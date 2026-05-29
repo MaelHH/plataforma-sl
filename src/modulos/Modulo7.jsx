@@ -132,8 +132,7 @@ export default function Modulo7() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">Módulo 7 — Monitoreo Logístico</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Eventos en tránsito · TIVE · retenes · aduanas · accidentes</p>
+        <h1 className="text-base font-semibold text-gray-900">Monitoreo en Ruta</h1>          <p className="text-sm text-gray-500 mt-0.5">Eventos en tránsito · TIVE · retenes · aduanas · accidentes</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">FF</div>

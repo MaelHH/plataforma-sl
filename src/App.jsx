@@ -10,13 +10,13 @@ import Modulo6 from "./modulos/Modulo6";
 import Modulo7 from "./modulos/Modulo7";
 
 const MODULOS = [
-  { id: 1, nombre: "Programa SL Produce", icono: "📋" },
-  { id: 2, nombre: "Cálculo de trailers", icono: "🚛" },
-  { id: 3, nombre: "Tablero Mónica", icono: "📊" },
-  { id: 4, nombre: "Dispatcher Francisco", icono: "📸" },
-  { id: 5, nombre: "Embarques", icono: "📦" },
-  { id: 6, nombre: "Consolidado Cristina", icono: "💰" },
-  { id: 7, nombre: "Monitoreo Logístico", icono: "🛰️" },
+  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋" },
+  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛" },
+  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊" },
+  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸" },
+  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦" },
+  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰" },
+  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️" },
 ];
 
 export default function App() {
@@ -27,11 +27,14 @@ export default function App() {
       <div className="flex h-screen bg-gray-50">
         {/* Menú lateral */}
         <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
-          <div className="p-4 border-b border-gray-100">
-            <h1 className="text-base font-bold text-gray-900">Plataforma Logística SL</h1>
-            <p className="text-xs text-gray-500 mt-0.5">SL Produce · SL Agrícola</p>
+          <div className="p-4 border-b border-gray-100 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">SL</div>
+            <div>
+              <h1 className="text-base font-bold text-gray-900 leading-tight">SL Logística</h1>
+              <p className="text-xs text-gray-500">SL Produce · SL Agrícola</p>
+            </div>
           </div>
-          <nav className="flex-1 p-2">
+          <nav className="flex-1 p-2 overflow-y-auto">
             {MODULOS.map((m) => (
               <button
                 key={m.id}
@@ -42,19 +45,22 @@ export default function App() {
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
-                <span>{m.icono}</span>
-                <span>{m.nombre}</span>
+                <span className="text-base">{m.icono}</span>
+                <div className="text-left leading-tight">
+                  <div>{m.nombre}</div>
+                  <div className={`text-xs font-normal ${moduloActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
+                </div>
               </button>
             ))}
           </nav>
           <div className="p-4 border-t border-gray-100 text-xs text-gray-400">
-            Los Mochis, Sinaloa
+            📍 Los Mochis, Sinaloa
           </div>
         </div>
 
         {/* Contenido del módulo */}
         <div className="flex-1 overflow-auto">
-          <div className="p-8">
+          <div className="p-8 max-w-6xl mx-auto">
             {moduloActivo === 1 && <Modulo1 />}
             {moduloActivo === 2 && <Modulo2 />}
             {moduloActivo === 3 && <Modulo3 />}

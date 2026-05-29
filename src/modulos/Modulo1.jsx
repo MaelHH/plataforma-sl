@@ -96,8 +96,8 @@ export default function Modulo1() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">Módulo 1 — Programa SL Produce</h1>
-          <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado</p>
+            <h1 className="text-base font-semibold text-gray-900">Programa Semanal</h1>
+          <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado · planeación de cajas por presentación</p>
         </div>
         <button onClick={() => setCatAbierto(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
           ⚙️ Catálogo de presentaciones

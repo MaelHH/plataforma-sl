@@ -149,9 +149,8 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
   return (
     <div>
       <div className="mb-4">
-        <h1 className="text-base font-semibold text-gray-900">Módulo 2 — Cálculo de trailers</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Datos automáticos del programa (Módulo 1)</p>
-      </div>
+<h1 className="text-base font-semibold text-gray-900">Cálculo de Trailers</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Kiko / Alfonso · convierte el programa en trailers necesarios</p>      </div>
 
       {/* Selector de semana */}
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
