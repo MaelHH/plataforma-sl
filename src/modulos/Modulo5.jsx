@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useDatos, CATALOGO, EMPRESAS, DC, idxToParr } from "../store/datos";
+import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 
 export default function Modulo5() {
-  const { cargasEmbarques, setCargasEmbarques, setTrailers } = useDatos();
+  const { cargasEmbarques, setCargasEmbarques, setTrailers, catalogo } = useDatos();
+  const CATALOGO = [CAT_VACIO, ...catalogo];
   const [cargaSel, setCargaSel] = useState(null);
 
   const toggleSap = (i) =>
@@ -49,7 +50,7 @@ export default function Modulo5() {
           {cargasEmbarques.map((carga, i) => {
             const isOpen = cargaSel === carga.id;
             const cajasTotal = carga.consolidado
-              ? carga.empresasSel.reduce((a, eid) => a + (carga.distEmpresas[eid] || []).reduce((b, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return b + (c?.cajas || 0); }, 0), 0)
+              ? carga.empresasSel.reduce((a, eid) => a + (carga.distEmpresas[eid] || []).reduce((b, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return b + (c?.cajasPorParrilla || 0); }, 0), 0)
               : 0;
             return (
               <div key={carga.id} className={`bg-white border-2 rounded-xl overflow-hidden ${carga.sapStatus === "cargado" ? "border-green-300" : "border-orange-200"}`}>
@@ -88,7 +89,7 @@ export default function Modulo5() {
                         {carga.empresasSel.map((eid) => {
                           const emp = EMPRESAS.find((e) => e.id === eid);
                           const data = carga.distEmpresas[eid] || [];
-                          const cajasEmp = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajas || 0); }, 0);
+                          const cajasEmp = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajasPorParrilla || 0); }, 0);
                           const pct = cajasTotal > 0 ? Math.round((cajasEmp / cajasTotal) * 100) : 0;
                           const flete = parseFloat(carga.trailer.flete) || 0;
                           const fProp = flete > 0 ? ((cajasEmp / cajasTotal) * flete).toFixed(2) : "—";

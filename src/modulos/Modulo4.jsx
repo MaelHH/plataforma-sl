@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDatos, ORIGEN, TOTAL, CATALOGO, EMPRESAS, DC } from "../store/datos";
+import { useDatos, ORIGEN, TOTAL, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
 
 const COLS = 15;
 const FRONTAL_FIELDS = [
@@ -12,8 +12,8 @@ const FRONTAL_FIELDS = [
 ];
 
 export default function Modulo4() {
-  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques } = useDatos();
-
+  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
+  const CATALOGO = [CAT_VACIO, ...catalogo];
   const [trailerSel, setTrailerSel] = useState(null);
   const [cargaPhotos, setCargaPhotos] = useState(Array(TOTAL).fill(null));
   const [frontalPhotos, setFrontalPhotos] = useState({});
@@ -114,7 +114,7 @@ export default function Modulo4() {
   // Grid de distribución de productos
   function ParrillaGrid({ title, color, border, data, onChange, blockedIdxs = [] }) {
     const asig = data.filter((p) => p.prod).length;
-    const totalCajas = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajas || 0); }, 0);
+    const totalCajas = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajasPorParrilla || 0); }, 0);    
     const renderCol = (start, parrFn) =>
       Array.from({ length: 15 }, (_, i) => {
         const idx = start + i, parrNum = parrFn(i);
@@ -128,7 +128,7 @@ export default function Modulo4() {
               className={`flex-1 text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}>
               {CATALOGO.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
-            <div className={`w-14 text-center text-xs font-semibold rounded px-1 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-700" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajas + " cjs" : "—"}</div>
+            <div className={`w-14 text-center text-xs font-semibold rounded px-1 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-700" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
           </div>
         );
       });
