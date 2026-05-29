@@ -13,17 +13,23 @@ export const EMPRESAS = [
   { id: "CACO", label: "CACO", color: "bg-purple-100 text-purple-800", border: "border-purple-300" },
 ];
 
+// Cultivos (pestañas del programa) — ampliable a futuro
+export const CULTIVOS_INICIAL = [
+  { id: "BP", label: "Bell Pepper SL", color: "orange" },
+  { id: "EJ", label: "SL Agrícola Ejote", color: "green" },
+];
+
 // Catálogo inicial de presentaciones (cajasPorParrilla es la clave del cálculo)
 const CATALOGO_INICIAL = [
-  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 20 },
-  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 48 },
-  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 48 },
-  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 35 },
-  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 48 },
-  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 24 },
-  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 12 },
-  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 16 },
-  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 14 },
+  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 20, cultivo: "BP" },
+  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 48, cultivo: "BP" },
+  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 48, cultivo: "BP" },
+  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 35, cultivo: "BP" },
+  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 48, cultivo: "BP" },
+  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 24, cultivo: "EJ" },
+  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 12, cultivo: "EJ" },
+  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 16, cultivo: "EJ" },
+  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 14, cultivo: "EJ" },
 ];
 
 // Opción "sin asignar" para los selects (no editable)
@@ -53,6 +59,37 @@ export const STATUS_CFG = {
 
 export function idxToParr(idx) { return idx < 15 ? idx * 2 + 1 : (idx - 15) * 2 + 2; }
 
+// ─── MANEJO DE SEMANAS ───
+const DIAS_ABREV = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const MESES_ABREV = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// Dada una fecha (lunes), devuelve los 7 días con etiqueta "Lun 26"
+export function calcularDias(fechaLunes) {
+  const base = new Date(fechaLunes + "T00:00:00");
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return `${DIAS_ABREV[i]} ${d.getDate()}`;
+  });
+}
+
+// Etiqueta de la semana, ej. "26 may – 1 jun 2026"
+export function etiquetaSemana(fechaLunes) {
+  const base = new Date(fechaLunes + "T00:00:00");
+  const fin = new Date(base);
+  fin.setDate(base.getDate() + 6);
+  const ini = `${base.getDate()} ${MESES_ABREV[base.getMonth()]}`;
+  const finStr = `${fin.getDate()} ${MESES_ABREV[fin.getMonth()]} ${fin.getFullYear()}`;
+  return `${ini} – ${finStr}`;
+}
+
+// Suma o resta semanas a una fecha de lunes (devuelve nueva fecha YYYY-MM-DD)
+export function moverSemana(fechaLunes, deltas) {
+  const d = new Date(fechaLunes + "T00:00:00");
+  d.setDate(d.getDate() + deltas * 7);
+  return d.toISOString().slice(0, 10);
+}
+
 export const requerimiento = [
   { id: 0, tipo: "Contrato", fecha: "Lun 26", origen: ORIGEN, dest: "USA Texas", sol: 4 },
   { id: 1, tipo: "Contrato", fecha: "Lun 26", origen: ORIGEN, dest: "WM MEX", sol: 2 },
@@ -79,9 +116,12 @@ export function DatosProvider({ children }) {
   const [cargasEmbarques, setCargasEmbarques] = useState([]);
   const [monitoreo, setMonitoreo] = useState({});
   const [catalogo, setCatalogo] = useState(CATALOGO_INICIAL);
+  const [cultivos, setCultivos] = useState(CULTIVOS_INICIAL);
+  const [programa, setPrograma] = useState({}); // { "2026-05-26": [ {presId, origen, dest, dias:[7]} ] }
+  const [requerimientoGen, setRequerimientoGen] = useState({}); // { "2026-05-26": [ {tipo, fecha, diIdx, origen, dest, sol} ] }
 
-  const value = { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo, catalogo, setCatalogo };
-  return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
+const value = { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo, catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma, requerimientoGen, setRequerimientoGen };  
+return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }
 
 export function useDatos() {

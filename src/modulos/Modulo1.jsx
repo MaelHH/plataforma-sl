@@ -1,39 +1,23 @@
 import { useState } from "react";
-import { useDatos, DESTINOS_ALL, COLORES_CAT } from "../store/datos";
-
-const DIAS = ["Lun 26", "Mar 27", "Mié 28", "Jue 29", "Vie 30", "Sáb 31", "Dom 1"];
-
-const PRESETS_BP = [
-  { presId: "BP_XL_11KG", dest: "WM MEX", dias: [56, 0, 0, 0, 224, 0, 0] },
-  { presId: "BP_55CT", dest: "USA Texas", dias: [0, 550, 50, 0, 200, 1000, 0] },
-  { presId: "BP_65CT", dest: "USA Texas", dias: [0, 2550, 0, 0, 0, 0, 0] },
-  { presId: "BP_BOLSA8X6", dest: "McAllen", dias: [0, 0, 1500, 0, 1500, 0, 0] },
-];
-
-const PRESETS_EJ = [
-  { presId: "EJ_WM17", dest: "USA Texas", dias: [1200, 500, 0, 0, 200, 1350, 0] },
-  { presId: "EJ_WM17", dest: "USA Nogales", dias: [0, 1350, 0, 0, 350, 0, 0] },
-  { presId: "EJ_CONV5LBS", dest: "McAllen", dias: [0, 2304, 0, 0, 0, 0, 0] },
-  { presId: "EJ_MKT_WM", dest: "WM MEX", dias: [220, 0, 0, 0, 220, 220, 0] },
-];
-
-const DC = {
-  "WM MEX": "bg-orange-100 text-orange-800",
-  "WM Culiacán": "bg-blue-100 text-blue-800",
-  "USA Texas": "bg-orange-100 text-orange-800",
-  "USA Nogales": "bg-green-100 text-green-800",
-  "McAllen": "bg-blue-100 text-blue-800",
-  "Chihuahua": "bg-teal-100 text-teal-800",
-};
+import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
 let nextCatId = 1;
 
-function SelectorPresentacion({ value, catalogo, onChange }) {
+// Lunes de la semana actual en formato YYYY-MM-DD
+function lunesActual() {
+  const hoy = new Date();
+  const dia = hoy.getDay(); // 0=dom, 1=lun...
+  const diff = dia === 0 ? -6 : 1 - dia;
+  hoy.setDate(hoy.getDate() + diff);
+  return hoy.toISOString().slice(0, 10);
+}
+
+// Selector buscable de presentación (filtrado por cultivo)
+function SelectorPresentacion({ value, opciones, onChange }) {
   const [abierto, setAbierto] = useState(false);
   const [busqueda, setBusqueda] = useState("");
-  const sel = catalogo.find((c) => c.id === value);
-  const filtrados = catalogo.filter((c) => c.label.toLowerCase().includes(busqueda.toLowerCase()));
-
+  const sel = opciones.find((c) => c.id === value);
+  const filtrados = opciones.filter((c) => c.label.toLowerCase().includes(busqueda.toLowerCase()));
   return (
     <div className="relative">
       <button onClick={() => setAbierto(!abierto)}
@@ -66,135 +50,148 @@ function SelectorPresentacion({ value, catalogo, onChange }) {
 }
 
 export default function Modulo1() {
-  const { catalogo, setCatalogo } = useDatos();
-  const [tab, setTab] = useState("bp");
-  const [imagen, setImagen] = useState(null);
-  const [dataBP, setDataBP] = useState(PRESETS_BP);
-  const [dataEJ, setDataEJ] = useState(PRESETS_EJ);
+  const { catalogo, setCatalogo, cultivos, programa, setPrograma } = useDatos();
+  const [semana, setSemana] = useState(lunesActual());
+  const [tab, setTab] = useState(cultivos[0]?.id || "BP");
   const [catAbierto, setCatAbierto] = useState(false);
 
-  const data = tab === "bp" ? dataBP : dataEJ;
-  const setData = tab === "bp" ? setDataBP : setDataEJ;
+  const dias = calcularDias(semana);
+  const filasSemana = programa[semana] || [];
+  const filasTab = filasSemana.map((f, idxGlobal) => ({ ...f, idxGlobal })).filter((f) => {
+    const pres = catalogo.find((c) => c.id === f.presId);
+    return pres ? pres.cultivo === tab : f.cultivo === tab;
+  });
 
-  const cajasDeFila = (r) => r.dias.reduce((b, c) => b + c, 0);
-  const totalCajas = data.reduce((a, r) => a + cajasDeFila(r), 0);
+  const presDelCultivo = catalogo.filter((c) => c.cultivo === tab);
 
-  const subirImagen = (e) => {
-    const file = e.target.files[0];
-    if (file) setImagen(URL.createObjectURL(file));
+  // Total de cajas de la pestaña actual
+  const totalCajas = filasTab.reduce((a, f) => a + f.dias.reduce((b, c) => b + c, 0), 0);
+
+  // ── Guardar en el store ──
+  const setFilas = (nuevasFilasSemana) => setPrograma((prev) => ({ ...prev, [semana]: nuevasFilasSemana }));
+
+  const addFila = () => {
+    const nueva = { presId: presDelCultivo[0]?.id || "", cultivo: tab, origen: ORIGENES[0], dest: "USA Texas", dias: [0, 0, 0, 0, 0, 0, 0] };
+    setFilas([...(programa[semana] || []), nueva]);
   };
+  const updFila = (idxGlobal, campo, val) =>
+    setFilas((programa[semana] || []).map((f, j) => (j === idxGlobal ? { ...f, [campo]: val } : f)));
+  const updDia = (idxGlobal, di, val) =>
+    setFilas((programa[semana] || []).map((f, j) => (j === idxGlobal ? { ...f, dias: f.dias.map((d, k) => (k === di ? parseInt(val) || 0 : d)) } : f)));
+  const delFila = (idxGlobal) =>
+    setFilas((programa[semana] || []).filter((_, j) => j !== idxGlobal));
 
-  const updRow = (i, campo, val) => setData((prev) => prev.map((r, j) => (j === i ? { ...r, [campo]: val } : r)));
-  const updDia = (i, di, val) => setData((prev) => prev.map((r, j) => (j === i ? { ...r, dias: r.dias.map((d, k) => (k === di ? parseInt(val) || 0 : d)) } : r)));
-  const addRow = () => setData((prev) => [...prev, { presId: catalogo[0]?.id || "", dest: "USA Texas", dias: [0, 0, 0, 0, 0, 0, 0] }]);
-  const delRow = (i) => setData((prev) => prev.filter((_, j) => j !== i));
-
+  // ── Editor de catálogo ──
   const updCat = (id, campo, val) => setCatalogo((prev) => prev.map((c) => (c.id === id ? { ...c, [campo]: campo === "cajasPorParrilla" ? (parseInt(val) || 0) : val } : c)));
   const addCat = () => {
     const id = "NUEVO_" + nextCatId++;
     const color = COLORES_CAT[catalogo.length % COLORES_CAT.length];
-    setCatalogo((prev) => [...prev, { id, label: "Nueva presentación", color, cajasPorParrilla: 0 }]);
+    setCatalogo((prev) => [...prev, { id, label: "Nueva presentación", color, cajasPorParrilla: 0, cultivo: tab }]);
   };
   const delCat = (id) => setCatalogo((prev) => prev.filter((c) => c.id !== id));
+
+  const DC_TAB = { orange: "bg-orange-100 text-orange-700", green: "bg-green-100 text-green-700", blue: "bg-blue-100 text-blue-700", purple: "bg-purple-100 text-purple-700", teal: "bg-teal-100 text-teal-700" };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Módulo 1 — Programa SL Produce</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Semana 22 · 26 mayo – 1 jun 2026 · José Carlos Preciado</p>
+          <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado</p>
         </div>
         <button onClick={() => setCatAbierto(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
           ⚙️ Catálogo de presentaciones
         </button>
       </div>
 
-      {/* Subir imagen */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Parrilla recibida (WhatsApp / Excel)</div>
-          <label className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 cursor-pointer">
-            📷 Subir imagen
-            <input type="file" accept="image/*" onChange={subirImagen} className="hidden" />
-          </label>
+      {/* Selector de semana */}
+      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
+        <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">◀ Anterior</button>
+        <div className="text-center">
+          <div className="text-xs text-gray-400">Semana del programa</div>
+          <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
+          <input type="date" value={semana} onChange={(e) => { if (e.target.value) setSemana(e.target.value); }}
+            className="text-xs text-gray-400 mt-1 border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:border-blue-400" />
         </div>
-        {imagen ? (
-          <div className="flex items-start gap-3">
-            <img src={imagen} alt="Parrilla" className="max-h-48 rounded-lg border border-gray-200" />
-            <div className="text-xs text-gray-400 flex-1">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-700">
-                🤖 <span className="font-semibold">Lectura automática con IA</span> — se activará al conectar el backend. Por ahora ajusta la tabla manualmente abajo.
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs text-gray-400 italic text-center py-4 border border-dashed border-gray-200 rounded-lg">
-            Sube la foto o screenshot del programa que manda José Carlos
-          </div>
-        )}
+        <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">Siguiente ▶</button>
       </div>
 
-      {/* Pestañas */}
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setTab("bp")} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${tab === "bp" ? "bg-orange-100 text-orange-700" : "bg-white text-gray-500 border border-gray-200"}`}>Bell Pepper SL</button>
-        <button onClick={() => setTab("ej")} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${tab === "ej" ? "bg-green-100 text-green-700" : "bg-white text-gray-500 border border-gray-200"}`}>SL Agrícola Ejote</button>
+      {/* Pestañas de cultivo */}
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {cultivos.map((cu) => (
+          <button key={cu.id} onClick={() => setTab(cu.id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium ${tab === cu.id ? (DC_TAB[cu.color] || "bg-gray-100 text-gray-700") : "bg-white text-gray-500 border border-gray-200"}`}>
+            {cu.label}
+          </button>
+        ))}
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-4 inline-block">
-        <div className="text-xs text-gray-500">Total cajas semana</div>
+        <div className="text-xs text-gray-500">Total cajas semana · {cultivos.find((c) => c.id === tab)?.label}</div>
         <div className="text-2xl font-semibold text-gray-900">{totalCajas.toLocaleString()}</div>
       </div>
 
       {/* Tabla editable */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: "800px" }}>
+        <table className="w-full text-sm" style={{ minWidth: "950px" }}>
           <thead>
             <tr className="bg-gray-50">
-              <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">Presentación</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100" style={{ minWidth: "180px" }}>Presentación</th>
+              <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">Origen</th>
               <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">Destino</th>
-              {DIAS.map((d) => <th key={d} className="text-center px-1 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">{d}</th>)}
+              {dias.map((d) => <th key={d} className="text-center px-1 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">{d}</th>)}
               <th className="text-right px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">Total</th>
               <th className="border-b border-gray-100"></th>
             </tr>
           </thead>
           <tbody>
-            {data.map((r, i) => {
-              const total = cajasDeFila(r);
-              return (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-2 py-1 border-b border-gray-100" style={{ minWidth: "180px" }}>
-                    <SelectorPresentacion value={r.presId} catalogo={catalogo} onChange={(id) => updRow(i, "presId", id)} />
-                  </td>
-                  <td className="px-2 py-1 border-b border-gray-100">
-                    <select value={r.dest} onChange={(e) => updRow(i, "dest", e.target.value)}
-                      className={`text-xs px-2 py-0.5 rounded-full border-transparent focus:outline-none ${DC[r.dest] || "bg-gray-100 text-gray-600"}`}>
-                      {DESTINOS_ALL.filter((d) => d !== "Sin asignar").map((d) => <option key={d}>{d}</option>)}
-                    </select>
-                  </td>
-                  {r.dias.map((c, j) => (
-                    <td key={j} className="px-0.5 py-1 border-b border-gray-100">
-                      <input type="number" value={c || ""} onChange={(e) => updDia(i, j, e.target.value)} placeholder="0"
-                        className="w-14 text-center text-xs px-1 py-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+            {filasTab.length === 0 ? (
+              <tr><td colSpan={dias.length + 5} className="text-center text-xs text-gray-400 italic py-6">Sin presentaciones esta semana. Agrega una fila abajo.</td></tr>
+            ) : (
+              filasTab.map((r) => {
+                const total = r.dias.reduce((a, b) => a + b, 0);
+                return (
+                  <tr key={r.idxGlobal} className="hover:bg-gray-50">
+                    <td className="px-2 py-1 border-b border-gray-100" style={{ minWidth: "180px" }}>
+                      <SelectorPresentacion value={r.presId} opciones={presDelCultivo} onChange={(id) => updFila(r.idxGlobal, "presId", id)} />
                     </td>
-                  ))}
-                  <td className="text-right px-3 py-1 text-xs font-semibold border-b border-gray-100">{total.toLocaleString()}</td>
-                  <td className="px-2 py-1 border-b border-gray-100 text-center">
-                    <button onClick={() => delRow(i)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
-                  </td>
-                </tr>
-              );
-            })}
+                    <td className="px-2 py-1 border-b border-gray-100">
+                      <select value={r.origen} onChange={(e) => updFila(r.idxGlobal, "origen", e.target.value)}
+                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white">
+                        {ORIGENES.map((o) => <option key={o}>{o}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1 border-b border-gray-100">
+                      <select value={r.dest} onChange={(e) => updFila(r.idxGlobal, "dest", e.target.value)}
+                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white">
+                        {DESTINOS_ALL.filter((d) => d !== "Sin asignar").map((d) => <option key={d}>{d}</option>)}
+                      </select>
+                    </td>
+                    {r.dias.map((c, j) => (
+                      <td key={j} className="px-0.5 py-1 border-b border-gray-100">
+                        <input type="number" value={c || ""} onChange={(e) => updDia(r.idxGlobal, j, e.target.value)} placeholder="0"
+                          className="w-14 text-center text-xs px-1 py-1 border border-transparent hover:border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                    ))}
+                    <td className="text-right px-3 py-1 text-xs font-semibold border-b border-gray-100">{total.toLocaleString()}</td>
+                    <td className="px-2 py-1 border-b border-gray-100 text-center">
+                      <button onClick={() => delFila(r.idxGlobal)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
         <div className="p-2 border-t border-gray-100">
-          <button onClick={addRow} className="text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar fila</button>
+          <button onClick={addFila} className="text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar fila</button>
         </div>
       </div>
 
       {/* Modal catálogo */}
       {catAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
                 <div className="text-sm font-semibold text-gray-900">Catálogo de presentaciones</div>
@@ -207,6 +204,7 @@ export default function Modulo1() {
                 <thead>
                   <tr className="text-xs text-gray-500 border-b border-gray-100">
                     <th className="text-left py-2 font-medium">Presentación</th>
+                    <th className="text-center py-2 font-medium w-32">Cultivo</th>
                     <th className="text-center py-2 font-medium w-32">Cajas / parrilla</th>
                     <th className="w-10"></th>
                   </tr>
@@ -217,6 +215,12 @@ export default function Modulo1() {
                       <td className="py-1.5">
                         <input value={c.label} onChange={(e) => updCat(c.id, "label", e.target.value)}
                           className="w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <select value={c.cultivo || ""} onChange={(e) => updCat(c.id, "cultivo", e.target.value)}
+                          className="text-xs px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none bg-white">
+                          {cultivos.map((cu) => <option key={cu.id} value={cu.id}>{cu.label}</option>)}
+                        </select>
                       </td>
                       <td className="py-1.5 text-center">
                         <input type="number" value={c.cajasPorParrilla} onChange={(e) => updCat(c.id, "cajasPorParrilla", e.target.value)}
