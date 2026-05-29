@@ -1,0 +1,125 @@
+import { useState } from "react";
+import { useDatos, CATALOGO, EMPRESAS, DC, idxToParr } from "../store/datos";
+
+export default function Modulo5() {
+  const { cargasEmbarques, setCargasEmbarques, setTrailers } = useDatos();
+  const [cargaSel, setCargaSel] = useState(null);
+
+  const toggleSap = (i) =>
+    setCargasEmbarques((prev) => prev.map((c, j) => (j === i ? { ...c, sapStatus: c.sapStatus === "pendiente" ? "cargado" : "pendiente" } : c)));
+
+  const devolver = (i, carga) => {
+    setTrailers((prev) => prev.map((t) => (t.id === carga.trailer.id ? { ...t, status: "en_instalaciones" } : t)));
+    setCargasEmbarques((prev) => prev.filter((_, j) => j !== i));
+  };
+
+  const empBadge = { SL_AGR: "bg-green-100 text-green-800 border-green-200", CAT: "bg-blue-100 text-blue-800 border-blue-200", CACO: "bg-purple-100 text-purple-800 border-purple-200" };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-base font-semibold text-gray-900">Módulo 5 — Embarques</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Daniel · Cristina</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">DC</div>
+          <span className="text-sm font-medium text-gray-700">Daniel / Cristina</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {[
+          { l: "Total cargas", v: cargasEmbarques.length, c: "text-gray-900" },
+          { l: "Pendientes SAP", v: cargasEmbarques.filter((c) => c.sapStatus === "pendiente").length, c: "text-orange-600" },
+          { l: "Cargadas en SAP", v: cargasEmbarques.filter((c) => c.sapStatus === "cargado").length, c: "text-green-700" },
+        ].map((s, i) => (
+          <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5"><div className="text-xs text-gray-500 mb-1">{s.l}</div><div className={`text-xl font-semibold ${s.c}`}>{s.v}</div></div>
+        ))}
+      </div>
+
+      {cargasEmbarques.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+          <div className="text-2xl mb-3">📋</div>
+          <div className="text-sm font-medium text-gray-700 mb-1">Sin cargas recibidas</div>
+          <div className="text-xs text-gray-400">Francisco debe enviar evidencias desde el Módulo 4</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {cargasEmbarques.map((carga, i) => {
+            const isOpen = cargaSel === carga.id;
+            const cajasTotal = carga.consolidado
+              ? carga.empresasSel.reduce((a, eid) => a + (carga.distEmpresas[eid] || []).reduce((b, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return b + (c?.cajas || 0); }, 0), 0)
+              : 0;
+            return (
+              <div key={carga.id} className={`bg-white border-2 rounded-xl overflow-hidden ${carga.sapStatus === "cargado" ? "border-green-300" : "border-orange-200"}`}>
+                <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50" onClick={() => setCargaSel(isOpen ? null : carga.id)}>
+                  <div className="flex flex-col"><span className="text-xs font-bold text-gray-700">{carga.fecha}</span><span className="text-xs text-gray-400">{carga.trailer.fecha}</span></div>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[carga.trailer.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{carga.trailer.dest}</span>
+                  <div className="text-xs text-gray-500"><span className="font-medium">{carga.trailer.chofer || "Sin chofer"}</span>{carga.trailer.placaTracto && <span className="ml-1 font-mono text-gray-400">· {carga.trailer.placaTracto}</span>}</div>
+                  {carga.consolidado ? (
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">{carga.empresasSel.length} empresas</span>
+                  ) : (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${empBadge[carga.empresasSel?.[0]] || "bg-gray-100 text-gray-500 border-gray-200"}`}>{EMPRESAS.find((e) => e.id === carga.empresasSel?.[0])?.label || "Sin empresa"}</span>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); toggleSap(i); }} className={`text-xs px-3 py-1 rounded-lg border font-medium ${carga.sapStatus === "cargado" ? "bg-green-50 border-green-300 text-green-700" : "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"}`}>
+                      {carga.sapStatus === "cargado" ? "✓ Cargado en SAP" : "⏳ Pendiente SAP"}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); devolver(i, carga); }} className="text-xs px-3 py-1 rounded-lg border font-medium bg-red-50 border-red-200 text-red-600 hover:bg-red-100">↩ Devolver</button>
+                    <span className="text-gray-400 text-sm">{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+
+                {isOpen && (
+                  <div className="border-t border-gray-100 px-4 py-4 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos del trailer</div>
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        {[["Origen", carga.trailer.origen], ["Línea", carga.trailer.linea], ["Chofer", carga.trailer.chofer], ["Tel.", carga.trailer.telefono], ["Placas tracto", carga.trailer.placaTracto], ["Placas caja", carga.trailer.placaCaja], ["Económico", carga.trailer.economicoCaja], ["Flete", "$" + carga.trailer.flete]].map(([l, v]) => (
+                          <div key={l}><div className="text-gray-400 mb-0.5">{l}</div><div className="font-semibold text-gray-900">{v || "—"}</div></div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {carga.consolidado && (
+                      <div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase mb-2">División por empresa</div>
+                        {carga.empresasSel.map((eid) => {
+                          const emp = EMPRESAS.find((e) => e.id === eid);
+                          const data = carga.distEmpresas[eid] || [];
+                          const cajasEmp = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajas || 0); }, 0);
+                          const pct = cajasTotal > 0 ? Math.round((cajasEmp / cajasTotal) * 100) : 0;
+                          const flete = parseFloat(carga.trailer.flete) || 0;
+                          const fProp = flete > 0 ? ((cajasEmp / cajasTotal) * flete).toFixed(2) : "—";
+                          return (
+                            <div key={eid} className="flex items-center justify-between px-3 py-2 rounded-lg mb-1 bg-gray-50">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded ${empBadge[eid]}`}>{emp.label}</span>
+                              <span className="text-xs text-gray-600">{cajasEmp.toLocaleString()} cjs · {pct}%</span>
+                              <span className="text-xs font-bold text-green-700">${fProp}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 text-xs">
+                      {[["Fotos carga", `${carga.cargaFotos}/30`], ["Fotos frontales", `${carga.frontalFotos}/6`]].map(([l, v]) => (
+                        <div key={l} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"><div className="text-gray-400 mb-0.5">{l}</div><div className="font-semibold text-gray-700">{v}</div></div>
+                      ))}
+                    </div>
+
+                    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-4 py-3 flex items-center gap-3">
+                      <span className="text-lg">🔗</span>
+                      <div><div className="text-xs font-semibold text-gray-500">Consulta SAP — próximamente</div><div className="text-xs text-gray-400">OC fletero · Orden de venta · Factura cliente · Inventario</div></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
