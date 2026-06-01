@@ -21,19 +21,19 @@ export const CULTIVOS_INICIAL = [
 
 // Catálogo inicial de presentaciones (cajasPorParrilla es la clave del cálculo)
 const CATALOGO_INICIAL = [
-  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 20, cultivo: "BP" },
-  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 48, cultivo: "BP" },
-  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 48, cultivo: "BP" },
-  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 35, cultivo: "BP" },
-  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 48, cultivo: "BP" },
-  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 24, cultivo: "EJ" },
-  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 12, cultivo: "EJ" },
-  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 16, cultivo: "EJ" },
-  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 14, cultivo: "EJ" },
+  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 20, cultivo: "BP", librasPorCaja: 24 },
+  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 25 },
+  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 25 },
+  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 35, cultivo: "BP", librasPorCaja: 22 },
+  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 18 },
+  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 24, cultivo: "EJ", librasPorCaja: 20 },
+  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 12, cultivo: "EJ", librasPorCaja: 10 },
+  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 16, cultivo: "EJ", librasPorCaja: 15 },
+  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 14, cultivo: "EJ", librasPorCaja: 14 },
 ];
 
 // Opción "sin asignar" para los selects (no editable)
-export const CAT_VACIO = { id: "", label: "— Sin asignar —", color: "bg-gray-100 text-gray-500", cajasPorParrilla: 0 };
+export const CAT_VACIO = { id: "", label: "— Sin asignar —", color: "bg-gray-100 text-gray-500", cajasPorParrilla: 0, librasPorCaja: 0 };
 
 // Paleta de colores para nuevas presentaciones
 export const COLORES_CAT = [
@@ -102,6 +102,13 @@ export const requerimiento = [
 
 export const EMPTY_TRAILER = { linea: "", contacto: "", numero: "", chofer: "", marcaModelo: "", placaTracto: "", economicoCaja: "", placaCaja: "", licencia: "", telefono: "", flete: "" };
 
+// Catálogo inicial de líneas de transporte
+const LINEAS_INICIAL = [
+  { id: "L1", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567" },
+  { id: "L2", linea: "Fletes del Norte", contacto: "Sandra López", numero: "668-555-9900" },
+  { id: "L3", linea: "Logística Sinaloa", contacto: "Pedro Vega", numero: "669-777-1122" },
+];
+
 const mockTrailers = [
   { id: 1, fecha: "Lun 26", origen: ORIGEN, dest: "USA Texas", status: "en_instalaciones", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567", chofer: "Carlos Mendoza", marcaModelo: "Kenworth T680", placaTracto: "ABC-1234", economicoCaja: "C-0042", placaCaja: "XYZ-9876", licencia: "LIC-88721", telefono: "667-987-6543", flete: "18500" },
   { id: 2, fecha: "Lun 26", origen: ORIGEN, dest: "WM MEX", status: "en_instalaciones", linea: "Fletes del Norte", contacto: "Sandra López", numero: "668-555-9900", chofer: "Miguel Ángel Ruiz", marcaModelo: "International LT", placaTracto: "DEF-5678", economicoCaja: "C-0087", placaCaja: "MNO-4321", licencia: "LIC-44502", telefono: "668-321-7654", flete: "9200" },
@@ -119,9 +126,11 @@ export function DatosProvider({ children }) {
   const [cultivos, setCultivos] = useState(CULTIVOS_INICIAL);
   const [programa, setPrograma] = useState({}); // { "2026-05-26": [ {presId, origen, dest, dias:[7]} ] }
   const [requerimientoGen, setRequerimientoGen] = useState({}); // { "2026-05-26": [ {tipo, fecha, diIdx, origen, dest, sol} ] }
+  const [responsables, setResponsables] = useState(["Francisco Flores", "Kiko"]); // nombres usados en monitoreo
+  const [lineas, setLineas] = useState(LINEAS_INICIAL); // catálogo de líneas de transporte
 
-const value = { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo, catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma, requerimientoGen, setRequerimientoGen };  
-return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
+  const value = { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo, catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma, requerimientoGen, setRequerimientoGen, responsables, setResponsables, lineas, setLineas };
+  return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }
 
 export function useDatos() {

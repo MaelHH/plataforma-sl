@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./index.css";
 import { DatosProvider } from "./store/datos";
+import Dashboard from "./modulos/Dashboard";
 import Modulo1 from "./modulos/Modulo1";
 import Modulo2 from "./modulos/Modulo2";
 import Modulo3 from "./modulos/Modulo3";
@@ -10,6 +11,7 @@ import Modulo6 from "./modulos/Modulo6";
 import Modulo7 from "./modulos/Modulo7";
 
 const MODULOS = [
+  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈" },
   { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋" },
   { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛" },
   { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊" },
@@ -20,7 +22,7 @@ const MODULOS = [
 ];
 
 export default function App() {
-  const [moduloActivo, setModuloActivo] = useState(1);
+  const [moduloActivo, setModuloActivo] = useState(0);
 
   return (
     <DatosProvider>
@@ -61,6 +63,7 @@ export default function App() {
         {/* Contenido del módulo */}
         <div className="flex-1 overflow-auto">
           <div className="p-8 max-w-6xl mx-auto">
+            {moduloActivo === 0 && <Dashboard />}
             {moduloActivo === 1 && <Modulo1 />}
             {moduloActivo === 2 && <Modulo2 />}
             {moduloActivo === 3 && <Modulo3 />}

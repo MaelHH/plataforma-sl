@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
 let nextId = 100;
+let nextLineaId = 1;
 
 function lunesActual() {
   const hoy = new Date();
@@ -12,12 +13,13 @@ function lunesActual() {
 }
 
 export default function Modulo3() {
-  const { trailers, setTrailers, requerimientoGen } = useDatos();
+  const { trailers, setTrailers, requerimientoGen, lineas, setLineas } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const dias = calcularDias(semana);
   const [diaFil, setDiaFil] = useState(dias[0]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
+  const [catLineas, setCatLineas] = useState(false);
 
   const reqSemana = requerimientoGen[semana] || [];
 
@@ -55,6 +57,18 @@ export default function Modulo3() {
       setTrailers((prev) => prev.filter((t) => t.id !== id));
     }
   };
+
+  // Al elegir una línea del catálogo, auto-llena los 3 datos
+  const elegirLinea = (lineaId) => {
+    const l = lineas.find((x) => x.id === lineaId);
+    if (l) setForm((f) => ({ ...f, linea: l.linea, contacto: l.contacto, numero: l.numero }));
+    else setForm((f) => ({ ...f, linea: "", contacto: "", numero: "" }));
+  };
+
+  // ── Editor de catálogo de líneas ──
+  const updLinea = (id, campo, val) => setLineas((prev) => prev.map((l) => (l.id === id ? { ...l, [campo]: val } : l)));
+  const addLinea = () => setLineas((prev) => [...prev, { id: "LN_" + nextLineaId++, linea: "Nueva línea", contacto: "", numero: "" }]);
+  const delLinea = (id) => setLineas((prev) => prev.filter((l) => l.id !== id));
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
 
@@ -109,6 +123,9 @@ export default function Modulo3() {
     );
   }
 
+  // ID de línea actual del form (para que el dropdown muestre la seleccionada)
+  const lineaActualId = lineas.find((l) => l.linea === form.linea)?.id || "";
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -117,6 +134,9 @@ export default function Modulo3() {
           <p className="text-sm text-gray-500 mt-0.5">Mónica · asignación y seguimiento de trailers</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setCatLineas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
+            ⚙️ Catálogo de líneas
+          </button>
           <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold">MO</div>
           <span className="text-sm font-medium text-gray-700">Mónica</span>
         </div>
@@ -243,7 +263,7 @@ export default function Modulo3() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal ficha trailer */}
       {modal !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
@@ -267,11 +287,24 @@ export default function Modulo3() {
               </div>
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Línea de transporte</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {[["linea", "Línea"], ["contacto", "Contacto"], ["numero", "Número"], ["flete", "Flete $"]].map(([k, l]) => (
-                    <div key={k}><label className="text-xs text-gray-500 block mb-0.5">{l}</label>
-                      <input className={INP} value={form[k] || ""} onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))} /></div>
-                  ))}
+                <div className="mb-2">
+                  <label className="text-xs text-gray-500 block mb-0.5">Elegir del catálogo</label>
+                  <select className={INP} value={lineaActualId} onChange={(e) => elegirLinea(e.target.value)}>
+                    <option value="">— Selecciona una línea —</option>
+                    {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Línea</label>
+                    <input className={INP + " bg-gray-50"} value={form.linea || ""} readOnly /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Contacto</label>
+                    <input className={INP + " bg-gray-50"} value={form.contacto || ""} readOnly /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Número</label>
+                    <input className={INP + " bg-gray-50"} value={form.numero || ""} readOnly /></div>
+                </div>
+                <div className="mt-2">
+                  <label className="text-xs text-gray-500 block mb-0.5">Flete $</label>
+                  <input className={INP} value={form.flete || ""} onChange={(e) => setForm((f) => ({ ...f, flete: e.target.value }))} />
                 </div>
               </div>
               <div>
@@ -287,6 +320,58 @@ export default function Modulo3() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={saveForm} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Guardar ficha</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal catálogo de líneas */}
+      {catLineas && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Catálogo de líneas de transporte</div>
+                <div className="text-xs text-gray-500 mt-0.5">Registra las líneas para elegirlas al llenar la ficha del trailer</div>
+              </div>
+              <button onClick={() => setCatLineas(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="px-5 py-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-500 border-b border-gray-100">
+                    <th className="text-left py-2 font-medium">Línea</th>
+                    <th className="text-left py-2 font-medium">Contacto</th>
+                    <th className="text-left py-2 font-medium">Número</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineas.map((l) => (
+                    <tr key={l.id} className="border-b border-gray-50">
+                      <td className="py-1.5 pr-2">
+                        <input value={l.linea} onChange={(e) => updLinea(l.id, "linea", e.target.value)}
+                          className="w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <input value={l.contacto} onChange={(e) => updLinea(l.id, "contacto", e.target.value)}
+                          className="w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <input value={l.numero} onChange={(e) => updLinea(l.id, "numero", e.target.value)}
+                          className="w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <button onClick={() => delLinea(l.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button onClick={addLinea} className="mt-3 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar línea</button>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setCatLineas(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
             </div>
           </div>
         </div>

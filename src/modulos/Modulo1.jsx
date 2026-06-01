@@ -82,11 +82,11 @@ export default function Modulo1() {
     setFilas((programa[semana] || []).filter((_, j) => j !== idxGlobal));
 
   // ── Editor de catálogo ──
-  const updCat = (id, campo, val) => setCatalogo((prev) => prev.map((c) => (c.id === id ? { ...c, [campo]: campo === "cajasPorParrilla" ? (parseInt(val) || 0) : val } : c)));
+  const updCat = (id, campo, val) => setCatalogo((prev) => prev.map((c) => (c.id === id ? { ...c, [campo]: (campo === "cajasPorParrilla" || campo === "librasPorCaja") ? (parseInt(val) || 0) : val } : c)));
   const addCat = () => {
     const id = "NUEVO_" + nextCatId++;
     const color = COLORES_CAT[catalogo.length % COLORES_CAT.length];
-    setCatalogo((prev) => [...prev, { id, label: "Nueva presentación", color, cajasPorParrilla: 0, cultivo: tab }]);
+    setCatalogo((prev) => [...prev, { id, label: "Nueva presentación", color, cajasPorParrilla: 0, cultivo: tab, librasPorCaja: 0 }]);
   };
   const delCat = (id) => setCatalogo((prev) => prev.filter((c) => c.id !== id));
 
@@ -96,7 +96,7 @@ export default function Modulo1() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-            <h1 className="text-base font-semibold text-gray-900">Programa Semanal</h1>
+          <h1 className="text-base font-semibold text-gray-900">Programa Semanal</h1>
           <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado · planeación de cajas por presentación</p>
         </div>
         <button onClick={() => setCatAbierto(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
@@ -195,7 +195,7 @@ export default function Modulo1() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
                 <div className="text-sm font-semibold text-gray-900">Catálogo de presentaciones</div>
-                <div className="text-xs text-gray-500 mt-0.5">Las cajas por parrilla alimentan el cálculo de trailers en toda la plataforma</div>
+                <div className="text-xs text-gray-500 mt-0.5">Cajas por parrilla y libras por caja alimentan los cálculos de toda la plataforma</div>
               </div>
               <button onClick={() => setCatAbierto(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
             </div>
@@ -204,8 +204,9 @@ export default function Modulo1() {
                 <thead>
                   <tr className="text-xs text-gray-500 border-b border-gray-100">
                     <th className="text-left py-2 font-medium">Presentación</th>
-                    <th className="text-center py-2 font-medium w-32">Cultivo</th>
-                    <th className="text-center py-2 font-medium w-32">Cajas / parrilla</th>
+                    <th className="text-center py-2 font-medium w-28">Cultivo</th>
+                    <th className="text-center py-2 font-medium w-28">Cajas / parrilla</th>
+                    <th className="text-center py-2 font-medium w-28">Libras / caja</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -224,7 +225,11 @@ export default function Modulo1() {
                       </td>
                       <td className="py-1.5 text-center">
                         <input type="number" value={c.cajasPorParrilla} onChange={(e) => updCat(c.id, "cajasPorParrilla", e.target.value)}
-                          className="w-24 text-center text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                          className="w-20 text-center text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
+                      </td>
+                      <td className="py-1.5 text-center">
+                        <input type="number" value={c.librasPorCaja || 0} onChange={(e) => updCat(c.id, "librasPorCaja", e.target.value)}
+                          className="w-20 text-center text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
                       </td>
                       <td className="py-1.5 text-center">
                         <button onClick={() => delCat(c.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>

@@ -9,6 +9,10 @@ export default function Modulo5() {
   const toggleSap = (i) =>
     setCargasEmbarques((prev) => prev.map((c, j) => (j === i ? { ...c, sapStatus: c.sapStatus === "pendiente" ? "cargado" : "pendiente" } : c)));
 
+  // Guarda el manifiesto de una empresa específica dentro de la carga
+  const setManifiesto = (i, empId, val) =>
+    setCargasEmbarques((prev) => prev.map((c, j) => (j === i ? { ...c, manifiestos: { ...(c.manifiestos || {}), [empId]: val } } : c)));
+
   const devolver = (i, carga) => {
     setTrailers((prev) => prev.map((t) => (t.id === carga.trailer.id ? { ...t, status: "en_instalaciones" } : t)));
     setCargasEmbarques((prev) => prev.filter((_, j) => j !== i));
@@ -16,12 +20,22 @@ export default function Modulo5() {
 
   const empBadge = { SL_AGR: "bg-green-100 text-green-800 border-green-200", CAT: "bg-blue-100 text-blue-800 border-blue-200", CACO: "bg-purple-100 text-purple-800 border-purple-200" };
 
+  // Lista de empresas de una carga (consolidado o simple)
+  const empresasDe = (carga) => carga.consolidado ? carga.empresasSel : (carga.empresasSel?.slice(0, 1) || []);
+
+  // ¿Tiene todos los manifiestos capturados?
+  const manifiestosCompletos = (carga) => {
+    const emps = empresasDe(carga);
+    return emps.length > 0 && emps.every((eid) => (carga.manifiestos?.[eid] || "").trim() !== "");
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-<h1 className="text-base font-semibold text-gray-900">Embarques</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Daniel / Cristina · registro en SAP</p>        </div>
+          <h1 className="text-base font-semibold text-gray-900">Embarques</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Daniel / Cristina · registro en SAP</p>
+        </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">DC</div>
           <span className="text-sm font-medium text-gray-700">Daniel / Cristina</span>
@@ -51,12 +65,17 @@ export default function Modulo5() {
             const cajasTotal = carga.consolidado
               ? carga.empresasSel.reduce((a, eid) => a + (carga.distEmpresas[eid] || []).reduce((b, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return b + (c?.cajasPorParrilla || 0); }, 0), 0)
               : 0;
+            const completos = manifiestosCompletos(carga);
             return (
               <div key={carga.id} className={`bg-white border-2 rounded-xl overflow-hidden ${carga.sapStatus === "cargado" ? "border-green-300" : "border-orange-200"}`}>
                 <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50" onClick={() => setCargaSel(isOpen ? null : carga.id)}>
                   <div className="flex flex-col"><span className="text-xs font-bold text-gray-700">{carga.fecha}</span><span className="text-xs text-gray-400">{carga.trailer.fecha}</span></div>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[carga.trailer.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{carga.trailer.dest}</span>
                   <div className="text-xs text-gray-500"><span className="font-medium">{carga.trailer.chofer || "Sin chofer"}</span>{carga.trailer.placaTracto && <span className="ml-1 font-mono text-gray-400">· {carga.trailer.placaTracto}</span>}</div>
+                  {/* Indicador de manifiestos */}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${completos ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                    📄 {completos ? "Manifiestos ✓" : "Falta manifiesto"}
+                  </span>
                   {carga.consolidado ? (
                     <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">{carga.empresasSel.length} empresas</span>
                   ) : (
@@ -79,6 +98,23 @@ export default function Modulo5() {
                         {[["Origen", carga.trailer.origen], ["Línea", carga.trailer.linea], ["Chofer", carga.trailer.chofer], ["Tel.", carga.trailer.telefono], ["Placas tracto", carga.trailer.placaTracto], ["Placas caja", carga.trailer.placaCaja], ["Económico", carga.trailer.economicoCaja], ["Flete", "$" + carga.trailer.flete]].map(([l, v]) => (
                           <div key={l}><div className="text-gray-400 mb-0.5">{l}</div><div className="font-semibold text-gray-900">{v || "—"}</div></div>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Manifiestos por empresa */}
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">📄 Manifiesto por empresa</div>
+                      <div className="space-y-2">
+                        {empresasDe(carga).map((eid) => {
+                          const emp = EMPRESAS.find((e) => e.id === eid);
+                          return (
+                            <div key={eid} className="flex items-center gap-3">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded border ${empBadge[eid]}`} style={{ minWidth: "90px" }}>{emp?.label || eid}</span>
+                              <input value={carga.manifiestos?.[eid] || ""} onChange={(e) => setManifiesto(i, eid, e.target.value)} placeholder="Folio de manifiesto"
+                                className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 font-mono" />
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
