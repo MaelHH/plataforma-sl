@@ -7,6 +7,15 @@ export default function Modulo6() {
   const CATALOGO = [CAT_VACIO, ...catalogo];
   const [cargaSel, setCargaSel] = useState(null);
 
+  // ── Filtros ──
+  const [fDest, setFDest] = useState("");
+  const [fOrigen, setFOrigen] = useState("");
+  const [fLinea, setFLinea] = useState("");
+  const [fChofer, setFChofer] = useState("");
+  const [fEmpresa, setFEmpresa] = useState("");
+  const [fFecha, setFFecha] = useState("");
+  const [fSap, setFSap] = useState("");
+
   const toggleSap = (i) =>
     setCargasEmbarques((prev) => prev.map((c, j) => (j === i ? { ...c, sapStatus: c.sapStatus === "pendiente" ? "cargado" : "pendiente" } : c)));
 
@@ -14,31 +23,57 @@ export default function Modulo6() {
 
   const cajasDe = (data) => data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajasPorParrilla || 0); }, 0);
 
+  const empresasDe = (carga) => carga.consolidado ? carga.empresasSel : (carga.empresasSel?.slice(0, 1) || []);
+
+  // Aplica filtros a cada carga (con su índice real para toggleSap)
+  const cargasFiltradas = cargasEmbarques.map((c, i) => ({ c, i })).filter(({ c }) => {
+    const t = c.trailer || {};
+    if (fDest && t.dest !== fDest) return false;
+    if (fOrigen && t.origen !== fOrigen) return false;
+    if (fLinea && !(t.linea || "").toLowerCase().includes(fLinea.toLowerCase())) return false;
+    if (fChofer && !(t.chofer || "").toLowerCase().includes(fChofer.toLowerCase())) return false;
+    if (fFecha && t.fecha !== fFecha) return false;
+    if (fSap && c.sapStatus !== fSap) return false;
+    if (fEmpresa && !empresasDe(c).includes(fEmpresa)) return false;
+    return true;
+  });
+
+  const opcDest = [...new Set(cargasEmbarques.map((c) => c.trailer?.dest).filter(Boolean))];
+  const opcOrigen = [...new Set(cargasEmbarques.map((c) => c.trailer?.origen).filter(Boolean))];
+  const opcFecha = [...new Set(cargasEmbarques.map((c) => c.trailer?.fecha).filter(Boolean))];
+  const hayFiltros = fDest || fOrigen || fLinea || fChofer || fEmpresa || fFecha || fSap;
+  const limpiarFiltros = () => { setFDest(""); setFOrigen(""); setFLinea(""); setFChofer(""); setFEmpresa(""); setFFecha(""); setFSap(""); };
+
+  // ── Exportar a Excel (solo lo filtrado) ──
   const exportarExcel = () => {
     const filas = [];
-    cargasEmbarques.forEach((carga) => {
+    cargasFiltradas.forEach(({ c: carga }) => {
       const flete = parseFloat(carga.trailer.flete) || 0;
+      const emps = empresasDe(carga);
+      // Si hay filtro de empresa, exporta solo esa
+      const empsExport = fEmpresa ? emps.filter((e) => e === fEmpresa) : emps;
       if (!carga.consolidado) {
-        const eid = carga.empresasSel?.[0];
-        const emp = EMPRESAS.find((e) => e.id === eid);
-        filas.push({
-          Manifiesto: carga.manifiestos?.[eid] || "",
-          Fecha: carga.trailer.fecha || "",
-          Destino: carga.trailer.dest || "",
-          Linea: carga.trailer.linea || "",
-          Chofer: carga.trailer.chofer || "",
-          Placas: carga.trailer.placaTracto || "",
-          Tipo: "Simple",
-          Empresa: emp?.label || "Sin empresa",
-          Cajas: "",
-          "% Flete": "100%",
-          "Flete a cobrar": flete,
-          "Flete total": flete,
-          SAP: carga.sapStatus === "cargado" ? "Cargado" : "Pendiente",
+        empsExport.forEach((eid) => {
+          const emp = EMPRESAS.find((e) => e.id === eid);
+          filas.push({
+            Manifiesto: carga.manifiestos?.[eid] || "",
+            Fecha: carga.trailer.fecha || "",
+            Destino: carga.trailer.dest || "",
+            Linea: carga.trailer.linea || "",
+            Chofer: carga.trailer.chofer || "",
+            Placas: carga.trailer.placaTracto || "",
+            Tipo: "Simple",
+            Empresa: emp?.label || "Sin empresa",
+            Cajas: "",
+            "% Flete": "100%",
+            "Flete a cobrar": flete,
+            "Flete total": flete,
+            SAP: carga.sapStatus === "cargado" ? "Cargado" : "Pendiente",
+          });
         });
       } else {
         const cajasTotal = carga.empresasSel.reduce((a, eid) => a + cajasDe(carga.distEmpresas[eid] || []), 0);
-        carga.empresasSel.forEach((eid) => {
+        empsExport.forEach((eid) => {
           const emp = EMPRESAS.find((e) => e.id === eid);
           const cajasEmp = cajasDe(carga.distEmpresas[eid] || []);
           const pct = cajasTotal > 0 ? Math.round((cajasEmp / cajasTotal) * 100) : 0;
@@ -63,7 +98,7 @@ export default function Modulo6() {
     });
 
     if (filas.length === 0) {
-      alert("No hay cargas para exportar.");
+      alert("No hay cargas para exportar con los filtros actuales.");
       return;
     }
 
@@ -73,6 +108,8 @@ export default function Modulo6() {
     const hoy = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `Consolidado_Fletes_${hoy}.xlsx`);
   };
+
+  const SEL = "text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
 
   return (
     <div>
@@ -106,9 +143,43 @@ export default function Modulo6() {
             ))}
           </div>
 
+          {/* Barra de filtros */}
+          <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-600">🔍 Filtros</span>
+              {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+              <select className={SEL} value={fFecha} onChange={(e) => setFFecha(e.target.value)}>
+                <option value="">Fecha: todas</option>
+                {opcFecha.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <select className={SEL} value={fDest} onChange={(e) => setFDest(e.target.value)}>
+                <option value="">Destino: todos</option>
+                {opcDest.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select className={SEL} value={fOrigen} onChange={(e) => setFOrigen(e.target.value)}>
+                <option value="">Origen: todos</option>
+                {opcOrigen.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <select className={SEL} value={fEmpresa} onChange={(e) => setFEmpresa(e.target.value)}>
+                <option value="">Empresa: todas</option>
+                {EMPRESAS.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+              </select>
+              <select className={SEL} value={fSap} onChange={(e) => setFSap(e.target.value)}>
+                <option value="">SAP: todos</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="cargado">Cargado</option>
+              </select>
+              <input className={SEL} value={fLinea} onChange={(e) => setFLinea(e.target.value)} placeholder="Línea..." />
+              <input className={SEL} value={fChofer} onChange={(e) => setFChofer(e.target.value)} placeholder="Chofer..." />
+            </div>
+            {hayFiltros && <div className="text-xs text-gray-400 mt-2">Mostrando {cargasFiltradas.length} de {cargasEmbarques.length}</div>}
+          </div>
+
           <div className="flex justify-end mb-3">
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2">
-              📊 Descargar a Excel
+              📊 Descargar a Excel{hayFiltros ? " (filtrado)" : ""}
             </button>
           </div>
 
@@ -127,7 +198,9 @@ export default function Modulo6() {
                 </tr>
               </thead>
               <tbody>
-                {cargasEmbarques.map((carga, ci) => {
+                {cargasFiltradas.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center text-xs text-gray-400 italic py-6">Sin resultados con estos filtros</td></tr>
+                ) : cargasFiltradas.map(({ c: carga, i: ci }) => {
                   const isOpen = cargaSel === carga.id;
                   const cajasTotal = carga.consolidado
                     ? carga.empresasSel.reduce((a, eid) => a + cajasDe(carga.distEmpresas[eid] || []), 0)

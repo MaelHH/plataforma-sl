@@ -21,15 +21,15 @@ export const CULTIVOS_INICIAL = [
 
 // Catálogo inicial de presentaciones (cajasPorParrilla es la clave del cálculo)
 const CATALOGO_INICIAL = [
-  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 20, cultivo: "BP", librasPorCaja: 24 },
-  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 25 },
-  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 25 },
-  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 35, cultivo: "BP", librasPorCaja: 22 },
-  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 48, cultivo: "BP", librasPorCaja: 18 },
-  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 24, cultivo: "EJ", librasPorCaja: 20 },
-  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 12, cultivo: "EJ", librasPorCaja: 10 },
-  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 16, cultivo: "EJ", librasPorCaja: 15 },
-  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 14, cultivo: "EJ", librasPorCaja: 14 },
+  { id: "BP_XL_11KG", label: "Bell Pepper XL 11 KG", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 56, cultivo: "BP", librasPorCaja: 24 },
+  { id: "BP_55CT", label: "Bell Pepper 55 CT WM USA", color: "bg-orange-100 text-orange-800", cajasPorParrilla: 45, cultivo: "BP", librasPorCaja: 25 },
+  { id: "BP_65CT", label: "Bell Pepper 65 CT WM USA", color: "bg-orange-200 text-orange-900", cajasPorParrilla: 45, cultivo: "BP", librasPorCaja: 25 },
+  { id: "BP_EURO48", label: "Bell Pepper Eurobox 48CT XLG", color: "bg-amber-100 text-amber-800", cajasPorParrilla: 50, cultivo: "BP", librasPorCaja: 22 },
+  { id: "BP_BOLSA8X6", label: "Bell Pepper Bolsa 8x6", color: "bg-yellow-100 text-yellow-800", cajasPorParrilla: 50, cultivo: "BP", librasPorCaja: 18 },
+  { id: "EJ_WM17", label: "Ejote Walmart 1.7 USA", color: "bg-green-100 text-green-800", cajasPorParrilla: 50, cultivo: "EJ", librasPorCaja: 20 },
+  { id: "EJ_CONV5LBS", label: "Ejote Conv. 2 bolsas 5lbs", color: "bg-teal-100 text-teal-800", cajasPorParrilla: 88, cultivo: "EJ", librasPorCaja: 10 },
+  { id: "EJ_MKT_WM", label: "Ejote Market Side WM", color: "bg-emerald-100 text-emerald-800", cajasPorParrilla: 88, cultivo: "EJ", librasPorCaja: 15 },
+  { id: "EJ_ORG_ALS", label: "Ejote Orgánico 14 Bolsas Alsuper", color: "bg-lime-100 text-lime-800", cajasPorParrilla: 80, cultivo: "EJ", librasPorCaja: 14 },
 ];
 
 // Opción "sin asignar" para los selects (no editable)
@@ -102,11 +102,26 @@ export const requerimiento = [
 
 export const EMPTY_TRAILER = { linea: "", contacto: "", numero: "", chofer: "", marcaModelo: "", placaTracto: "", economicoCaja: "", placaCaja: "", licencia: "", telefono: "", flete: "" };
 
-// Catálogo inicial de líneas de transporte
+// Catálogo inicial de líneas de transporte (con subcatálogos: choferes, tractos, cajas)
 const LINEAS_INICIAL = [
-  { id: "L1", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567" },
-  { id: "L2", linea: "Fletes del Norte", contacto: "Sandra López", numero: "668-555-9900" },
-  { id: "L3", linea: "Logística Sinaloa", contacto: "Pedro Vega", numero: "669-777-1122" },
+  {
+    id: "L1", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567",
+    choferes: [{ id: "CH1", nombre: "Carlos Mendoza", telefono: "667-987-6543", licencia: "LIC-88721" }],
+    tractos: [{ id: "TR1", marcaModelo: "Kenworth T680", placa: "ABC-1234" }],
+    cajas: [{ id: "CJ1", economico: "C-0042", placa: "XYZ-9876" }],
+  },
+  {
+    id: "L2", linea: "Fletes del Norte", contacto: "Sandra López", numero: "668-555-9900",
+    choferes: [{ id: "CH2", nombre: "Miguel Ángel Ruiz", telefono: "668-321-7654", licencia: "LIC-44502" }],
+    tractos: [{ id: "TR2", marcaModelo: "International LT", placa: "DEF-5678" }],
+    cajas: [{ id: "CJ2", economico: "C-0087", placa: "MNO-4321" }],
+  },
+  {
+    id: "L3", linea: "Logística Sinaloa", contacto: "Pedro Vega", numero: "669-777-1122",
+    choferes: [{ id: "CH3", nombre: "José Luis Torres", telefono: "669-444-2211", licencia: "LIC-33180" }],
+    tractos: [{ id: "TR3", marcaModelo: "Freightliner Cascadia", placa: "GHI-9012" }],
+    cajas: [{ id: "CJ3", economico: "C-0103", placa: "PQR-8765" }],
+  },
 ];
 
 const mockTrailers = [

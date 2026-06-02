@@ -10,7 +10,6 @@ const DC = {
   "McAllen": "bg-blue-100 text-blue-800",
 };
 
-// Lunes de la semana actual en formato YYYY-MM-DD
 function lunesActual() {
   const hoy = new Date();
   const dia = hoy.getDay();
@@ -78,7 +77,7 @@ function TablaCalculadora() {
 }
 
 export default function Modulo2() {
-const { programa, catalogo, setRequerimientoGen } = useDatos();
+  const { programa, catalogo, cultivos, setRequerimientoGen } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const [diaFil, setDiaFil] = useState("Todos");
   const [maData, setMaData] = useState({});
@@ -86,33 +85,31 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
   const dias = calcularDias(semana);
   const filasSemana = programa[semana] || [];
 
-  // ── Cálculo de contratos desde el programa de M1 ──
-  // Agrupar parrillas por destino+día. Cada presentación redondea sus parrillas por separado.
-  const cxpDe = (presId) => catalogo.find((c) => c.id === presId)?.cajasPorParrilla || 0;
+  const catDe = (presId) => catalogo.find((c) => c.id === presId);
+  const labelCultivo = (cId) => cultivos.find((c) => c.id === cId)?.label || cId;
 
-  // mapa: { "destino||díaIdx": parrillasTotales }
+  // mapa: { "cultivo||destino||díaIdx": parrillasTotales }
   const acumulado = {};
   filasSemana.forEach((fila) => {
-    const cxp = cxpDe(fila.presId);
+    const cat = catDe(fila.presId);
+    const cxp = cat?.cajasPorParrilla || 0;
+    const cultivo = cat?.cultivo || fila.cultivo || "—";
     if (!cxp) return;
     fila.dias.forEach((cajas, di) => {
       if (!cajas) return;
-      const parr = Math.ceil(cajas / cxp); // redondeo por presentación
-      const key = fila.dest + "||" + di;
+      const parr = Math.ceil(cajas / cxp);
+      const key = cultivo + "||" + fila.dest + "||" + di;
       acumulado[key] = (acumulado[key] || 0) + parr;
     });
   });
 
-  // Convertir a filas para la tabla
   let contratos = Object.entries(acumulado).map(([key, parr]) => {
-    const [dest, diStr] = key.split("||");
+    const [cultivo, dest, diStr] = key.split("||");
     const di = parseInt(diStr);
-    return { dest, di, fecha: dias[di], parrillas: parr, trailers: Math.ceil(parr / PT) };
+    return { cultivo, dest, di, fecha: dias[di], parrillas: parr, trailers: Math.ceil(parr / PT) };
   });
-  // Filtrar por día seleccionado
   if (diaFil !== "Todos") contratos = contratos.filter((c) => c.fecha === diaFil);
-  // Ordenar por día y destino
-  contratos.sort((a, b) => a.di - b.di || a.dest.localeCompare(b.dest));
+  contratos.sort((a, b) => a.di - b.di || a.dest.localeCompare(b.dest) || a.cultivo.localeCompare(b.cultivo));
 
   const totalTrailers = contratos.reduce((a, c) => a + c.trailers, 0);
 
@@ -123,14 +120,12 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
   const [generado, setGenerado] = useState(false);
   const generarRequerimiento = () => {
     const reqs = [];
-    // Contratos (de todo lo calculado, sin filtro de día)
     Object.entries(acumulado).forEach(([key, parr]) => {
-      const [dest, diStr] = key.split("||");
+      const [cultivo, dest, diStr] = key.split("||");
       const di = parseInt(diStr);
       const trailers = Math.ceil(parr / PT);
-      if (trailers > 0) reqs.push({ tipo: "Contrato", fecha: dias[di], diIdx: di, origen: ORIGEN, dest, sol: trailers });
+      if (trailers > 0) reqs.push({ tipo: "Contrato", fecha: dias[di], diIdx: di, origen: ORIGEN, dest, cultivo, sol: trailers });
     });
-    // Mercado Abierto (lo que capturó Kiko)
     Object.entries(maData).forEach(([key, val]) => {
       const sol = parseInt(val) || 0;
       if (sol <= 0) return;
@@ -146,11 +141,19 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
   const TH = "text-xs font-medium px-2 py-2 border-b border-gray-100 text-left";
   const TD = "px-2 py-2 border-b border-gray-100 text-xs";
 
+  const cultBadge = (cId) => {
+    const color = cultivos.find((c) => c.id === cId)?.color;
+    if (color === "orange") return "bg-orange-100 text-orange-700";
+    if (color === "green") return "bg-green-100 text-green-700";
+    return "bg-gray-100 text-gray-600";
+  };
+
   return (
     <div>
       <div className="mb-4">
-<h1 className="text-base font-semibold text-gray-900">Cálculo de Trailers</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Kiko / Alfonso · convierte el programa en trailers necesarios</p>      </div>
+        <h1 className="text-base font-semibold text-gray-900">Cálculo de Trailers</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Kiko / Alfonso · convierte el programa en trailers necesarios</p>
+      </div>
 
       {/* Selector de semana */}
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
@@ -181,25 +184,27 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
         <span className="text-xs text-gray-400">calculado automático desde el programa</span>
       </div>
       <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto mb-6">
-        <table className="w-full text-sm min-w-[520px]">
+        <table className="w-full text-sm min-w-[560px]">
           <thead>
             <tr className="bg-gray-50">
               <th className={TH}>Fecha</th>
               <th className={TH}>Origen</th>
               <th className={TH}>Destino</th>
+              <th className={TH}>Cultivo</th>
               <th className={TH + " text-right bg-green-50 text-green-700"}>Parrillas</th>
               <th className={TH + " text-right bg-blue-50 text-blue-700"}>Trailers</th>
             </tr>
           </thead>
           <tbody>
             {contratos.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-xs text-gray-400 italic py-6">Sin programa para esta semana. José Carlos debe llenarlo en el Módulo 1.</td></tr>
+              <tr><td colSpan={6} className="text-center text-xs text-gray-400 italic py-6">Sin programa para esta semana. José Carlos debe llenarlo en el Módulo 1.</td></tr>
             ) : (
               contratos.map((r, i) => (
                 <tr key={i} className="hover:bg-gray-50">
                   <td className={TD + " font-semibold"}>{r.fecha}</td>
                   <td className={TD + " text-gray-500"}>{ORIGEN}</td>
                   <td className={TD}><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${DC[r.dest] || "bg-gray-100 text-gray-600"}`}>{r.dest}</span></td>
+                  <td className={TD}><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cultBadge(r.cultivo)}`}>{labelCultivo(r.cultivo)}</span></td>
                   <td className={TD + " text-right font-semibold text-green-700 bg-green-50"}>{r.parrillas}</td>
                   <td className={TD + " text-right font-bold text-blue-700 bg-blue-50"}>{r.trailers}</td>
                 </tr>
@@ -209,7 +214,7 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
           {contratos.length > 0 && (
             <tfoot>
               <tr className="bg-gray-50 font-semibold">
-                <td colSpan={4} className="px-2 py-2 text-xs text-gray-600 text-right">Total trailers de contrato</td>
+                <td colSpan={5} className="px-2 py-2 text-xs text-gray-600 text-right">Total trailers de contrato</td>
                 <td className="px-2 py-2 text-right text-sm text-blue-700">{totalTrailers}</td>
               </tr>
             </tfoot>
@@ -258,7 +263,7 @@ const { programa, catalogo, setRequerimientoGen } = useDatos();
               })
             )}
           </tbody>
-<tfoot>
+          <tfoot>
             <tr className="bg-purple-50 font-semibold">
               <td colSpan={3} className="px-2 py-2 text-xs text-purple-700">Total Mercado Abierto</td>
               <td className="px-2 py-2 text-center text-sm text-purple-700">{totMA} trailers</td>

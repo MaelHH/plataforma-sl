@@ -9,6 +9,7 @@ const FRONTAL_FIELDS = [
   { id: "placa_trailer", label: "Placas del trailer", icon: "🚛" },
   { id: "placa_caja", label: "Placas de la caja", icon: "📦" },
   { id: "economico", label: "Económico de la caja", icon: "🔢" },
+  { id: "tive", label: "TIVE", icon: "🛰️" },
 ];
 
 export default function Modulo4() {
@@ -261,18 +262,30 @@ export default function Modulo4() {
 
       {trailerSel && !enviado && (
         <div>
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+<div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <div className="text-xs font-semibold text-blue-700 uppercase mb-3">Datos del trailer — pre-llenados de Mónica</div>
             <div className="grid grid-cols-3 gap-2 text-xs">
-              {[["Destino", trailerSel.dest], ["Línea", trailerSel.linea], ["Chofer", trailerSel.chofer], ["Placas tracto", trailerSel.placaTracto], ["Placas caja", trailerSel.placaCaja], ["Flete", "$" + trailerSel.flete]].map(([l, v]) => (
+              {[
+                ["Fecha", trailerSel.fecha],
+                ["Origen", trailerSel.origen],
+                ["Destino", trailerSel.dest],
+                ["Línea", trailerSel.linea],
+                ["Contacto", trailerSel.contacto],
+                ["Número línea", trailerSel.numero],
+                ["Chofer", trailerSel.chofer],
+                ["Teléfono", trailerSel.telefono],
+                ["Licencia", trailerSel.licencia],
+                ["Marca/Modelo tracto", trailerSel.marcaModelo],
+                ["Placas tracto", trailerSel.placaTracto],
+                ["Económico caja", trailerSel.economicoCaja],
+                ["Placas caja", trailerSel.placaCaja],
+                ["Flete", trailerSel.flete ? "$" + trailerSel.flete : ""],              ].map(([l, v]) => (
                 <div key={l}><div className="text-blue-600 font-medium mb-0.5">{l}</div><div className="text-gray-800 font-semibold">{v || "—"}</div></div>
               ))}
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-2 mb-4">
-            {[{ l: "Fotos carga", v: `${cargaFilled}/30`, c: "text-blue-700" }, { l: "Fotos frontales", v: `${frontalFilled}/6`, c: "text-purple-700" }, { l: "Empresas", v: empresasSel.length, c: "text-green-700" }].map((s, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5"><div className="text-xs text-gray-500 mb-1">{s.l}</div><div className={`text-lg font-semibold ${s.c}`}>{s.v}</div></div>
+{[{ l: "Fotos carga", v: `${cargaFilled}/30`, c: "text-blue-700" }, { l: "Fotos frontales", v: `${frontalFilled}/${FRONTAL_FIELDS.length}`, c: "text-purple-700" }, { l: "Empresas", v: empresasSel.length, c: "text-green-700" }].map((s, i) => (              <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5"><div className="text-xs text-gray-500 mb-1">{s.l}</div><div className={`text-lg font-semibold ${s.c}`}>{s.v}</div></div>
             ))}
           </div>
 
