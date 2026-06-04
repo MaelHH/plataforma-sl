@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SearchSelect from "../components/SearchSelect";
+import ColaTabs from "../components/ColaTabs";
 import {
   useDatos, ahora,
   IMPORT_ESTADOS, DIAS_ALERTA_SALIDA,
@@ -230,7 +231,11 @@ export default function Modulo10() {
     const v = vencimientoImportacion(imp);
     return v && v.est === "vencido";
   }).length;
-  const retornadas = importaciones.filter((imp) => imp.estado === "retornada").length;
+  const enTramiteArr = importaciones.filter((imp) => imp.estado !== "retornada");
+  const retornadasArr = importaciones.filter((imp) => imp.estado === "retornada");
+  const retornadas = retornadasArr.length;
+  const [tabImp, setTabImp] = useState("tramite"); // tramite | historial
+  const listaImp = tabImp === "tramite" ? enTramiteArr : retornadasArr;
 
   const stat = (l, v, c) => (
     <div className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
@@ -259,9 +264,16 @@ export default function Modulo10() {
         {stat("Retornadas", retornadas, "text-green-700")}
       </div>
 
+      {totDocs > 0 && (
+        <ColaTabs tab={tabImp} setTab={setTabImp} tabs={[
+          { key: "tramite", label: "En trámite", count: enTramiteArr.length },
+          { key: "historial", label: "Retornadas", count: retornadasArr.length },
+        ]} />
+      )}
+
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">Importaciones registradas ({totDocs})</span>
+          <span className="text-sm font-semibold text-gray-900">{totDocs === 0 ? "Importaciones registradas" : tabImp === "tramite" ? "Importaciones en trámite" : "Importaciones retornadas"} ({totDocs === 0 ? 0 : listaImp.length})</span>
         </div>
         {totDocs === 0 ? (
           <div className="text-center py-10">
@@ -269,6 +281,8 @@ export default function Modulo10() {
             <div className="text-sm text-gray-500 mb-3">Aún no hay importaciones registradas.</div>
             <button onClick={nueva} className="text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">+ Documentar primera importación</button>
           </div>
+        ) : listaImp.length === 0 ? (
+          <div className="text-xs text-gray-400 text-center py-8 italic">{tabImp === "tramite" ? "No hay importaciones en trámite." : "Aún no hay importaciones retornadas."}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: "1080px" }}>
@@ -287,7 +301,7 @@ export default function Modulo10() {
                 </tr>
               </thead>
               <tbody>
-                {importaciones.map((imp) => {
+                {listaImp.map((imp) => {
                   const v = vencimientoImportacion(imp);
                   const estCfg = IMPORT_ESTADOS[imp.estado] || IMPORT_ESTADOS.borrador;
                   return (

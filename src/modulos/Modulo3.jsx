@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SearchSelect from "../components/SearchSelect";
+import ColaTabs from "../components/ColaTabs";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
 import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
@@ -27,6 +28,7 @@ export default function Modulo3() {
   const [inspTrailer, setInspTrailer] = useState(null); // trailer al que se le hace inspección precarga
   const [inspForm, setInspForm] = useState(null);
   const [inspTab, setInspTab] = useState("precarga"); // "precarga" | "alergenos"
+  const [tabPool, setTabPool] = useState("activos"); // activos | historial
   const [lineaNueva, setLineaNueva] = useState(false);
   const [choferNuevo, setChoferNuevo] = useState(false);
   const [tractoNuevo, setTractoNuevo] = useState(false);
@@ -35,6 +37,9 @@ export default function Modulo3() {
   const reqSemana = requerimientoGen[semana] || [];
 
   const hoy = trailers.filter((t) => t.fecha === diaFil);
+  const hoyActivos = hoy.filter((t) => t.status !== "en_ruta");
+  const hoyEnRuta = hoy.filter((t) => t.status === "en_ruta");
+  const listaPool = tabPool === "activos" ? hoyActivos : hoyEnRuta;
   const reqsHoy = reqSemana.filter((r) => r.fecha === diaFil);
   const destinos = [...new Set(reqsHoy.map((r) => r.dest))];
 
@@ -415,7 +420,17 @@ export default function Modulo3() {
         {hoy.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-6 italic">Ningún trailer registrado este día</div>
         ) : (
-          <div className="p-3 grid grid-cols-2 gap-2">{hoy.map((t) => <MiniCard key={t.id} t={t} showDestSel={true} />)}</div>
+          <div className="p-3">
+            <ColaTabs tab={tabPool} setTab={setTabPool} tabs={[
+              { key: "activos", label: "Activos", count: hoyActivos.length },
+              { key: "historial", label: "En ruta", count: hoyEnRuta.length },
+            ]} />
+            {listaPool.length === 0 ? (
+              <div className="text-xs text-gray-400 text-center py-4 italic">{tabPool === "activos" ? "Sin trailers activos este día." : "Ningún trailer en ruta este día."}</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">{listaPool.map((t) => <MiniCard key={t.id} t={t} showDestSel={true} />)}</div>
+            )}
+          </div>
         )}
       </div>
 

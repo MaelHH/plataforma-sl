@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
+import ColaTabs from "../components/ColaTabs";
 
 const FRONTAL_FIELDS = [
   { id: "temp_antes", label: "Temp. antes de carga", icon: "🌡️" },
@@ -13,8 +14,9 @@ const FRONTAL_FIELDS = [
 ];
 
 export default function Modulo4() {
-  const { trailers, setTrailers, setCargasEmbarques, catalogo } = useDatos();
+  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
   const CATALOGO = [CAT_VACIO, ...catalogo];
+  const [tabM4, setTabM4] = useState("preparar"); // preparar | enviados
   const [trailerSel, setTrailerSel] = useState(null);
   const [cargaPhotos, setCargaPhotos] = useState(Array(TOTAL).fill(null));
   const [frontalPhotos, setFrontalPhotos] = useState({});
@@ -214,6 +216,51 @@ export default function Modulo4() {
         </div>
       </div>
 
+      <ColaTabs tab={tabM4} setTab={setTabM4} tabs={[
+        { key: "preparar", label: "Preparar", count: disponibles.length },
+        { key: "enviados", label: "Enviados", count: cargasEmbarques.length },
+      ]} />
+
+      {tabM4 === "enviados" ? (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <span className="text-sm font-semibold text-gray-900">Cargas enviadas a Embarques ({cargasEmbarques.length})</span>
+          </div>
+          {cargasEmbarques.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-8 italic">Aún no has enviado cargas a Embarques.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: "720px" }}>
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                    <th className="text-left px-3 py-2 font-medium">Enviado</th>
+                    <th className="text-left px-3 py-2 font-medium">Destino</th>
+                    <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
+                    <th className="text-right px-3 py-2 font-medium">Fotos carga</th>
+                    <th className="text-right px-3 py-2 font-medium">Fotos frontales</th>
+                    <th className="text-center px-3 py-2 font-medium">SAP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cargasEmbarques.map((c) => (
+                    <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-600">{c.fecha}</td>
+                      <td className="px-3 py-2"><span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[c.trailer?.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{c.trailer?.dest || "—"}</span></td>
+                      <td className="px-3 py-2 text-gray-700"><div className="font-medium">{c.trailer?.linea || "—"}</div><div className="text-gray-400">{c.trailer?.chofer || "—"}</div></td>
+                      <td className="px-3 py-2 text-right">{c.cargaFotos ?? 0}/30</td>
+                      <td className="px-3 py-2 text-right">{c.frontalFotos ?? 0}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${c.sapStatus === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>{c.sapStatus === "cargado" ? "✓ Cargado" : "⏳ Pendiente"}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* Selector */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
         <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
@@ -310,6 +357,9 @@ export default function Modulo4() {
             <button onClick={enviar} className="bg-green-600 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-700">↗ Enviar a Embarques</button>
           </div>
         </div>
+      )}
+
+        </>
       )}
 
       {/* Modal cámara */}
