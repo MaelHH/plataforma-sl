@@ -3,6 +3,7 @@ import { useDatos, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PROD
 import SearchSelect from "../components/SearchSelect";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
+import ColaTabs from "../components/ColaTabs";
 
 // Muestreo vacío (gramos por defecto en blanco)
 const muestreoVacio = (lote) => ({
@@ -49,6 +50,7 @@ export default function Modulo9() {
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
+  const [tabRec, setTabRec] = useState("pendientes"); // pendientes | historial
 
   // ── Muestreo de calidad ──
   const [muestreoMov, setMuestreoMov] = useState(null); // movimiento al que se le hace muestreo
@@ -139,6 +141,7 @@ export default function Modulo9() {
   const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido");
   const pendientes = movimientos.filter((m) => m.recepcion?.estado !== "recibido");
   const conNovedad = recibidos.filter((m) => m.recepcion?.condicion === "con_novedad");
+  const lista = tabRec === "pendientes" ? pendientes : recibidos;
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -182,12 +185,17 @@ export default function Modulo9() {
         {stat("Con novedad", conNovedad.length, "text-red-600")}
       </div>
 
+      <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
+        { key: "pendientes", label: "Por recibir", count: pendientes.length },
+        { key: "historial", label: "Historial", count: recibidos.length },
+      ]} />
+
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">Fletes para dar recepción ({movimientos.length})</span>
+          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes por recibir" : "Fletes recibidos (historial)"} ({lista.length})</span>
         </div>
-        {movimientos.length === 0 ? (
-          <div className="text-xs text-gray-400 text-center py-8 italic">Aún no hay fletes salidos de campo. Aparecerán aquí en cuanto se registren en Movimientos.</div>
+        {lista.length === 0 ? (
+          <div className="text-xs text-gray-400 text-center py-8 italic">{tabRec === "pendientes" ? "No hay fletes por recibir. Aparecerán aquí en cuanto se registren en Movimientos." : "Aún no hay fletes recibidos."}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: "1080px" }}>
@@ -205,7 +213,7 @@ export default function Modulo9() {
                 </tr>
               </thead>
               <tbody>
-                {movimientos.map((m) => {
+                {lista.map((m) => {
                   const par = sumar(m.cargaItems, "parrillas");
                   const bul = sumar(m.cargaItems, "bultos");
                   const r = m.recepcion;

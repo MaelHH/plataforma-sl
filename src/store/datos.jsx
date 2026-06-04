@@ -165,6 +165,52 @@ export const PRECARGA_PREGUNTAS = [
 // Principales alérgenos en México (manifiesto de capacitación al operador)
 export const ALERGENOS_MX = ["Soya", "Huevos", "Leche", "Pescado", "Mariscos (crustáceos)", "Trigo", "Cacahuates", "Nueces de árbol", "Sulfito"];
 
+// ─── APROBACIÓN DE CALIDAD DE EMBARQUES (por producto) ───
+// Cada producto tiene su propia lista de defectos. Al seleccionar el producto en
+// la inspección se cargan SOLO sus defectos. Cada defecto pertenece al grupo
+// QUALITY (cat "calidad") o CONDITION (cat "condicion"), coloreados con CATS_QC.
+// ⚠️ Catálogo oficial de QC. Para editar: agrega/quita filas en DEFECTOS_ROWS
+// ([grupo, defecto]) — "Q" = QUALITY, "C" = CONDITION.
+
+// Filas tal cual el catálogo: producto → [ [grupo, defecto], ... ]  (Q=QUALITY, C=CONDITION)
+const DEFECTOS_ROWS = {
+  "ZUCCHINI": [["Q","ABNORMALCOLOR"],["C","BRUISES"],["C","DECAY"],["Q","DEFORMED"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"],["Q","SCUFFING"],["C","SOFT"],["C","SUNKENAREAS"],["Q","UNDERSIZE"]],
+  "YELLOW SQUASH": [["Q","ABNORMALCOLOR"],["C","BRUISES"],["C","DECAY"],["Q","DEFORMED"],["Q","FUERADETAMAÑO"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"],["Q","SCUFFING"],["C","SOFT"],["Q","UNDERSIZE"]],
+  "SPAGHETTI": [["Q","ABNORMALCOLOR"],["C","DECAY"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"],["Q","SCUFFING"],["C","SOFT"],["Q","UNDERSIZE"]],
+  "RED BELL PEPPER": [["Q","ABNORMALCOLOR"],["C","BLOSSOM"],["C","DECAY"],["Q","DEFORMED"],["Q","Fumagina"],["Q","IMMATURE"],["C","INSECTDAMAGE"],["C","LIVEINSECT"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","NOTCLEAN"],["Q","PITTING"],["Q","SCARS"],["C","SHRIVELED"],["Q","SUNSCALD"],["Q","TURNED"],["C","VIROSIS"],["Q","WETSTEM"]],
+  "GREEN BELL PEPPER": [["Q","ABNORMALCOLOR"],["C","BLOSSOM"],["Q","BROWNSTEM"],["C","BRUISES"],["Q","ChillDamage"],["Q","CRUSHED"],["C","DECAY"],["Q","DEFORMED"],["Q","FUERADETAMAÑO"],["Q","Fumagina"],["Q","HOLLOW"],["Q","IMMATURE"],["C","INSECTDAMAGE"],["C","LIVEINSECT"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","NOTCLEAN"],["Q","PITTING"],["C","RUSSETING"],["Q","SCARS"],["C","SHRIVELED"],["C","SHRIVELEDENDS"],["Q","SILVERDISCOLORATION"],["C","SOFT"],["C","SOFTTIPS"],["C","SUNKENAREAS"],["Q","SUNSCALD"],["Q","TURNED"],["Q","UNDERSIZE"],["C","VIROSIS"],["Q","WETSTEM"],["Q","YELLOWBELLY"],["Q","YELLOWTIPS"]],
+  "GREEN BEANS": [["Q","BEANNY"],["Q","CRUSHED"],["C","DECAY"],["Q","IMMATURE"],["C","INSECTDAMAGE"],["C","MATURE"],["C","MECHANICALDAMAGE"],["C","MOLD"],["C","RUSSETING"],["Q","SCARS"],["C","SHRIVELED"]],
+  "GRAY SQUASH": [["Q","ABNORMALCOLOR"],["C","BRUISES"],["C","DECAY"],["Q","DEFORMED"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"],["Q","SCUFFING"],["C","SOFT"],["Q","UNDERSIZE"]],
+  "CUCUMBER": [["Q","ABNORMALCOLOR"],["C","BRUISEDTIP"],["Q","ChillDamage"],["C","DECAY"],["Q","DEFORMED"],["Q","FUERADETAMAÑO"],["Q","HOLLOW"],["C","INSECTDAMAGE"],["Q","INTERNALDISCOLORATION"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","NOTCLEAN"],["Q","PITTING"],["C","RUSSETING"],["Q","SCARS"],["C","SHRIVELED"],["C","SHRIVELEDENDS"],["Q","SILVERDISCOLORATION"],["C","SOFT"],["C","SOFTTIPS"],["C","SUNKENAREAS"],["Q","SUNSCALD"],["Q","UNDERSIZE"],["Q","WETSTEM"],["Q","YELLOWBELLY"],["Q","YELLOWTIPS"]],
+  "CORN": [["C","DECAY"],["C","DEHYDRATED"],["Q","IMMATURE"],["C","LIVEINSECT"],["Q","MISSIZED"],["Q","UNDERSIZE"]],
+  "BUTTERNUT": [["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"],["Q","UNDERSIZE"]],
+  "BERENJENA": [["Q","ABNORMALCOLOR"],["Q","BROWNSTEM"],["C","BRUISES"],["C","DECAY"],["C","MECHANICALDAMAGE"],["Q","SCARS"],["C","SOFT"],["C","SUNKENAREAS"],["Q","UNDERSIZE"]],
+  "ACORN": [["Q","ABNORMALCOLOR"],["C","DECAY"],["C","MECHANICALDAMAGE"],["C","MOLD"],["Q","SCARS"]],
+};
+
+// Mapa inicial: producto → [ { id, label, cat } ]. El id se prefija con el producto
+// para que no se mezclen defectos del mismo nombre entre productos distintos.
+// Este es el VALOR INICIAL; el catálogo vivo es editable (estado defectosCalidad).
+export const DEFECTOS_POR_CULTIVO_INICIAL = Object.fromEntries(
+  Object.entries(DEFECTOS_ROWS).map(([prod, rows]) => [
+    prod,
+    rows.map(([g, tok]) => ({ id: `${prod}__${tok}`, label: tok, cat: g === "Q" ? "calidad" : "condicion" })),
+  ])
+);
+
+// Inspectores de calidad (valor inicial; editable en el catálogo)
+export const INSPECTORES_QC_INICIAL = ["ALDO ESTRADA", "FERNANDO BELTRAN", "JESUS GAXIOLA", "LUIS GAXIOLA"];
+
+// Lugares de inspección (valor inicial; editable en el catálogo)
+export const LUGARES_QC_INICIAL = ["Traveler", "Agripacking", "Divine Flavour"];
+
+// Estados de la aprobación de calidad de un embarque
+export const CALIDAD_ESTADOS = {
+  pendiente: { label: "Pendiente", color: "bg-orange-100 text-orange-700 border-orange-200", dot: "bg-orange-400" },
+  aprobado: { label: "Inspeccionado", color: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500" },
+  rechazado: { label: "Rechazado", color: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500" },
+};
+
 // ─── IMPORTACIONES DE MATERIALES (importación temporal IMMEX) ───
 // Catálogo EDITABLE de materiales que se pueden importar. `diasSalida` es el
 // periodo (en días) que se tiene para retornar/exportar el material desde la
@@ -329,17 +375,20 @@ export function DatosProvider({ children }) {
   const [bitacora, setBitacora] = useState(guardado.bitacora ?? []); // registro de eventos con timestamp (backend-ready)
   const [materiales, setMateriales] = useState(guardado.materiales ?? MATERIALES_INICIAL); // catálogo de materiales importables
   const [importaciones, setImportaciones] = useState(guardado.importaciones ?? []); // importaciones de materiales documentadas
+  const [defectosCalidad, setDefectosCalidad] = useState(guardado.defectosCalidad ?? DEFECTOS_POR_CULTIVO_INICIAL); // catálogo editable: producto → defectos
+  const [inspectoresCalidad, setInspectoresCalidad] = useState(guardado.inspectoresCalidad ?? INSPECTORES_QC_INICIAL); // inspectores de calidad
+  const [lugaresCalidad, setLugaresCalidad] = useState(guardado.lugaresCalidad ?? LUGARES_QC_INICIAL); // lugares de inspección
 
   // Persistir todo el estado en localStorage ante cualquier cambio.
   useEffect(() => {
-    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones };
+    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
     } catch (e) {
       // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
       console.warn("No se pudo guardar en localStorage:", e);
     }
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -356,6 +405,7 @@ export function DatosProvider({ children }) {
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, importaciones, setImportaciones,
+    defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
   };
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }
