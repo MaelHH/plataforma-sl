@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useDatos, ORIGEN, TOTAL, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
+import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
 
-const COLS = 15;
 const FRONTAL_FIELDS = [
   { id: "temp_antes", label: "Temp. antes de carga", icon: "🌡️" },
   { id: "temp_despues", label: "Temp. después de carga", icon: "🌡️" },
@@ -13,7 +13,7 @@ const FRONTAL_FIELDS = [
 ];
 
 export default function Modulo4() {
-  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
+  const { trailers, setTrailers, setCargasEmbarques, catalogo } = useDatos();
   const CATALOGO = [CAT_VACIO, ...catalogo];
   const [trailerSel, setTrailerSel] = useState(null);
   const [cargaPhotos, setCargaPhotos] = useState(Array(TOTAL).fill(null));
@@ -74,12 +74,10 @@ export default function Modulo4() {
     setEnviado(true);
   };
 
-  const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
-
   // Grid de fotos de carga (zigzag 1,2,3,4...)
-  function CargaGrid() {
+  function cargaGrid() {
     const filled = cargaPhotos.filter(Boolean).length;
-    const renderRow = (offset, labelOffset) =>
+    const renderRow = (offset) =>
       Array.from({ length: 15 }, (_, i) => {
         const idx = offset + i;
         const has = cargaPhotos[idx];
@@ -113,7 +111,7 @@ export default function Modulo4() {
   }
 
   // Grid de distribución de productos
-  function ParrillaGrid({ title, color, border, data, onChange, blockedIdxs = [] }) {
+  function parrillaGrid({ key, title, color, border, data, onChange, blockedIdxs = [] }) {
     const asig = data.filter((p) => p.prod).length;
     const totalCajas = data.reduce((a, p) => { const c = CATALOGO.find((x) => x.id === p.prod); return a + (c?.cajasPorParrilla || 0); }, 0);    
     const renderCol = (start, parrFn) =>
@@ -125,16 +123,16 @@ export default function Modulo4() {
         return (
           <div key={idx} className={`flex items-center gap-1.5 py-1 border-b border-gray-100 ${blocked ? "opacity-30" : ""}`}>
             <div className={`w-6 text-center text-xs font-bold ${isFront ? "text-blue-500" : "text-gray-500"}`}>{parrNum}{isFront ? "🚛" : ""}</div>
-            <select value={p.prod} disabled={blocked} onChange={(e) => { const n = [...data]; n[idx] = { ...n[idx], prod: e.target.value }; onChange(n); }}
-              className={`flex-1 text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}>
-              {CATALOGO.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
+            <SearchSelect value={p.prod} disabled={blocked}
+              onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
+              className={`flex-1 text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}
+              options={CATALOGO.map((c) => ({ value: c.id, label: c.label }))} />
             <div className={`w-14 text-center text-xs font-semibold rounded px-1 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-700" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
           </div>
         );
       });
     return (
-      <div className={`bg-white border-2 rounded-xl overflow-hidden mb-4 ${border}`}>
+      <div key={key} className={`bg-white border-2 rounded-xl overflow-hidden mb-4 ${border}`}>
         <div className={`px-3 py-2 border-b flex items-center justify-between ${color}`}>
           <span className="text-xs font-bold text-gray-800">{title}</span>
           <span className="text-xs text-gray-600">{asig}/30 · {totalCajas.toLocaleString()} cjs</span>
@@ -154,7 +152,7 @@ export default function Modulo4() {
   }
 
   // Sección empresa / consolidado
-  function ConsolidadoSection() {
+  function consolidadoSection() {
     const ocupadas = {};
     empresasSel.forEach((eid) => { (distEmpresas[eid] || []).forEach((p, idx) => { if (p.prod) ocupadas[idx] = eid; }); });
     const toggleEmpresa = (eid) => {
@@ -198,7 +196,7 @@ export default function Modulo4() {
           const emp = EMPRESAS.find((e) => e.id === eid);
           const data = distEmpresas[eid] || Array(TOTAL).fill({ prod: "", cajas: "" });
           const blocked = consolidado ? Array.from({ length: TOTAL }, (_, idx) => (ocupadas[idx] && ocupadas[idx] !== eid ? idx : -1)).filter((x) => x >= 0) : [];
-          return <ParrillaGrid key={eid} title={`Distribución — ${emp.label}`} color={COLORS[eid]} border={BORDERS[eid]} data={data} onChange={(d) => updEmpresa(eid, d)} blockedIdxs={blocked} />;
+          return parrillaGrid({ key: eid, title: `Distribución — ${emp.label}`, color: COLORS[eid], border: BORDERS[eid], data, onChange: (d) => updEmpresa(eid, d), blockedIdxs: blocked });
         })}
       </div>
     );
@@ -305,8 +303,8 @@ export default function Modulo4() {
           </div>
 
           <div className="flex items-center gap-2 mb-3"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-sm font-semibold text-gray-800">Interior — 30 parrillas</span></div>
-          <CargaGrid />
-          <ConsolidadoSection />
+          {cargaGrid()}
+          {consolidadoSection()}
 
           <div className="flex items-center justify-end mt-4">
             <button onClick={enviar} className="bg-green-600 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-700">↗ Enviar a Embarques</button>

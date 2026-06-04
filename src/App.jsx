@@ -11,6 +11,7 @@ import Modulo6 from "./modulos/Modulo6";
 import Modulo7 from "./modulos/Modulo7";
 import Modulo8 from "./modulos/Modulo8";
 import Modulo9 from "./modulos/Modulo9";
+import Modulo10 from "./modulos/Modulo10";
 
 const MODULOS = [
   { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈" },
@@ -23,6 +24,7 @@ const MODULOS = [
   { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦" },
   { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰" },
   { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️" },
+  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃" },
 ];
 
 export default function App() {
@@ -77,6 +79,7 @@ export default function App() {
             {moduloActivo === 7 && <Modulo7 />}
             {moduloActivo === 8 && <Modulo8 />}
             {moduloActivo === 9 && <Modulo9 />}
+            {moduloActivo === 10 && <Modulo10 />}
           </div>
         </div>
       </div>

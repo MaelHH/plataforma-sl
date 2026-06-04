@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components --
+   El store expone a propósito constantes/utilidades junto al DatosProvider. */
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 // ─── PERSISTENCIA (localStorage) + ESTAMPADO DE TIEMPO ───
@@ -124,6 +126,93 @@ export const DEFECTOS_QC = [
 
 export const MAX_MUESTREOS = 3;
 
+// ─── INSPECCIÓN DE VEHÍCULO Y PRODUCTO QUE LLEGA A LA PLANTA ───
+// Formato REG-EMP-24 / POE-ADM-11 (SL Agrícola). Checklist SI/NO que se llena
+// por cada carro/remisión/flete que llega a planta. `malo` indica qué respuesta
+// representa una condición indeseable (para resaltarla en pantalla y en el PDF).
+export const INSP_VEHICULO = [
+  { id: "veh_lodo", label: "Lodo / tierra", malo: "si" },
+  { id: "veh_quimica", label: "Contaminación química", malo: "si" },
+  { id: "veh_plagas", label: "Plagas, contaminación fecal", malo: "si" },
+];
+
+export const INSP_PRODUCTO = [
+  { id: "prod_cubierto", label: "Material cubierto", malo: "no" },
+  { id: "prod_lodo", label: "Lodo / tierra", malo: "si" },
+  { id: "prod_plagas", label: "Plagas, contaminación fecal", malo: "si" },
+  { id: "prod_quimica", label: "Contaminación química", malo: "si" },
+  { id: "prod_specs", label: "Cumplen con especificaciones", malo: "no" },
+];
+
+// ─── REVISIÓN PRECARGA DE TRANSPORTE REFRIGERADO (REG-EMP-15 / POE-MP-09) ───
+// Checklist SI/NO que se llena para cada trailer ANTES de cargar. En las áreas
+// 1-7 "si" = se encontró problema (hay que reportar al supervisor). En 8-9 lo
+// indeseable es "no"; en 10-11 lo indeseable es "si".
+export const PRECARGA_PREGUNTAS = [
+  { id: "exterior", num: 1, label: "Exterior / sección inferior", malo: "si" },
+  { id: "puertas", num: 2, label: "Puertas interiores / exteriores", malo: "si" },
+  { id: "lado_der", num: 3, label: "Lado derecho", malo: "si" },
+  { id: "lado_izq", num: 4, label: "Lado izquierdo", malo: "si" },
+  { id: "pared_del", num: 5, label: "Pared delantera", malo: "si" },
+  { id: "techo", num: 6, label: "Techo exterior / interior", malo: "si" },
+  { id: "piso", num: 7, label: "Piso", malo: "si" },
+  { id: "interior_limpio", num: 8, label: "¿Interior limpio y sin olor?", malo: "no" },
+  { id: "preenfrio", num: 9, label: "¿Se pre-enfrió el termo antes de cargar?", malo: "no" },
+  { id: "usada_ganado", num: 10, label: "¿La caja se usó antes para ganado / productos de animales no envasados?", malo: "si" },
+  { id: "quimicos_plagas", num: 11, label: "¿Se observaron químicos, derrames, plagas o contaminación fecal?", malo: "si" },
+];
+
+// Principales alérgenos en México (manifiesto de capacitación al operador)
+export const ALERGENOS_MX = ["Soya", "Huevos", "Leche", "Pescado", "Mariscos (crustáceos)", "Trigo", "Cacahuates", "Nueces de árbol", "Sulfito"];
+
+// ─── IMPORTACIONES DE MATERIALES (importación temporal IMMEX) ───
+// Catálogo EDITABLE de materiales que se pueden importar. `diasSalida` es el
+// periodo (en días) que se tiene para retornar/exportar el material desde la
+// fecha de importación SIN generar impuestos/multa. ⚠️ Estos son ejemplos:
+// reemplázalos con el catálogo real (código, descripción, unidad, fracción y días).
+export const MATERIALES_INICIAL = [
+  { id: "MAT1", codigo: "CART-001", descripcion: "Cartón corrugado para caja", unidad: "Pieza", fraccion: "4819.10.01", diasSalida: 540 },
+  { id: "MAT2", codigo: "ETI-001", descripcion: "Etiqueta adhesiva PLU", unidad: "Rollo", fraccion: "4821.10.01", diasSalida: 540 },
+  { id: "MAT3", codigo: "PEL-001", descripcion: "Película plástica (clamshell)", unidad: "Kg", fraccion: "3920.20.99", diasSalida: 540 },
+  { id: "MAT4", codigo: "FLE-001", descripcion: "Fleje plástico", unidad: "Rollo", fraccion: "3923.50.99", diasSalida: 540 },
+  { id: "MAT5", codigo: "RPC-6419", descripcion: "Contenedor plástico retornable RPC 6419 (60×40×19 cm)", unidad: "Pieza", fraccion: "3923.10.01", diasSalida: 540 },
+];
+
+// Estados del trámite de importación
+export const IMPORT_ESTADOS = {
+  borrador: { label: "Borrador", icono: "📝", color: "bg-gray-100 text-gray-600 border-gray-200" },
+  documentada: { label: "Documentada", icono: "📋", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  en_proceso: { label: "En proceso", icono: "⏳", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  retornada: { label: "Retornada / Exportada", icono: "✓", color: "bg-green-100 text-green-700 border-green-200" },
+};
+
+// Umbral (días) para marcar una fecha límite como "por vencer"
+export const DIAS_ALERTA_SALIDA = 15;
+
+// Fecha límite de salida = fecha de importación + días de salida del material
+export function fechaLimiteSalida(fechaImportacionISO, diasSalida) {
+  if (!fechaImportacionISO) return "";
+  const d = new Date(fechaImportacionISO + "T00:00:00");
+  d.setDate(d.getDate() + (parseInt(diasSalida, 10) || 0));
+  return d.toISOString().slice(0, 10);
+}
+
+// Días restantes desde hoy hasta la fecha límite (negativo = vencido)
+export function diasRestantesSalida(fechaLimiteISO) {
+  if (!fechaLimiteISO) return null;
+  const hoy = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00");
+  const lim = new Date(fechaLimiteISO + "T00:00:00");
+  return Math.round((lim - hoy) / 86400000);
+}
+
+// Clasifica la urgencia de la fecha límite
+export function estadoVencimiento(diasRestantes) {
+  if (diasRestantes == null) return null;
+  if (diasRestantes < 0) return "vencido";
+  if (diasRestantes <= DIAS_ALERTA_SALIDA) return "por_vencer";
+  return "vigente";
+}
+
 // ─── MANEJO DE SEMANAS ───
 const DIAS_ABREV = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const MESES_ABREV = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -238,17 +327,19 @@ export function DatosProvider({ children }) {
   const [cargaCampo, setCargaCampo] = useState(guardado.cargaCampo ?? CARGA_CAMPO_INICIAL); // catálogo de qué se carga
   const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
   const [bitacora, setBitacora] = useState(guardado.bitacora ?? []); // registro de eventos con timestamp (backend-ready)
+  const [materiales, setMateriales] = useState(guardado.materiales ?? MATERIALES_INICIAL); // catálogo de materiales importables
+  const [importaciones, setImportaciones] = useState(guardado.importaciones ?? []); // importaciones de materiales documentadas
 
   // Persistir todo el estado en localStorage ante cualquier cambio.
   useEffect(() => {
-    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora };
+    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
     } catch (e) {
       // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
       console.warn("No se pudo guardar en localStorage:", e);
     }
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -264,6 +355,7 @@ export function DatosProvider({ children }) {
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     bitacora, setBitacora, registrarEvento,
+    materiales, setMateriales, importaciones, setImportaciones,
   };
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }

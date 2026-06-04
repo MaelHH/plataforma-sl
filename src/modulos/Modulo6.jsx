@@ -1,6 +1,7 @@
 import { useState, Fragment } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
 
 export default function Modulo6() {
   const { cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
@@ -150,27 +151,16 @@ export default function Modulo6() {
               {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-              <select className={SEL} value={fFecha} onChange={(e) => setFFecha(e.target.value)}>
-                <option value="">Fecha: todas</option>
-                {opcFecha.map((f) => <option key={f} value={f}>{f}</option>)}
-              </select>
-              <select className={SEL} value={fDest} onChange={(e) => setFDest(e.target.value)}>
-                <option value="">Destino: todos</option>
-                {opcDest.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <select className={SEL} value={fOrigen} onChange={(e) => setFOrigen(e.target.value)}>
-                <option value="">Origen: todos</option>
-                {opcOrigen.map((o) => <option key={o} value={o}>{o}</option>)}
-              </select>
-              <select className={SEL} value={fEmpresa} onChange={(e) => setFEmpresa(e.target.value)}>
-                <option value="">Empresa: todas</option>
-                {EMPRESAS.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
-              </select>
-              <select className={SEL} value={fSap} onChange={(e) => setFSap(e.target.value)}>
-                <option value="">SAP: todos</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="cargado">Cargado</option>
-              </select>
+              <SearchSelect className={SEL} value={fFecha} onChange={(v) => setFFecha(v)} placeholder="Fecha: todas"
+                options={opcFecha.map((f) => ({ value: f, label: f }))} />
+              <SearchSelect className={SEL} value={fDest} onChange={(v) => setFDest(v)} placeholder="Destino: todos"
+                options={opcDest.map((d) => ({ value: d, label: d }))} />
+              <SearchSelect className={SEL} value={fOrigen} onChange={(v) => setFOrigen(v)} placeholder="Origen: todos"
+                options={opcOrigen.map((o) => ({ value: o, label: o }))} />
+              <SearchSelect className={SEL} value={fEmpresa} onChange={(v) => setFEmpresa(v)} placeholder="Empresa: todas"
+                options={EMPRESAS.map((e) => ({ value: e.id, label: e.label }))} />
+              <SearchSelect className={SEL} value={fSap} onChange={(v) => setFSap(v)} placeholder="SAP: todos"
+                options={[{ value: "pendiente", label: "Pendiente" }, { value: "cargado", label: "Cargado" }]} />
               <input className={SEL} value={fLinea} onChange={(e) => setFLinea(e.target.value)} placeholder="Línea..." />
               <input className={SEL} value={fChofer} onChange={(e) => setFChofer(e.target.value)} placeholder="Chofer..." />
             </div>

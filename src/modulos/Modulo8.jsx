@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useDatos, EMPTY_TRAILER, ahora } from "../store/datos";
+import { useDatos } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
 
 let nextMovId = 1;
 let nextLineaId = 500;
@@ -277,10 +278,13 @@ export default function Modulo8() {
                       {form.cargaItems.map((it, i) => (
                         <tr key={i} className="border-t border-gray-100">
                           <td className="px-2 py-1">
-                            <select className={INP} value={it.prod} onChange={(e) => updCargaItem(i, "prod", e.target.value)}>
-                              <option value="">— Selecciona —</option>
-                              {cargaCampo.map((c) => <option key={c.id} value={c.label}>{c.label}</option>)}
-                            </select>
+                            <SearchSelect
+                              className={INP}
+                              value={it.prod}
+                              onChange={(v) => updCargaItem(i, "prod", v)}
+                              placeholder="— Selecciona —"
+                              options={cargaCampo.map((c) => ({ value: c.label, label: c.label }))}
+                            />
                           </td>
                           <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={it.parrillas} onChange={(e) => updCargaItem(i, "parrillas", e.target.value)} /></td>
                           <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={it.bultos} onChange={(e) => updCargaItem(i, "bultos", e.target.value)} /></td>
@@ -310,11 +314,16 @@ export default function Modulo8() {
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos del transporte</div>
                 <div className="mb-2">
                   <label className={LBL}>Línea (del catálogo)</label>
-                  <select className={INP} value={lineaActualId} onChange={(e) => elegirLinea(e.target.value)}>
-                    <option value="">— Selecciona una línea —</option>
-                    {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
-                    <option value="__nueva__">➕ Nueva línea de transporte</option>
-                  </select>
+                  <SearchSelect
+                    className={INP}
+                    value={lineaActualId}
+                    onChange={(v) => elegirLinea(v)}
+                    placeholder="— Selecciona una línea —"
+                    options={[
+                      ...lineas.map((l) => ({ value: l.id, label: l.linea })),
+                      { value: "__nueva__", label: "➕ Nueva línea de transporte" },
+                    ]}
+                  />
                 </div>
                 {lineaNueva && <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">✏️ Capturando línea nueva — se guarda en el catálogo al guardar</div>}
                 <div className="grid grid-cols-3 gap-2">
@@ -327,11 +336,16 @@ export default function Modulo8() {
                   <div className="space-y-3 mt-3">
                     <div>
                       <label className={LBL}>Chofer</label>
-                      <select className={INP} value={choferActualId} onChange={(e) => elegirChofer(e.target.value)}>
-                        <option value="">— Selecciona chofer —</option>
-                        {(lineaSel?.choferes || []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        <option value="__nuevo__">➕ Nuevo chofer</option>
-                      </select>
+                      <SearchSelect
+                        className={INP}
+                        value={choferActualId}
+                        onChange={(v) => elegirChofer(v)}
+                        placeholder="— Selecciona chofer —"
+                        options={[
+                          ...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })),
+                          { value: "__nuevo__", label: "➕ Nuevo chofer" },
+                        ]}
+                      />
                       <div className="grid grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer} readOnly={!choferNuevo} placeholder="Nombre" onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.telefono} readOnly={!choferNuevo} placeholder="Teléfono" onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} />
@@ -340,11 +354,16 @@ export default function Modulo8() {
                     </div>
                     <div>
                       <label className={LBL}>Tracto</label>
-                      <select className={INP} value={tractoActualId} onChange={(e) => elegirTracto(e.target.value)}>
-                        <option value="">— Selecciona tracto —</option>
-                        {(lineaSel?.tractos || []).map((t) => <option key={t.id} value={t.id}>{t.marcaModelo} · {t.placa}</option>)}
-                        <option value="__nuevo__">➕ Nuevo tracto</option>
-                      </select>
+                      <SearchSelect
+                        className={INP}
+                        value={tractoActualId}
+                        onChange={(v) => elegirTracto(v)}
+                        placeholder="— Selecciona tracto —"
+                        options={[
+                          ...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })),
+                          { value: "__nuevo__", label: "➕ Nuevo tracto" },
+                        ]}
+                      />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (tractoNuevo ? "" : " bg-gray-50")} value={form.marcaModelo} readOnly={!tractoNuevo} placeholder="Marca y modelo" onChange={(e) => setForm((f) => ({ ...f, marcaModelo: e.target.value }))} />
                         <input className={INP + (tractoNuevo ? "" : " bg-gray-50")} value={form.placaTracto} readOnly={!tractoNuevo} placeholder="Placa tracto" onChange={(e) => setForm((f) => ({ ...f, placaTracto: e.target.value }))} />
@@ -352,11 +371,16 @@ export default function Modulo8() {
                     </div>
                     <div>
                       <label className={LBL}>Caja (No. de caja / placas)</label>
-                      <select className={INP} value={cajaActualId} onChange={(e) => elegirCaja(e.target.value)}>
-                        <option value="">— Selecciona caja —</option>
-                        {(lineaSel?.cajas || []).map((c) => <option key={c.id} value={c.id}>{c.economico} · {c.placa}</option>)}
-                        <option value="__nueva__">➕ Nueva caja</option>
-                      </select>
+                      <SearchSelect
+                        className={INP}
+                        value={cajaActualId}
+                        onChange={(v) => elegirCaja(v)}
+                        placeholder="— Selecciona caja —"
+                        options={[
+                          ...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })),
+                          { value: "__nueva__", label: "➕ Nueva caja" },
+                        ]}
+                      />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (cajaNueva ? "" : " bg-gray-50")} value={form.economicoCaja} readOnly={!cajaNueva} placeholder="No. de caja / económico" onChange={(e) => setForm((f) => ({ ...f, economicoCaja: e.target.value }))} />
                         <input className={INP + (cajaNueva ? "" : " bg-gray-50")} value={form.placaCaja} readOnly={!cajaNueva} placeholder="Placas caja" onChange={(e) => setForm((f) => ({ ...f, placaCaja: e.target.value }))} />

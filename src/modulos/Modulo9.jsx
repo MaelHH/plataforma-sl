@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useDatos, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS } from "../store/datos";
+import { useDatos, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
 
 // Muestreo vacío (gramos por defecto en blanco)
 const muestreoVacio = (lote) => ({
@@ -31,6 +32,32 @@ function hoyISO() {
 
 // Suma de un campo numérico en los renglones de carga
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
+
+// ── Inspección de vehículo y producto (REG-EMP-24) ──
+// Texto de los productos del flete para prellenar el campo "Producto".
+const productosDeMov = (m) =>
+  (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || m.rancho || "";
+
+// Inspección vacía, prellenada con los datos del flete que ya conocemos.
+const inspeccionVacia = (m) => ({
+  producto: productosDeMov(m),
+  fecha: m.fecha || hoyISO(),
+  hora: "",
+  remision: m.remision || "",
+  tempProducto: "",
+  veh: Object.fromEntries(INSP_VEHICULO.map((c) => [c.id, ""])),
+  prod: Object.fromEntries(INSP_PRODUCTO.map((c) => [c.id, ""])),
+  observaciones: "",
+  accionesCorrectivas: "",
+  elaboro: "",
+  supervisor: "",
+});
+
+// ¿Hay al menos un chequeo con resultado indeseable? (para badge en la tabla)
+const inspeccionConHallazgo = (insp) =>
+  !!insp &&
+  (INSP_VEHICULO.some((c) => insp.veh?.[c.id] === c.malo) ||
+    INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
   const { movimientos, setMovimientos } = useDatos();
@@ -67,6 +94,19 @@ export default function Modulo9() {
   const guardarMuestreo = () => {
     setMovimientos((prev) => prev.map((m) => (m.id === muestreoMov.id ? { ...m, muestreos } : m)));
     cerrarMuestreo();
+  };
+
+  // ── Inspección de vehículo y producto (REG-EMP-24) ──
+  const [inspMov, setInspMov] = useState(null); // flete al que se le hace la inspección
+  const [insp, setInsp] = useState(null);
+
+  const abrirInspeccion = (m) => { setInsp(m.inspeccion ? { ...inspeccionVacia(m), ...m.inspeccion } : inspeccionVacia(m)); setInspMov(m); };
+  const cerrarInspeccion = () => { setInspMov(null); setInsp(null); };
+  const updInsp = (campo, val) => setInsp((f) => ({ ...f, [campo]: val }));
+  const updInspCheck = (grupo, id, val) => setInsp((f) => ({ ...f, [grupo]: { ...f[grupo], [id]: val } }));
+  const guardarInspeccion = () => {
+    setMovimientos((prev) => prev.map((m) => (m.id === inspMov.id ? { ...m, inspeccion: insp } : m)));
+    cerrarInspeccion();
   };
 
   // Foto (1 por defecto) → se guarda como dataURL base64
@@ -181,6 +221,109 @@ export default function Modulo9() {
         <div><label>Línea / Chofer</label><span>${esc(m.linea) || "—"} · ${esc(m.chofer) || "—"}</span></div>
       </div>
       ${bloques}
+      <script>window.onload = function(){ window.print(); }</script>
+      </body></html>`);
+    win.document.close();
+  };
+
+  // ── Generar PDF: Inspección de vehículo y producto (REG-EMP-24) ──
+  const generarInspeccion = () => {
+    const i = insp;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Permite las ventanas emergentes para generar el reporte PDF."); return; }
+
+    const cell = (grupo, c) => {
+      const v = (i[grupo]?.[c.id] || "").toUpperCase();
+      const malo = i[grupo]?.[c.id] === c.malo;
+      return `<td class="chk${malo ? " malo" : ""}">${v}</td>`;
+    };
+    const subVeh = INSP_VEHICULO.map((c) => `<th class="rot">${esc(c.label)}</th>`).join("");
+    const subProd = INSP_PRODUCTO.map((c) => `<th class="rot">${esc(c.label)}</th>`).join("");
+    const celdasVeh = INSP_VEHICULO.map((c) => cell("veh", c)).join("");
+    const celdasProd = INSP_PRODUCTO.map((c) => cell("prod", c)).join("");
+
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
+      <title>Inspección de vehículo y producto - Remisión ${esc(i.remision) || ""}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: "Times New Roman", Georgia, serif; color: #111; margin: 18px; font-size: 12px; }
+        .marco { border: 1px solid #333; }
+        .cab { display: flex; align-items: stretch; border-bottom: 1px solid #333; }
+        .cab .logo { width: 200px; display: flex; align-items: center; justify-content: center; padding: 8px; border-right: 1px solid #333; }
+        .cab .logo b { font-size: 26px; color: #e11d48; font-weight: 800; }
+        .cab .logo small { color: #f59e0b; font-weight: 700; letter-spacing: 3px; }
+        .cab .tit { flex: 1; text-align: center; padding: 10px; display: flex; flex-direction: column; justify-content: center; }
+        .cab .tit b { font-size: 14px; }
+        .cab .cat { width: 150px; display: flex; align-items: center; justify-content: center; border-left: 1px solid #333; font-weight: 800; font-size: 20px; }
+        .codes { display: flex; border-bottom: 1px solid #333; font-weight: 700; }
+        .codes div { padding: 5px 10px; }
+        .codes .c1 { width: 200px; border-right: 1px solid #333; }
+        .codes .c2 { flex: 1; text-align: center; border-right: 1px solid #333; }
+        .codes .c3 { width: 150px; text-align: center; }
+        .instr { padding: 8px 10px; font-size: 11px; border-bottom: 1px solid #333; }
+        table.insp { width: 100%; border-collapse: collapse; }
+        table.insp th, table.insp td { border: 1px solid #333; padding: 4px; text-align: center; vertical-align: middle; }
+        table.insp th { font-size: 10px; font-weight: 700; }
+        table.insp th.rot { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; height: 120px; }
+        table.insp td { font-size: 12px; height: 34px; }
+        table.insp td.chk { font-weight: 700; }
+        table.insp td.malo { color: #dc2626; background: #fef2f2; }
+        .acc { border: 1px solid #333; border-top: none; padding: 8px 10px; min-height: 46px; }
+        .acc b { display: block; margin-bottom: 4px; }
+        .firmas { display: flex; gap: 30px; margin-top: 26px; padding: 0 6px; font-size: 12px; }
+        .firmas div { flex: 1; }
+        .ln { border-bottom: 1px solid #333; display: inline-block; min-width: 180px; }
+        @media print { body { margin: 10mm; } }
+      </style></head><body>
+      <div class="marco">
+        <div class="cab">
+          <div class="logo"><div><b>SL</b><br/><small>agrícola</small></div></div>
+          <div class="tit">
+            <b>SL AGRÍCOLA SA DE CV</b>
+            <b>INSPECCIÓN DE VEHÍCULO Y PRODUCTO QUE LLEGA A LA PLANTA</b>
+          </div>
+          <div class="cat">CAT<br/>SA DE CV</div>
+        </div>
+        <div class="codes">
+          <div class="c1">REG-EMP-24</div>
+          <div class="c2">ELABORACIÓN: FEBRERO 2024</div>
+          <div class="c3">POE-ADM-11</div>
+        </div>
+        <div class="instr"><b>Instrucciones:</b> Inspeccione el producto que está llegando para revisar la presencia de objetos extraños. Si se encuentra, separe el producto, notifique a su supervisor, remueva y verifique nuevamente el producto. Inspeccione cada carga a la llegada.</div>
+        <table class="insp">
+          <thead>
+            <tr>
+              <th rowspan="2">Producto</th>
+              <th rowspan="2">Fecha</th>
+              <th rowspan="2">Hora</th>
+              <th rowspan="2">No. De remisión</th>
+              <th colspan="${INSP_VEHICULO.length}">VEHÍCULO (SI / NO)</th>
+              <th rowspan="2">Temperatura interna del producto (°F)</th>
+              <th colspan="${INSP_PRODUCTO.length}">CONDICIONES DEL PRODUCTO (SI / NO)</th>
+              <th rowspan="2">Observaciones y/o acciones correctivas</th>
+            </tr>
+            <tr>${subVeh}${subProd}</tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${esc(i.producto)}</td>
+              <td>${esc(i.fecha)}</td>
+              <td>${esc(i.hora)}</td>
+              <td>${esc(i.remision)}</td>
+              ${celdasVeh}
+              <td class="chk">${esc(i.tempProducto)}</td>
+              ${celdasProd}
+              <td style="text-align:left">${esc(i.observaciones)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="acc"><b>ACCIONES CORRECTIVAS</b>${esc(i.accionesCorrectivas)}</div>
+      </div>
+      <div class="firmas">
+        <div>Elaboró <span class="ln">${esc(i.elaboro)}</span></div>
+        <div>Nombre y firma del supervisor <span class="ln">${esc(i.supervisor)}</span></div>
+        <div>Fecha <span class="ln">${esc(i.fecha)}</span></div>
+      </div>
       <script>window.onload = function(){ window.print(); }</script>
       </body></html>`);
     win.document.close();
@@ -306,16 +449,16 @@ export default function Modulo9() {
                       <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-center">
                         {recibido ? (
-                          <span className={`px-2 py-0.5 rounded-full font-semibold border ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>
-                            {novedad ? "⚠️ Con novedad" : "✓ Recibido"}
+                          <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>
+                            {novedad ? "⚠️" : "✓"}
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full font-semibold border bg-orange-100 text-orange-700 border-orange-200">⏳ Por recibir</span>
+                          <span title="Por recibir" className="inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200">⏳</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {qciProm !== null ? (
-                          <span className={`px-2 py-0.5 rounded-full font-bold ${qciProm >= 90 ? "bg-green-100 text-green-700" : qciProm >= 80 ? "bg-lime-100 text-lime-700" : qciProm >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
+                          <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${qciProm >= 90 ? "bg-green-100 text-green-700" : qciProm >= 80 ? "bg-lime-100 text-lime-700" : qciProm >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
                             {qciProm.toFixed(2)}%
                           </span>
                         ) : <span className="text-gray-300">—</span>}
@@ -323,6 +466,7 @@ export default function Modulo9() {
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
+                        <button onClick={() => abrirInspeccion(m)} className={`text-xs px-2 py-1 border rounded-lg bg-white mr-1 ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}>🚛 {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "Inspección ⚠️" : "Inspección ✓") : "Inspección"}</button>
                         {recibido ? (
                           <>
                             <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
@@ -411,10 +555,10 @@ export default function Modulo9() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div>
                     <label className={LBL}>Condición de la carga</label>
-                    <select className={INP} value={form.condicion} onChange={(e) => upd("condicion", e.target.value)}>
-                      <option value="ok">✓ Llegó completo y en buen estado</option>
-                      <option value="con_novedad">⚠️ Con novedad (faltante / daño)</option>
-                    </select>
+                    <SearchSelect className={INP} value={form.condicion} onChange={(v) => upd("condicion", v)} options={[
+                      { value: "ok", label: "✓ Llegó completo y en buen estado" },
+                      { value: "con_novedad", label: "⚠️ Con novedad (faltante / daño)" },
+                    ]} />
                   </div>
                   <div><label className={LBL}>Observaciones</label><input className={INP} value={form.observaciones} onChange={(e) => upd("observaciones", e.target.value)} placeholder="Notas de la recepción" /></div>
                 </div>
@@ -538,6 +682,98 @@ export default function Modulo9() {
           </div>
         );
       })()}
+
+      {/* ── Modal de inspección de vehículo y producto (REG-EMP-24) ── */}
+      {inspMov && insp && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Inspección de vehículo y producto que llega a la planta</div>
+                <div className="text-xs text-gray-500 mt-0.5">REG-EMP-24 · Folio {inspMov.folio || "—"} · {inspMov.linea || "—"} · {inspMov.chofer || "—"}</div>
+              </div>
+              <button onClick={cerrarInspeccion} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+
+            <div className="px-5 py-4 space-y-5">
+              {/* Encabezado del registro */}
+              <div className="grid grid-cols-4 gap-2">
+                <div className="col-span-1"><label className={LBL}>Producto</label><input className={INP} value={insp.producto} onChange={(e) => updInsp("producto", e.target.value)} placeholder="Producto" /></div>
+                <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={insp.fecha} onChange={(e) => updInsp("fecha", e.target.value)} /></div>
+                <div><label className={LBL}>Hora</label><input type="time" className={INP} value={insp.hora} onChange={(e) => updInsp("hora", e.target.value)} /></div>
+                <div><label className={LBL}>No. de remisión</label><input className={INP} value={insp.remision} onChange={(e) => updInsp("remision", e.target.value)} placeholder="Remisión" /></div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Vehículo */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-700">VEHÍCULO (SI / NO)</div>
+                  <div className="divide-y divide-gray-100">
+                    {INSP_VEHICULO.map((c) => {
+                      const malo = insp.veh[c.id] === c.malo;
+                      return (
+                        <div key={c.id} className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs text-gray-700">{c.label}</span>
+                          <SearchSelect value={insp.veh[c.id]} onChange={(v) => updInspCheck("veh", c.id, v)} placeholder="—"
+                            className={`text-xs px-2 py-1 border rounded-md focus:outline-none ${malo ? "border-red-300 bg-red-50 text-red-700 font-semibold" : "border-gray-200 bg-white"}`}
+                            options={[
+                              { value: "si", label: "SI" },
+                              { value: "no", label: "NO" },
+                            ]} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Condiciones del producto */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-700">CONDICIONES DEL PRODUCTO (SI / NO)</div>
+                  <div className="divide-y divide-gray-100">
+                    {INSP_PRODUCTO.map((c) => {
+                      const malo = insp.prod[c.id] === c.malo;
+                      return (
+                        <div key={c.id} className="flex items-center justify-between px-3 py-2">
+                          <span className="text-xs text-gray-700">{c.label}</span>
+                          <SearchSelect value={insp.prod[c.id]} onChange={(v) => updInspCheck("prod", c.id, v)} placeholder="—"
+                            className={`text-xs px-2 py-1 border rounded-md focus:outline-none ${malo ? "border-red-300 bg-red-50 text-red-700 font-semibold" : "border-gray-200 bg-white"}`}
+                            options={[
+                              { value: "si", label: "SI" },
+                              { value: "no", label: "NO" },
+                            ]} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className={LBL}>Temperatura interna del producto (°F)</label><input type="number" step="0.1" className={INP} value={insp.tempProducto} onChange={(e) => updInsp("tempProducto", e.target.value)} placeholder="°F" /></div>
+                <div className="col-span-2"><label className={LBL}>Observaciones y/o acciones correctivas</label><input className={INP} value={insp.observaciones} onChange={(e) => updInsp("observaciones", e.target.value)} placeholder="Observaciones" /></div>
+              </div>
+
+              <div>
+                <label className={LBL}>Acciones correctivas</label>
+                <textarea rows={2} className={INP} value={insp.accionesCorrectivas} onChange={(e) => updInsp("accionesCorrectivas", e.target.value)} placeholder="Acciones correctivas tomadas" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={LBL}>Elaboró</label><input className={INP} value={insp.elaboro} onChange={(e) => updInsp("elaboro", e.target.value)} placeholder="Nombre de quien elabora" /></div>
+                <div><label className={LBL}>Nombre del supervisor</label><input className={INP} value={insp.supervisor} onChange={(e) => updInsp("supervisor", e.target.value)} placeholder="Supervisor" /></div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
+              <button onClick={generarInspeccion} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF (REG-EMP-24)</button>
+              <div className="flex gap-2">
+                <button onClick={cerrarInspeccion} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={guardarInspeccion} className="text-xs px-4 py-2 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700">💾 Guardar inspección</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

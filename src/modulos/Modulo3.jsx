@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
+import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
 let nextId = 100;
 let nextLineaId = 1;
@@ -22,6 +23,9 @@ export default function Modulo3() {
   const [form, setForm] = useState({});
   const [catLineas, setCatLineas] = useState(false);
   const [catChoferes, setCatChoferes] = useState(false);
+  const [inspTrailer, setInspTrailer] = useState(null); // trailer al que se le hace inspección precarga
+  const [inspForm, setInspForm] = useState(null);
+  const [inspTab, setInspTab] = useState("precarga"); // "precarga" | "alergenos"
   const [lineaNueva, setLineaNueva] = useState(false);
   const [choferNuevo, setChoferNuevo] = useState(false);
   const [tractoNuevo, setTractoNuevo] = useState(false);
@@ -109,6 +113,181 @@ export default function Modulo3() {
   const setDest = (id, dest) => setTrailers((prev) => prev.map((t) => (t.id === id ? { ...t, dest } : t)));
   const setStatus = (id, status) => setTrailers((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
 
+  // ── Inspección precarga de transporte refrigerado (REG-EMP-15) + manifiesto de alérgenos ──
+  // Lo que ya se capturó en la ficha del trailer se autollena aquí.
+  const inspVacia = (t) => ({
+    manifiesto: "",
+    fecha: t?.fecha || "",
+    companiaTransporte: t?.linea || "",
+    nombreChofer: t?.chofer || "",
+    placasTermo: t?.placaCaja || "",
+    noEconomico: t?.economicoCaja || "",
+    destino: t?.dest || "",
+    // precarga refrigerado
+    horaLlegada: "", tempLlegada: "",
+    horaAbrioPuerta: "", tempAbrioPuerta: "",
+    respuestas: Object.fromEntries(PRECARGA_PREGUNTAS.map((p) => [p.id, ""])),
+    tempProducto: "", tempTermoCargar: "",
+    sanitizoCaja: "", sanitizante: "", concentracion: "",
+    // alérgenos
+    cargasAnteriores: "",
+    conoceAlergenos: "",
+    alergenos: Object.fromEntries(ALERGENOS_MX.map((a) => [a, "No"])),
+    aprobadoPor: "",
+  });
+
+  const openInsp = (t) => {
+    // Re-autollena los datos del trailer por si cambiaron desde la última vez
+    const base = inspVacia(t);
+    const guardada = t.inspeccionPrecarga;
+    setInspForm(guardada ? { ...base, ...guardada, respuestas: { ...base.respuestas, ...guardada.respuestas }, alergenos: { ...base.alergenos, ...guardada.alergenos } } : base);
+    setInspTab("precarga");
+    setInspTrailer(t);
+  };
+  const cerrarInsp = () => { setInspTrailer(null); setInspForm(null); };
+  const updInsp = (campo, val) => setInspForm((f) => ({ ...f, [campo]: val }));
+  const updRespuesta = (id, val) => setInspForm((f) => ({ ...f, respuestas: { ...f.respuestas, [id]: val } }));
+  const updAlergeno = (a, val) => setInspForm((f) => ({ ...f, alergenos: { ...f.alergenos, [a]: val } }));
+  const guardarInsp = () => {
+    setTrailers((prev) => prev.map((t) => (t.id === inspTrailer.id ? { ...t, inspeccionPrecarga: { ...inspForm, guardado: new Date().toLocaleString("es-MX") } } : t)));
+    cerrarInsp();
+  };
+  // Cuenta de hallazgos (respuestas indeseables) para el badge
+  const hallazgosInsp = (insp) => {
+    if (!insp) return 0;
+    return PRECARGA_PREGUNTAS.reduce((a, p) => a + (insp.respuestas?.[p.id] && insp.respuestas[p.id] === p.malo ? 1 : 0), 0);
+  };
+
+  const escI = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const generarInspPDF = () => {
+    const f = inspForm;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Permite las ventanas emergentes para generar el PDF."); return; }
+
+    const filasCheck = PRECARGA_PREGUNTAS.map((p) => {
+      const r = f.respuestas?.[p.id] || "";
+      const hallazgo = r && r === p.malo;
+      return `<tr>
+        <td style="text-align:center">${p.num}</td>
+        <td>${escI(p.label)}</td>
+        <td style="text-align:center;font-weight:700;color:${hallazgo ? "#dc2626" : "#16a34a"}">${r ? r.toUpperCase() : "—"}</td>
+      </tr>`;
+    }).join("");
+
+    const filasAlerg = ALERGENOS_MX.map((a) =>
+      `<tr><td>${escI(a)}</td><td style="text-align:center">${escI(f.alergenos?.[a] || "No")}</td></tr>`).join("");
+
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
+      <title>Inspección precarga - ${escI(f.companiaTransporte) || ""}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, Arial, sans-serif; color: #1f2937; margin: 24px; font-size: 12px; }
+        .doc { page-break-after: always; }
+        .doc:last-child { page-break-after: auto; }
+        .head { display: flex; justify-content: space-between; align-items: center; border: 1px solid #9ca3af; }
+        .head .logo { width: 90px; text-align: center; font-weight: 800; color: #ea580c; padding: 6px; }
+        .head .cat { color: #166534; }
+        .head .tit { text-align: center; flex: 1; }
+        .head .tit h1 { font-size: 15px; margin: 0; color: #374151; }
+        .head .tit .st { font-size: 11px; color: #6b7280; }
+        .codes { display: flex; border: 1px solid #9ca3af; border-top: none; font-size: 10px; color: #6b7280; }
+        .codes div { flex: 1; padding: 3px 6px; border-right: 1px solid #d1d5db; }
+        .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 16px; margin: 14px 0; }
+        .meta div { border-bottom: 1px solid #e5e7eb; padding: 3px 0; }
+        .meta label { color: #9ca3af; font-size: 10px; text-transform: uppercase; }
+        .meta b { font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #f3f4f6; text-align: left; padding: 5px 8px; font-size: 10px; color: #6b7280; text-transform: uppercase; border: 1px solid #e5e7eb; }
+        td { padding: 4px 8px; border: 1px solid #e5e7eb; }
+        h2 { font-size: 13px; margin: 16px 0 4px; color: #0e7490; }
+        .note { font-size: 11px; color: #6b7280; margin: 4px 0; }
+        .firmas { display: flex; justify-content: space-between; margin-top: 40px; gap: 40px; }
+        .firmas div { flex: 1; border-top: 1px solid #374151; padding-top: 4px; text-align: center; font-size: 11px; }
+        .prev { font-size: 11px; }
+        .prev li { margin-bottom: 2px; }
+        @media print { body { margin: 12mm; } }
+      </style></head><body>
+
+      <div class="doc">
+        <div class="head">
+          <div class="logo">SL<br/><span style="font-size:9px">agrícola</span></div>
+          <div class="tit"><h1>SL AGRÍCOLA SA DE CV</h1><div class="st">REVISIÓN PRECARGA DE TRANSPORTE REFRIGERADO</div></div>
+          <div class="logo cat">CAT<br/><span style="font-size:9px">SA DE CV</span></div>
+        </div>
+        <div class="codes"><div>REG-EMP-15</div><div>ELABORACIÓN: 20 OCT 2020</div><div>REVISIÓN: 10 OCT 2025</div><div>POE-MP-09</div></div>
+        <p class="note">Este formato debe ser llenado para cada camión que sale de esta empresa.</p>
+        <div class="meta">
+          <div><label>Manifiesto</label> <b>${escI(f.manifiesto) || "—"}</b></div>
+          <div><label>Fecha</label> <b>${escI(f.fecha) || "—"}</b></div>
+          <div><label>Compañía de transporte</label> <b>${escI(f.companiaTransporte) || "—"}</b></div>
+          <div><label>Nombre del chofer</label> <b>${escI(f.nombreChofer) || "—"}</b></div>
+          <div><label>Placas del termo</label> <b>${escI(f.placasTermo) || "—"}</b></div>
+          <div><label>No. Económico</label> <b>${escI(f.noEconomico) || "—"}</b></div>
+          <div><label>Hora y temp. de llegada al empaque</label> <b>${escI(f.horaLlegada) || "—"} / ${escI(f.tempLlegada) || "—"} °F</b></div>
+          <div><label>Hora y temp. en que se abrió la puerta</label> <b>${escI(f.horaAbrioPuerta) || "—"} / ${escI(f.tempAbrioPuerta) || "—"} °F</b></div>
+          <div><label>Destino</label> <b>${escI(f.destino) || "—"}</b></div>
+        </div>
+        <p class="note">Marque cualquier área con problemas que encuentre y repórtelo al supervisor ANTES de cargar.</p>
+        <table>
+          <thead><tr><th style="width:30px;text-align:center">#</th><th>Punto a revisar</th><th style="width:90px;text-align:center">Respuesta</th></tr></thead>
+          <tbody>${filasCheck}</tbody>
+        </table>
+        <div class="meta" style="margin-top:12px">
+          <div><label>12. Temp. del producto</label> <b>${escI(f.tempProducto) || "—"} °F</b></div>
+          <div><label>12. Temp. del termo al cargar</label> <b>${escI(f.tempTermoCargar) || "—"} °F</b></div>
+          <div><label>13. ¿Se sanitizó la caja?</label> <b>${escI(f.sanitizoCaja) || "—"}</b></div>
+          <div><label>13. Sanitizante · concentración</label> <b>${escI(f.sanitizante) || "—"} · ${escI(f.concentracion) || "—"}</b></div>
+        </div>
+        <div class="firmas">
+          <div>${escI(f.aprobadoPor) || ""}<br/>Aprobado para cargar por</div>
+          <div>${escI(f.nombreChofer) || ""}<br/>Firma del operador</div>
+        </div>
+      </div>
+
+      <div class="doc">
+        <div class="head">
+          <div class="logo">SL<br/><span style="font-size:9px">agrícola</span></div>
+          <div class="tit"><h1>SL AGRÍCOLA SA DE CV</h1><div class="st">MANIFIESTO DE ALÉRGENOS — CAPACITACIÓN AL OPERADOR</div></div>
+          <div class="logo cat">CAT<br/><span style="font-size:9px">SA DE CV</span></div>
+        </div>
+        <div class="meta">
+          <div><label>Manifiesto</label> <b>${escI(f.manifiesto) || "—"}</b></div>
+          <div><label>Fecha</label> <b>${escI(f.fecha) || "—"}</b></div>
+          <div><label>Compañía de transporte</label> <b>${escI(f.companiaTransporte) || "—"}</b></div>
+          <div><label>Nombre del operador</label> <b>${escI(f.nombreChofer) || "—"}</b></div>
+          <div><label>Placas del termo</label> <b>${escI(f.placasTermo) || "—"}</b></div>
+          <div><label>No. Económico</label> <b>${escI(f.noEconomico) || "—"}</b></div>
+          <div><label>Destino</label> <b>${escI(f.destino) || "—"}</b></div>
+        </div>
+        <div class="meta" style="grid-template-columns:1fr">
+          <div><label>1. ¿Cuáles han sido sus cargas anteriores?</label> <b>${escI(f.cargasAnteriores) || "—"}</b></div>
+          <div><label>2. ¿Tiene conocimiento sobre alérgenos?</label> <b>${f.conoceAlergenos ? f.conoceAlergenos.toUpperCase() : "—"}</b></div>
+        </div>
+        <table style="width:60%">
+          <thead><tr><th>Principales alérgenos en México</th><th style="width:120px;text-align:center">¿Dentro de las operaciones?</th></tr></thead>
+          <tbody>${filasAlerg}</tbody>
+        </table>
+        <h2>3. Consecuencias</h2>
+        <p class="prev">Después de ingerir un alérgeno alimentario una persona con alergia puede experimentar una reacción alérgica de riesgo vital grave, llamada anafilaxis, además de urticaria, hormigueo y comezón, inflamaciones, vómitos, diarrea, dificultades para respirar.</p>
+        <h2>4. Medidas preventivas</h2>
+        <p class="prev">SL AGRÍCOLA desarrolló un plan de capacitaciones preventivas, entre ellas esta información a los operadores de las cajas refrigeradas:</p>
+        <ul class="prev">
+          <li>No abrir la caja.</li>
+          <li>No introducir alimentos considerados como alérgenos ni productos diferentes a la carga (aceites, detergentes, sustancias químicas en general, etc.).</li>
+          <li>Reportar cualquier anomalía en el trayecto.</li>
+        </ul>
+        <div class="firmas">
+          <div>${escI(f.aprobadoPor) || ""}<br/>Aprobado para cargar por</div>
+          <div>${escI(f.nombreChofer) || ""}<br/>Firma del operador</div>
+        </div>
+      </div>
+
+      <script>window.onload = function(){ window.print(); }</script>
+      </body></html>`);
+    win.document.close();
+  };
+
   const elegirLinea = (valor) => {
     if (valor === "__nueva__") {
       setLineaNueva(true);
@@ -186,6 +365,22 @@ export default function Modulo3() {
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const INP_TBL = "w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none";
 
+  // Control segmentado Sí/No para la inspección. `malo` resalta en rojo la respuesta indeseable.
+  const sino = (val, onSet, malo) => (
+    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+      {["si", "no"].map((op) => {
+        const activo = val === op;
+        const esMalo = malo && op === malo;
+        return (
+          <button key={op} onClick={() => onSet(op)} type="button"
+            className={`text-xs px-3 py-1 font-semibold ${activo ? (esMalo ? "bg-red-500 text-white" : "bg-green-500 text-white") : "bg-white text-gray-500 hover:bg-gray-50"}`}>
+            {op === "si" ? "Sí" : "No"}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   function MiniCard({ t, showDestSel }) {
     const s = STATUS_CFG[t.status] || STATUS_CFG.esperando;
     const dc = DC[t.dest] || DC["Sin asignar"];
@@ -201,10 +396,9 @@ export default function Modulo3() {
             <span className="text-xs text-gray-400">{(t.origen || ORIGEN).split(",")[0]}</span>
             <span className="text-gray-300 text-xs">→</span>
             {showDestSel ? (
-              <select value={t.dest || "Sin asignar"} onChange={(e) => setDest(t.id, e.target.value)}
-                className={`text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}>
-                {DESTINOS_ALL.map((d) => <option key={d}>{d}</option>)}
-              </select>
+              <SearchSelect value={t.dest || "Sin asignar"} onChange={(v) => setDest(t.id, v)}
+                className={`text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}
+                options={DESTINOS_ALL.map((d) => ({ value: d, label: d }))} />
             ) : (
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${dc}`}>{t.dest}</span>
             )}
@@ -222,15 +416,23 @@ export default function Modulo3() {
         )}
         <div className="flex gap-1 flex-wrap items-center">
           <button onClick={() => openModal(t)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">✏️ Editar</button>
+          {(() => {
+            const hall = hallazgosInsp(t.inspeccionPrecarga);
+            const hecha = !!t.inspeccionPrecarga;
+            return (
+              <button onClick={() => openInsp(t)} title="Inspección precarga de transporte refrigerado"
+                className={`text-xs px-2 py-1 border rounded-lg bg-white ${hecha ? (hall > 0 ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-cyan-200 hover:bg-cyan-50 text-cyan-600"}`}>
+                🌡️ {hecha ? (hall > 0 ? `Inspección ⚠️${hall}` : "Inspección ✓") : "Inspección"}
+              </button>
+            );
+          })()}
           <button onClick={() => delTrailer(t.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
           {t.status === "en_ruta" ? (
             <span className="text-xs px-2 py-1 bg-green-100 border border-green-300 text-green-700 rounded-lg font-semibold">🚛 En ruta</span>
           ) : (
-            <select value={t.status} onChange={(e) => setStatus(t.id, e.target.value)}
-              className={`text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}>
-              <option value="esperando">⏳ Esperando</option>
-              <option value="en_instalaciones">📍 En instalaciones</option>
-            </select>
+            <SearchSelect value={t.status} onChange={(v) => setStatus(t.id, v)}
+              className={`text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
+              options={[{ value: "esperando", label: "⏳ Esperando" }, { value: "en_instalaciones", label: "📍 En instalaciones" }]} />
           )}
         </div>
       </div>
@@ -399,13 +601,11 @@ export default function Modulo3() {
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Ruta</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className="text-xs text-gray-500 block mb-0.5">Origen</label>
-                    <select className={INP} value={form.origen || ORIGEN} onChange={(e) => setForm((f) => ({ ...f, origen: e.target.value }))}>
-                      {ORIGENES.map((o) => <option key={o}>{o}</option>)}
-                    </select></div>
+                    <SearchSelect className={INP} value={form.origen || ORIGEN} onChange={(v) => setForm((f) => ({ ...f, origen: v }))}
+                      options={ORIGENES.map((o) => ({ value: o, label: o }))} /></div>
                   <div><label className="text-xs text-gray-500 block mb-0.5">Destino</label>
-                    <select className={INP} value={form.dest || "Sin asignar"} onChange={(e) => setForm((f) => ({ ...f, dest: e.target.value }))}>
-                      {DESTINOS_ALL.map((d) => <option key={d}>{d}</option>)}
-                    </select></div>
+                    <SearchSelect className={INP} value={form.dest || "Sin asignar"} onChange={(v) => setForm((f) => ({ ...f, dest: v }))}
+                      options={DESTINOS_ALL.map((d) => ({ value: d, label: d }))} /></div>
                 </div>
               </div>
 
@@ -413,11 +613,9 @@ export default function Modulo3() {
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Línea de transporte</div>
                 <div className="mb-2">
                   <label className="text-xs text-gray-500 block mb-0.5">Elegir del catálogo</label>
-                  <select className={INP} value={lineaActualId} onChange={(e) => elegirLinea(e.target.value)}>
-                    <option value="">— Selecciona una línea —</option>
-                    {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
-                    <option value="__nueva__">➕ Nueva línea de transporte</option>
-                  </select>
+                  <SearchSelect className={INP} value={lineaActualId} onChange={(v) => elegirLinea(v)}
+                    placeholder="— Selecciona una línea —"
+                    options={[...lineas.map((l) => ({ value: l.id, label: l.linea })), { value: "__nueva__", label: "➕ Nueva línea de transporte" }]} />
                 </div>
                 {lineaNueva && (
                   <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">
@@ -452,11 +650,9 @@ export default function Modulo3() {
                     {/* Chofer */}
                     <div>
                       <label className="text-xs text-gray-500 block mb-0.5">Chofer</label>
-                      <select className={INP} value={choferActualId} onChange={(e) => elegirChofer(e.target.value)}>
-                        <option value="">— Selecciona chofer —</option>
-                        {(lineaSel?.choferes || []).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        <option value="__nuevo__">➕ Nuevo chofer</option>
-                      </select>
+                      <SearchSelect className={INP} value={choferActualId} onChange={(v) => elegirChofer(v)}
+                        placeholder="— Selecciona chofer —"
+                        options={[...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })), { value: "__nuevo__", label: "➕ Nuevo chofer" }]} />
                       <div className="grid grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer || ""} readOnly={!choferNuevo} placeholder="Nombre"
                           onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
@@ -470,11 +666,9 @@ export default function Modulo3() {
                     {/* Tracto: marca/modelo + placa */}
                     <div>
                       <label className="text-xs text-gray-500 block mb-0.5">Tracto</label>
-                      <select className={INP} value={tractoActualId} onChange={(e) => elegirTracto(e.target.value)}>
-                        <option value="">— Selecciona tracto —</option>
-                        {(lineaSel?.tractos || []).map((t) => <option key={t.id} value={t.id}>{t.marcaModelo} · {t.placa}</option>)}
-                        <option value="__nuevo__">➕ Nuevo tracto</option>
-                      </select>
+                      <SearchSelect className={INP} value={tractoActualId} onChange={(v) => elegirTracto(v)}
+                        placeholder="— Selecciona tracto —"
+                        options={[...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })), { value: "__nuevo__", label: "➕ Nuevo tracto" }]} />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (tractoNuevo ? "" : " bg-gray-50")} value={form.marcaModelo || ""} readOnly={!tractoNuevo} placeholder="Marca y modelo"
                           onChange={(e) => setForm((f) => ({ ...f, marcaModelo: e.target.value }))} />
@@ -486,11 +680,9 @@ export default function Modulo3() {
                     {/* Caja: económico + placa */}
                     <div>
                       <label className="text-xs text-gray-500 block mb-0.5">Caja</label>
-                      <select className={INP} value={cajaActualId} onChange={(e) => elegirCaja(e.target.value)}>
-                        <option value="">— Selecciona caja —</option>
-                        {(lineaSel?.cajas || []).map((c) => <option key={c.id} value={c.id}>{c.economico} · {c.placa}</option>)}
-                        <option value="__nueva__">➕ Nueva caja</option>
-                      </select>
+                      <SearchSelect className={INP} value={cajaActualId} onChange={(v) => elegirCaja(v)}
+                        placeholder="— Selecciona caja —"
+                        options={[...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })), { value: "__nueva__", label: "➕ Nueva caja" }]} />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (cajaNueva ? "" : " bg-gray-50")} value={form.economicoCaja || ""} readOnly={!cajaNueva} placeholder="Económico"
                           onChange={(e) => setForm((f) => ({ ...f, economicoCaja: e.target.value }))} />
@@ -511,6 +703,120 @@ export default function Modulo3() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={saveForm} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Guardar ficha</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal inspección precarga + alérgenos */}
+      {inspTrailer && inspForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Inspección precarga de transporte refrigerado</div>
+                <div className="text-xs text-gray-500 mt-0.5">REG-EMP-15 · POE-MP-09 · {inspForm.companiaTransporte || "—"} → {inspForm.destino || "—"}</div>
+              </div>
+              <button onClick={cerrarInsp} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+
+            {/* Pestañas */}
+            <div className="px-5 pt-3 flex items-center gap-2 border-b border-gray-100">
+              {[["precarga", "🌡️ Precarga refrigerado"], ["alergenos", "⚠️ Alérgenos"]].map(([k, label]) => (
+                <button key={k} onClick={() => setInspTab(k)}
+                  className={`text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px ${inspTab === k ? "border-cyan-500 text-cyan-700 bg-cyan-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* Datos generales (autollenados, editables) */}
+              <div>
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos del transporte <span className="font-normal text-gray-400 normal-case">— autollenados de la ficha</span></div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Manifiesto</label><input className={INP} value={inspForm.manifiesto} onChange={(e) => updInsp("manifiesto", e.target.value)} placeholder="No." /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Fecha</label><input className={INP} value={inspForm.fecha} onChange={(e) => updInsp("fecha", e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Destino</label><input className={INP} value={inspForm.destino} onChange={(e) => updInsp("destino", e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Compañía de transporte</label><input className={INP} value={inspForm.companiaTransporte} onChange={(e) => updInsp("companiaTransporte", e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Nombre del chofer / operador</label><input className={INP} value={inspForm.nombreChofer} onChange={(e) => updInsp("nombreChofer", e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">Placas del termo</label><input className={INP} value={inspForm.placasTermo} onChange={(e) => updInsp("placasTermo", e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-500 block mb-0.5">No. Económico</label><input className={INP} value={inspForm.noEconomico} onChange={(e) => updInsp("noEconomico", e.target.value)} /></div>
+                </div>
+              </div>
+
+              {inspTab === "precarga" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-gray-500 block mb-0.5">Hora de llegada al empaque</label><input type="time" className={INP} value={inspForm.horaLlegada} onChange={(e) => updInsp("horaLlegada", e.target.value)} /></div>
+                    <div><label className="text-xs text-gray-500 block mb-0.5">Temp. de llegada (°F)</label><input type="number" className={INP} value={inspForm.tempLlegada} onChange={(e) => updInsp("tempLlegada", e.target.value)} /></div>
+                    <div><label className="text-xs text-gray-500 block mb-0.5">Hora en que se abrió la puerta</label><input type="time" className={INP} value={inspForm.horaAbrioPuerta} onChange={(e) => updInsp("horaAbrioPuerta", e.target.value)} /></div>
+                    <div><label className="text-xs text-gray-500 block mb-0.5">Temp. al abrir la puerta (°F)</label><input type="number" className={INP} value={inspForm.tempAbrioPuerta} onChange={(e) => updInsp("tempAbrioPuerta", e.target.value)} /></div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-gray-500 mb-2">Marque cualquier área con problemas y repórtela al supervisor <b>ANTES</b> de cargar.</div>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {PRECARGA_PREGUNTAS.map((p) => (
+                        <div key={p.id} className="flex items-center gap-2 px-3 py-1.5">
+                          <span className="w-5 text-xs text-gray-400 font-medium">{p.num}</span>
+                          <span className="flex-1 text-xs text-gray-700">{p.label}</span>
+                          {sino(inspForm.respuestas[p.id], (v) => updRespuesta(p.id, v), p.malo)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="text-xs text-gray-500 block mb-0.5">12. Temp. del producto (°F)</label><input type="number" className={INP} value={inspForm.tempProducto} onChange={(e) => updInsp("tempProducto", e.target.value)} /></div>
+                    <div><label className="text-xs text-gray-500 block mb-0.5">12. Temp. del termo al cargar (°F)</label><input type="number" className={INP} value={inspForm.tempTermoCargar} onChange={(e) => updInsp("tempTermoCargar", e.target.value)} /></div>
+                    <div><label className="text-xs text-gray-500 block mb-0.5">13. ¿Se sanitizó la caja?</label><input className={INP} value={inspForm.sanitizoCaja} onChange={(e) => updInsp("sanitizoCaja", e.target.value)} placeholder="Sí / No" /></div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><label className="text-xs text-gray-500 block mb-0.5">Sanitizante</label><input className={INP} value={inspForm.sanitizante} onChange={(e) => updInsp("sanitizante", e.target.value)} /></div>
+                      <div><label className="text-xs text-gray-500 block mb-0.5">Concentración</label><input className={INP} value={inspForm.concentracion} onChange={(e) => updInsp("concentracion", e.target.value)} /></div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-0.5">1. ¿Cuáles han sido sus cargas anteriores?</label>
+                    <input className={INP} value={inspForm.cargasAnteriores} onChange={(e) => updInsp("cargasAnteriores", e.target.value)} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-gray-700 font-medium">2. ¿Tiene conocimiento sobre alérgenos?</label>
+                    {sino(inspForm.conoceAlergenos, (v) => updInsp("conoceAlergenos", v))}
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Principales alérgenos en México · ¿dentro de las operaciones?</div>
+                    <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {ALERGENOS_MX.map((a) => (
+                        <div key={a} className="flex items-center gap-2 px-3 py-1.5">
+                          <span className="flex-1 text-xs text-gray-700">{a}</span>
+                          {sino(inspForm.alergenos[a] === "Sí" ? "si" : "no", (v) => updAlergeno(a, v === "si" ? "Sí" : "No"))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                    <b>Consecuencias:</b> tras ingerir un alérgeno, una persona alérgica puede sufrir anafilaxis (riesgo vital), urticaria, hormigueo, comezón, inflamaciones, vómitos, diarrea y dificultad para respirar.
+                    <div className="mt-2"><b>Medidas preventivas:</b> no abrir la caja · no introducir alérgenos ni productos ajenos a la carga (aceites, detergentes, químicos) · reportar cualquier anomalía en el trayecto.</div>
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className="text-xs text-gray-500 block mb-0.5">Aprobado para cargar por</label><input className={INP} value={inspForm.aprobadoPor} onChange={(e) => updInsp("aprobadoPor", e.target.value)} placeholder="Nombre del supervisor" /></div>
+                <div><label className="text-xs text-gray-500 block mb-0.5">Firma del operador</label><input className={INP + " bg-gray-50"} value={inspForm.nombreChofer} readOnly /></div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
+              <button onClick={generarInspPDF} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📄 Descargar PDF</button>
+              <div className="flex gap-2">
+                <button onClick={cerrarInsp} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={guardarInsp} className="text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">💾 Guardar inspección</button>
+              </div>
             </div>
           </div>
         </div>
@@ -590,9 +896,8 @@ export default function Modulo3() {
                     ) : aplanar("choferes").map((c) => (
                       <tr key={c.id} className="border-b border-gray-50">
                         <td className="py-1.5 pr-2">
-                          <select value={c.lineaId} onChange={(e) => moverSub("choferes", c.lineaId, c.id, e.target.value)} className={INP_TBL}>
-                            {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
-                          </select>
+                          <SearchSelect value={c.lineaId} onChange={(v) => moverSub("choferes", c.lineaId, c.id, v)} className={INP_TBL}
+                            options={lineas.map((l) => ({ value: l.id, label: l.linea }))} />
                         </td>
                         <td className="py-1.5 pr-2"><input value={c.nombre} onChange={(e) => updSub("choferes", c.lineaId, c.id, "nombre", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={c.telefono} onChange={(e) => updSub("choferes", c.lineaId, c.id, "telefono", e.target.value)} className={INP_TBL} /></td>
@@ -623,9 +928,8 @@ export default function Modulo3() {
                     ) : aplanar("tractos").map((t) => (
                       <tr key={t.id} className="border-b border-gray-50">
                         <td className="py-1.5 pr-2">
-                          <select value={t.lineaId} onChange={(e) => moverSub("tractos", t.lineaId, t.id, e.target.value)} className={INP_TBL}>
-                            {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
-                          </select>
+                          <SearchSelect value={t.lineaId} onChange={(v) => moverSub("tractos", t.lineaId, t.id, v)} className={INP_TBL}
+                            options={lineas.map((l) => ({ value: l.id, label: l.linea }))} />
                         </td>
                         <td className="py-1.5 pr-2"><input value={t.marcaModelo || ""} onChange={(e) => updSub("tractos", t.lineaId, t.id, "marcaModelo", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={t.placa} onChange={(e) => updSub("tractos", t.lineaId, t.id, "placa", e.target.value)} className={INP_TBL} /></td>
@@ -655,9 +959,8 @@ export default function Modulo3() {
                     ) : aplanar("cajas").map((c) => (
                       <tr key={c.id} className="border-b border-gray-50">
                         <td className="py-1.5 pr-2">
-                          <select value={c.lineaId} onChange={(e) => moverSub("cajas", c.lineaId, c.id, e.target.value)} className={INP_TBL}>
-                            {lineas.map((l) => <option key={l.id} value={l.id}>{l.linea}</option>)}
-                          </select>
+                          <SearchSelect value={c.lineaId} onChange={(v) => moverSub("cajas", c.lineaId, c.id, v)} className={INP_TBL}
+                            options={lineas.map((l) => ({ value: l.id, label: l.linea }))} />
                         </td>
                         <td className="py-1.5 pr-2"><input value={c.economico} onChange={(e) => updSub("cajas", c.lineaId, c.id, "economico", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={c.placa} onChange={(e) => updSub("cajas", c.lineaId, c.id, "placa", e.target.value)} className={INP_TBL} /></td>

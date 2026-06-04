@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
+import { useDatos, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
 
 export default function Modulo5() {
   const { cargasEmbarques, setCargasEmbarques, setTrailers, catalogo } = useDatos();

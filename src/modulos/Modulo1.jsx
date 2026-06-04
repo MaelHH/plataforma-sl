@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
+import SearchSelect from "../components/SearchSelect";
 
 let nextCatId = 1;
 
@@ -156,16 +157,14 @@ export default function Modulo1() {
                       <SelectorPresentacion value={r.presId} opciones={presDelCultivo} onChange={(id) => updFila(r.idxGlobal, "presId", id)} />
                     </td>
                     <td className="px-2 py-1 border-b border-gray-100">
-                      <select value={r.origen} onChange={(e) => updFila(r.idxGlobal, "origen", e.target.value)}
-                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white">
-                        {ORIGENES.map((o) => <option key={o}>{o}</option>)}
-                      </select>
+                      <SearchSelect value={r.origen} onChange={(v) => updFila(r.idxGlobal, "origen", v)}
+                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white"
+                        options={ORIGENES.map((o) => ({ value: o, label: o }))} />
                     </td>
                     <td className="px-2 py-1 border-b border-gray-100">
-                      <select value={r.dest} onChange={(e) => updFila(r.idxGlobal, "dest", e.target.value)}
-                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white">
-                        {DESTINOS_ALL.filter((d) => d !== "Sin asignar").map((d) => <option key={d}>{d}</option>)}
-                      </select>
+                      <SearchSelect value={r.dest} onChange={(v) => updFila(r.idxGlobal, "dest", v)}
+                        className="text-xs px-2 py-1 rounded-md border border-gray-200 focus:border-blue-400 focus:outline-none bg-white"
+                        options={DESTINOS_ALL.filter((d) => d !== "Sin asignar").map((d) => ({ value: d, label: d }))} />
                     </td>
                     {r.dias.map((c, j) => (
                       <td key={j} className="px-0.5 py-1 border-b border-gray-100">
@@ -218,10 +217,9 @@ export default function Modulo1() {
                           className="w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
                       </td>
                       <td className="py-1.5 text-center">
-                        <select value={c.cultivo || ""} onChange={(e) => updCat(c.id, "cultivo", e.target.value)}
-                          className="text-xs px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none bg-white">
-                          {cultivos.map((cu) => <option key={cu.id} value={cu.id}>{cu.label}</option>)}
-                        </select>
+                        <SearchSelect value={c.cultivo || ""} onChange={(v) => updCat(c.id, "cultivo", v)}
+                          className="text-xs px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none bg-white"
+                          options={cultivos.map((cu) => ({ value: cu.id, label: cu.label }))} />
                       </td>
                       <td className="py-1.5 text-center">
                         <input type="number" value={c.cajasPorParrilla} onChange={(e) => updCat(c.id, "cajasPorParrilla", e.target.value)}

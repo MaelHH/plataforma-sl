@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { useDatos, CAT_VACIO, DC, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
+import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 
 // DATOS DEMO — BORRAR AL CONECTAR BACKEND
 const TENDENCIA_DEMO = {
