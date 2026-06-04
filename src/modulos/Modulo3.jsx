@@ -14,7 +14,7 @@ function lunesActual() {
 }
 
 export default function Modulo3() {
-  const { trailers, setTrailers, requerimientoGen, lineas, setLineas } = useDatos();
+  const { trailers, setTrailers, requerimientoGen, requerimientoMeta, lineas, setLineas } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const dias = calcularDias(semana);
   const [diaFil, setDiaFil] = useState(dias[0]);
@@ -278,6 +278,9 @@ export default function Modulo3() {
           <div>
             <div className="text-sm font-bold text-gray-900">📋 Resumen de la semana — qué conseguir</div>
             <div className="text-xs text-gray-500 mt-0.5">Requerimiento total enviado desde Cálculo de Trailers</div>
+            {requerimientoMeta[semana]?.enviadoLocal && (
+              <div className="text-xs text-blue-600 mt-1 font-medium">📥 Recibido de {requerimientoMeta[semana].actor || "Kiko"}: {requerimientoMeta[semana].enviadoLocal}</div>
+            )}
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-blue-700">{totalSemana}</div>

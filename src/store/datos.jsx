@@ -1,4 +1,34 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+// ─── PERSISTENCIA (localStorage) + ESTAMPADO DE TIEMPO ───
+// Versionado de la llave para poder migrar el esquema cuando llegue el backend real.
+const STORAGE_KEY = "plataforma_sl_estado_v1";
+
+function leerEstado() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+// Devuelve el instante actual en formato backend-ready (ISO/UTC) + texto local.
+export function ahora() {
+  const d = new Date();
+  return {
+    iso: d.toISOString(),
+    local: d.toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" }),
+  };
+}
+
+function nuevoId() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return "ev_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+}
 
 // ─── CONSTANTES ───
 export const ORIGEN = "Los Mochis, Sinaloa";
@@ -58,6 +88,41 @@ export const STATUS_CFG = {
 };
 
 export function idxToParr(idx) { return idx < 15 ? idx * 2 + 1 : (idx - 15) * 2 + 2; }
+
+// ─── CONTROL DE CALIDAD (recepción) ───
+// Categorías de defectos: calidad, condición y plaga
+export const CATS_QC = {
+  calidad: { label: "% D. Calidad", color: "text-blue-700" },
+  condicion: { label: "% D. Condición", color: "text-amber-700" },
+  plaga: { label: "% D. Plaga", color: "text-red-700" },
+};
+
+// Catálogo de defectos en el orden de la hoja de QC (cada uno con su categoría)
+export const DEFECTOS_QC = [
+  { id: "DEFORME", label: "Deforme", cat: "calidad" },
+  { id: "CICATRIZ", label: "Cicatriz", cat: "calidad" },
+  { id: "QUEBRADO", label: "Quebrado", cat: "calidad" },
+  { id: "MACHACADO", label: "Machacado", cat: "calidad" },
+  { id: "EJOTE_CLARO", label: "Ejote claro", cat: "calidad" },
+  { id: "FLOJO_TIERNO", label: "Flojo / Tierno", cat: "calidad" },
+  { id: "MARCADO", label: "Marcado", cat: "calidad" },
+  { id: "BEANY", label: "Beany", cat: "calidad" },
+  { id: "BOFO", label: "Bofo", cat: "calidad" },
+  { id: "HOJA_RACIMOS", label: "Hoja / Racimos", cat: "calidad" },
+  { id: "DESHIDRATADO", label: "Deshidratado", cat: "condicion" },
+  { id: "HONGO_BACTERIA", label: "Hongo / Bacteria", cat: "condicion" },
+  { id: "OXIDADO", label: "Oxidado", cat: "condicion" },
+  { id: "PUNTA_OXIDADA", label: "Punta oxidada", cat: "condicion" },
+  { id: "GOTA_AGUA", label: "Gota de agua", cat: "condicion" },
+  { id: "PUDRICION", label: "Pudrición", cat: "condicion" },
+  { id: "DANO_CHINCHE", label: "Daño de chinche", cat: "plaga" },
+  { id: "DANO_GUSANO", label: "Daño de gusano", cat: "plaga" },
+  { id: "TRIP", label: "Trip", cat: "plaga" },
+  { id: "DANO_RATA", label: "Daño de rata", cat: "plaga" },
+  { id: "VIROSIS", label: "Virosis", cat: "plaga" },
+];
+
+export const MAX_MUESTREOS = 3;
 
 // ─── MANEJO DE SEMANAS ───
 const DIAS_ABREV = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -124,6 +189,29 @@ const LINEAS_INICIAL = [
   },
 ];
 
+// Catálogo de "qué se carga" en movimientos de campo (producto/empaque)
+const CARGA_CAMPO_INICIAL = [
+  { id: "CC1", label: "Caja c/flete" },
+  { id: "CC2", label: "Fresco" },
+  { id: "CC3", label: "Cajas vacías" },
+  { id: "CC4", label: "Bins" },
+  { id: "CC5", label: "Taras" },
+];
+
+// Catálogo de orígenes (ranchos/campos) y destinos (empaques) para movimientos internos
+const UBICACIONES_INICIAL = {
+  origenes: [
+    { id: "OR1", nombre: "San Quintín, B.C." },
+    { id: "OR2", nombre: "Los Mochis, Sinaloa" },
+    { id: "OR3", nombre: "Culiacán, Sinaloa" },
+  ],
+  destinos: [
+    { id: "DE1", nombre: "Empaque Los Mochis" },
+    { id: "DE2", nombre: "Empaque Culiacán" },
+    { id: "DE3", nombre: "Empaque Guasave" },
+  ],
+};
+
 const mockTrailers = [
   { id: 1, fecha: "Lun 26", origen: ORIGEN, dest: "USA Texas", status: "en_instalaciones", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567", chofer: "Carlos Mendoza", marcaModelo: "Kenworth T680", placaTracto: "ABC-1234", economicoCaja: "C-0042", placaCaja: "XYZ-9876", licencia: "LIC-88721", telefono: "667-987-6543", flete: "18500" },
   { id: 2, fecha: "Lun 26", origen: ORIGEN, dest: "WM MEX", status: "en_instalaciones", linea: "Fletes del Norte", contacto: "Sandra López", numero: "668-555-9900", chofer: "Miguel Ángel Ruiz", marcaModelo: "International LT", placaTracto: "DEF-5678", economicoCaja: "C-0087", placaCaja: "MNO-4321", licencia: "LIC-44502", telefono: "668-321-7654", flete: "9200" },
@@ -134,17 +222,49 @@ const mockTrailers = [
 const DatosContext = createContext(null);
 
 export function DatosProvider({ children }) {
-  const [trailers, setTrailers] = useState(mockTrailers);
-  const [cargasEmbarques, setCargasEmbarques] = useState([]);
-  const [monitoreo, setMonitoreo] = useState({});
-  const [catalogo, setCatalogo] = useState(CATALOGO_INICIAL);
-  const [cultivos, setCultivos] = useState(CULTIVOS_INICIAL);
-  const [programa, setPrograma] = useState({}); // { "2026-05-26": [ {presId, origen, dest, dias:[7]} ] }
-  const [requerimientoGen, setRequerimientoGen] = useState({}); // { "2026-05-26": [ {tipo, fecha, diIdx, origen, dest, sol} ] }
-  const [responsables, setResponsables] = useState(["Francisco Flores", "Kiko"]); // nombres usados en monitoreo
-  const [lineas, setLineas] = useState(LINEAS_INICIAL); // catálogo de líneas de transporte
+  const guardado = leerEstado(); // estado persistido en localStorage (o {})
 
-  const value = { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo, catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma, requerimientoGen, setRequerimientoGen, responsables, setResponsables, lineas, setLineas };
+  const [trailers, setTrailers] = useState(guardado.trailers ?? mockTrailers);
+  const [cargasEmbarques, setCargasEmbarques] = useState(guardado.cargasEmbarques ?? []);
+  const [monitoreo, setMonitoreo] = useState(guardado.monitoreo ?? {});
+  const [catalogo, setCatalogo] = useState(guardado.catalogo ?? CATALOGO_INICIAL);
+  const [cultivos, setCultivos] = useState(guardado.cultivos ?? CULTIVOS_INICIAL);
+  const [programa, setPrograma] = useState(guardado.programa ?? {}); // { "2026-05-26": [ {presId, origen, dest, dias:[7]} ] }
+  const [requerimientoGen, setRequerimientoGen] = useState(guardado.requerimientoGen ?? {}); // { "2026-05-26": [ {tipo, fecha, diIdx, origen, dest, sol} ] }
+  const [requerimientoMeta, setRequerimientoMeta] = useState(guardado.requerimientoMeta ?? {}); // { semana: { enviadoTs, enviadoLocal, actor } }
+  const [responsables, setResponsables] = useState(guardado.responsables ?? ["Francisco Flores", "Kiko"]); // nombres usados en monitoreo
+  const [lineas, setLineas] = useState(guardado.lineas ?? LINEAS_INICIAL); // catálogo de líneas de transporte
+  const [movimientos, setMovimientos] = useState(guardado.movimientos ?? []); // movimientos internos campo→empaque
+  const [cargaCampo, setCargaCampo] = useState(guardado.cargaCampo ?? CARGA_CAMPO_INICIAL); // catálogo de qué se carga
+  const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
+  const [bitacora, setBitacora] = useState(guardado.bitacora ?? []); // registro de eventos con timestamp (backend-ready)
+
+  // Persistir todo el estado en localStorage ante cualquier cambio.
+  useEffect(() => {
+    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+    } catch (e) {
+      // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
+      console.warn("No se pudo guardar en localStorage:", e);
+    }
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora]);
+
+  // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
+  //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
+  const registrarEvento = useCallback((ev) => {
+    const t = ahora();
+    setBitacora((prev) => [{ id: nuevoId(), ts: t.iso, tsLocal: t.local, ...ev }, ...prev]);
+  }, []);
+
+  const value = {
+    trailers, setTrailers, cargasEmbarques, setCargasEmbarques, monitoreo, setMonitoreo,
+    catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma,
+    requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
+    responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
+    cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
+    bitacora, setBitacora, registrarEvento,
+  };
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }
 

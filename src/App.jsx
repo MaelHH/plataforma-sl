@@ -9,9 +9,13 @@ import Modulo4 from "./modulos/Modulo4";
 import Modulo5 from "./modulos/Modulo5";
 import Modulo6 from "./modulos/Modulo6";
 import Modulo7 from "./modulos/Modulo7";
+import Modulo8 from "./modulos/Modulo8";
+import Modulo9 from "./modulos/Modulo9";
 
 const MODULOS = [
   { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈" },
+  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾" },
+  { id: 9, nombre: "Recepción en Empaque", sub: "Empaque", icono: "📥" },
   { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋" },
   { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛" },
   { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊" },
@@ -71,6 +75,8 @@ export default function App() {
             {moduloActivo === 5 && <Modulo5 />}
             {moduloActivo === 6 && <Modulo6 />}
             {moduloActivo === 7 && <Modulo7 />}
+            {moduloActivo === 8 && <Modulo8 />}
+            {moduloActivo === 9 && <Modulo9 />}
           </div>
         </div>
       </div>

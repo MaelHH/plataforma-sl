@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 
@@ -206,8 +206,8 @@ export default function Modulo6() {
                     ? carga.empresasSel.reduce((a, eid) => a + cajasDe(carga.distEmpresas[eid] || []), 0)
                     : 0;
                   return (
-                    <>
-                      <tr key={carga.id} className={`border-b border-gray-100 cursor-pointer ${isOpen ? "bg-blue-50" : carga.sapStatus === "cargado" ? "bg-green-50/40" : "hover:bg-gray-50"}`} onClick={() => setCargaSel(isOpen ? null : carga.id)}>
+                    <Fragment key={carga.id}>
+                      <tr className={`border-b border-gray-100 cursor-pointer ${isOpen ? "bg-blue-50" : carga.sapStatus === "cargado" ? "bg-green-50/40" : "hover:bg-gray-50"}`} onClick={() => setCargaSel(isOpen ? null : carga.id)}>
                         <td className="px-3 py-2 font-semibold text-gray-700">{carga.trailer.fecha || "—"}</td>
                         <td className="px-3 py-2"><span className={`font-medium px-2 py-0.5 rounded-full border ${DC[carga.trailer.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{carga.trailer.dest || "—"}</span></td>
                         <td className="px-3 py-2 text-gray-700"><div className="font-medium">{carga.trailer.linea || "—"}</div><div className="text-gray-400">{carga.trailer.chofer || "—"}</div></td>
@@ -281,7 +281,7 @@ export default function Modulo6() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDatos, ORIGEN, TOTAL, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
+import { useDatos, ORIGEN, TOTAL, calcularDias, etiquetaSemana, moverSemana, ahora } from "../store/datos";
 
 const PT = TOTAL;
 
@@ -77,7 +77,7 @@ function TablaCalculadora() {
 }
 
 export default function Modulo2() {
-  const { programa, catalogo, cultivos, setRequerimientoGen } = useDatos();
+  const { programa, catalogo, cultivos, setRequerimientoGen, setRequerimientoMeta, registrarEvento } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const [diaFil, setDiaFil] = useState("Todos");
   const [maData, setMaData] = useState({});
@@ -134,6 +134,19 @@ export default function Modulo2() {
       reqs.push({ tipo: "M. Abierto", fecha, diIdx: di, origen: ORIGEN, dest, sol });
     });
     setRequerimientoGen((prev) => ({ ...prev, [semana]: reqs }));
+    // Estampado de tiempo del envío Kiko → Mónica
+    const t = ahora();
+    const totalTrailers = reqs.reduce((a, r) => a + (r.sol || 0), 0);
+    setRequerimientoMeta((prev) => ({ ...prev, [semana]: { enviadoTs: t.iso, enviadoLocal: t.local, actor: "Kiko", lineas: reqs.length, trailers: totalTrailers } }));
+    registrarEvento({
+      evento: "requerimiento_enviado",
+      modulo: "Cálculo de Trailers",
+      actor: "Kiko",
+      destino: "Tablero de Tráfico (Mónica)",
+      ref: semana,
+      detalle: `Requerimiento de ${reqs.length} línea(s) / ${totalTrailers} trailer(s) enviado a Mónica`,
+      meta: { semana, lineas: reqs.length, trailers: totalTrailers },
+    });
     setGenerado(true);
     setTimeout(() => setGenerado(false), 2500);
   };
