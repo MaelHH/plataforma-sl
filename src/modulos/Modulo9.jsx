@@ -5,9 +5,9 @@ import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import ColaTabs from "../components/ColaTabs";
 
-// Muestreo vacío (gramos por defecto en blanco)
-const muestreoVacio = (lote) => ({
-  inspector: "", folio: "", lote: lote || "", pesoMuestra: "", fecha: hoyISO(),
+// Muestreo vacío. Arrastra lote y fecha del movimiento de campo cuando se recibe.
+const muestreoVacio = (m) => ({
+  inspector: "", folio: "", lote: m?.lote || "", pesoMuestra: "", fecha: m?.fecha || hoyISO(),
   defectos: Object.fromEntries(DEFECTOS_QC.map((d) => [d.id, ""])),
   fotos: {}, // 1 foto por defecto: { [defId]: dataURL }
 });
@@ -51,6 +51,10 @@ export default function Modulo9() {
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
   const [tabRec, setTabRec] = useState("pendientes"); // pendientes | historial
+  const [q, setQ] = useState("");
+  const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
+  const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
+  const [rechazoComent, setRechazoComent] = useState("");
 
   // ── Muestreo de calidad ──
   const [muestreoMov, setMuestreoMov] = useState(null); // movimiento al que se le hace muestreo
@@ -58,7 +62,7 @@ export default function Modulo9() {
   const [mActivo, setMActivo] = useState(0); // pestaña activa
 
   const abrirMuestreo = (m) => {
-    const existentes = m.muestreos && m.muestreos.length ? m.muestreos : [muestreoVacio(m.lote)];
+    const existentes = m.muestreos && m.muestreos.length ? m.muestreos : [muestreoVacio(m)];
     setMuestreos(existentes);
     setMActivo(0);
     setMuestreoMov(m);
@@ -70,7 +74,7 @@ export default function Modulo9() {
 
   const agregarMuestreo = () => {
     if (muestreos.length >= MAX_MUESTREOS) return;
-    setMuestreos((prev) => [...prev, muestreoVacio(muestreoMov?.lote)]);
+    setMuestreos((prev) => [...prev, muestreoVacio(muestreoMov)]);
     setMActivo(muestreos.length);
   };
   const eliminarMuestreo = (idx) => {
@@ -134,14 +138,34 @@ export default function Modulo9() {
   };
 
   const reabrir = (id) => {
-    if (!window.confirm("¿Reabrir esta recepción? Se marcará como pendiente otra vez.")) return;
+    if (!window.confirm("¿Reabrir este flete? Volverá a 'Por recibir'.")) return;
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined } : m)));
   };
 
+  // ── Rechazo del flete (desde muestreo o inspección) ──
+  const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
+  const confirmarRechazo = () => {
+    const recepcion = { estado: "rechazado", comentario: rechazoComent, confirmado: new Date().toLocaleString("es-MX") };
+    setMovimientos((prev) => prev.map((m) => (m.id === rechazoMov.id ? { ...m, recepcion } : m)));
+    setRechazoMov(null); setRechazoComent("");
+    cerrarMuestreo(); cerrarInspeccion();
+  };
+
+  const atendido = (m) => m.recepcion?.estado === "recibido" || m.recepcion?.estado === "rechazado";
   const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido");
-  const pendientes = movimientos.filter((m) => m.recepcion?.estado !== "recibido");
+  const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
+  const pendientes = movimientos.filter((m) => !atendido(m));
+  const historialArr = movimientos.filter(atendido);
   const conNovedad = recibidos.filter((m) => m.recepcion?.condicion === "con_novedad");
-  const lista = tabRec === "pendientes" ? pendientes : recibidos;
+  const qLow = q.trim().toLowerCase();
+  const lista = (tabRec === "pendientes" ? pendientes : historialArr).filter((m) => {
+    if (tabRec === "historial" && fTipo && (m.recepcion?.estado || "") !== fTipo) return false;
+    if (qLow) {
+      const campos = [m.folio, m.remision, m.rancho, m.lote, m.linea, m.chofer, m.origen, m.destino, m.viaje];
+      if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
+  });
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -178,27 +202,39 @@ export default function Modulo9() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-5 gap-2 mb-4">
         {stat("Total fletes", movimientos.length, "text-gray-900")}
         {stat("Por recibir", pendientes.length, "text-orange-600")}
         {stat("Recibidos", recibidos.length, "text-green-700")}
-        {stat("Con novedad", conNovedad.length, "text-red-600")}
+        {stat("Rechazados", rechazados.length, "text-red-600")}
+        {stat("Con novedad", conNovedad.length, "text-amber-600")}
       </div>
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },
-        { key: "historial", label: "Historial", count: recibidos.length },
+        { key: "historial", label: "Historial", count: historialArr.length },
       ]} />
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes por recibir" : "Fletes recibidos (historial)"} ({lista.length})</span>
+          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes por recibir" : "Historial (recibidos y rechazados)"} ({lista.length})</span>
         </div>
+        {movimientos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, rancho, chofer, destino…"
+              className="flex-1 min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+            {tabRec === "historial" && (
+              <div className="w-48"><SearchSelect className={INP} value={fTipo} onChange={setFTipo} placeholder="Tipo: todos"
+                options={[{ value: "", label: "Tipo: todos" }, { value: "recibido", label: "Recepción" }, { value: "rechazado", label: "Rechazo" }]} /></div>
+            )}
+            {(q || fTipo) && <button onClick={() => { setQ(""); setFTipo(""); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Limpiar</button>}
+          </div>
+        )}
         {lista.length === 0 ? (
-          <div className="text-xs text-gray-400 text-center py-8 italic">{tabRec === "pendientes" ? "No hay fletes por recibir. Aparecerán aquí en cuanto se registren en Movimientos." : "Aún no hay fletes recibidos."}</div>
+          <div className="text-xs text-gray-400 text-center py-8 italic">{movimientos.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "1080px" }}>
+            <table className="w-full text-xs" style={{ minWidth: "1180px" }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                   <th className="text-left px-3 py-2 font-medium">Folio</th>
@@ -208,6 +244,7 @@ export default function Modulo9() {
                   <th className="text-right px-3 py-2 font-medium">Parrillas</th>
                   <th className="text-right px-3 py-2 font-medium">Bultos</th>
                   <th className="text-center px-3 py-2 font-medium">Estado</th>
+                  <th className="text-center px-3 py-2 font-medium">Tipo</th>
                   <th className="text-center px-3 py-2 font-medium">Calidad (QCI)</th>
                   <th className="text-center px-3 py-2 font-medium"></th>
                 </tr>
@@ -218,13 +255,14 @@ export default function Modulo9() {
                   const bul = sumar(m.cargaItems, "bultos");
                   const r = m.recepcion;
                   const recibido = r?.estado === "recibido";
+                  const rechazado = r?.estado === "rechazado";
                   const novedad = recibido && r?.condicion === "con_novedad";
                   const nMu = m.muestreos?.length || 0;
                   const qciProm = nMu ? m.muestreos.reduce((a, mu) => a + calcQCI(mu), 0) / nMu : null;
                   return (
-                    <tr key={m.id} className={`border-b border-gray-100 ${recibido ? (novedad ? "bg-red-50/40" : "bg-green-50/40") : "hover:bg-gray-50"}`}>
+                    <tr key={m.id} className={`border-b border-gray-100 ${recibido ? (novedad ? "bg-red-50/40" : "bg-green-50/40") : rechazado ? "bg-red-50/40" : "hover:bg-gray-50"}`}>
                       <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-700">{m.fecha || "—"}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
                       <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
                       <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
@@ -234,9 +272,21 @@ export default function Modulo9() {
                           <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>
                             {novedad ? "⚠️" : "✓"}
                           </span>
+                        ) : rechazado ? (
+                          <span title="Rechazado" className="inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm bg-red-100 text-red-700 border-red-200">❌</span>
                         ) : (
                           <span title="Por recibir" className="inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200">⏳</span>
                         )}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {recibido ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold whitespace-nowrap">Recepción</span>
+                        ) : rechazado ? (
+                          <div>
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold whitespace-nowrap">Rechazo</span>
+                            {r?.comentario && <div className="text-[10px] text-gray-500 mt-0.5 max-w-[160px] mx-auto truncate" title={r.comentario}>{r.comentario}</div>}
+                          </div>
+                        ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {qciProm !== null ? (
@@ -254,6 +304,8 @@ export default function Modulo9() {
                             <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
                           </>
+                        ) : rechazado ? (
+                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
                         ) : (
                           <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-700">Dar recepción</button>
                         )}
@@ -385,6 +437,16 @@ export default function Modulo9() {
               </div>
 
               <div className="px-5 py-4">
+                {/* Datos arrastrados del movimiento de campo (solo lectura) */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Datos del movimiento de campo</div>
+                  <div className="grid grid-cols-4 gap-x-3 gap-y-1 text-xs">
+                    {[["Remisión", muestreoMov.remision], ["Folio", muestreoMov.folio], ["Rancho", muestreoMov.rancho], ["Lote", muestreoMov.lote], ["Viaje / zona", muestreoMov.viaje], ["Consignado", muestreoMov.consignado], ["Distribuidor", muestreoMov.distribuidor], ["Resp. cosecha", muestreoMov.responsableCosecha], ["Origen → Destino", `${muestreoMov.origen || "—"} → ${muestreoMov.destino || "—"}`], ["Fecha salida", muestreoMov.fecha], ["Línea", muestreoMov.linea], ["Chofer", muestreoMov.chofer]].map(([l, v]) => (
+                      <div key={l}><span className="text-gray-400">{l}: </span><span className="font-semibold text-gray-700">{v || "—"}</span></div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Encabezado del muestreo */}
                 <div className="grid grid-cols-4 gap-2 mb-4">
                   <div><label className={LBL}>Lote (paredes)</label><input className={INP} value={mu.lote} onChange={(e) => updMuestreo("lote", e.target.value)} placeholder="Paredes" /></div>
@@ -454,7 +516,10 @@ export default function Modulo9() {
               </div>
 
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
-                <button onClick={() => generarReporteCalidad(muestreoMov, muestreos)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF / Reportar a empaque</button>
+                <div className="flex gap-2">
+                  <button onClick={() => generarReporteCalidad(muestreoMov, muestreos)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF</button>
+                  <button onClick={() => abrirRechazo(muestreoMov)} className="text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50">🚫 Rechazar flete</button>
+                </div>
                 <div className="flex gap-2">
                   <button onClick={cerrarMuestreo} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
                   <button onClick={guardarMuestreo} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">💾 Guardar muestreo{muestreos.length > 1 ? "s" : ""}</button>
@@ -547,11 +612,35 @@ export default function Modulo9() {
             </div>
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
-              <button onClick={() => generarReporteInspeccion(insp)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF (REG-EMP-24)</button>
+              <div className="flex gap-2">
+                <button onClick={() => generarReporteInspeccion(insp)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF</button>
+                <button onClick={() => abrirRechazo(inspMov)} className="text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50">🚫 Rechazar flete</button>
+              </div>
               <div className="flex gap-2">
                 <button onClick={cerrarInspeccion} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
                 <button onClick={guardarInspeccion} className="text-xs px-4 py-2 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700">💾 Guardar inspección</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de rechazo del flete ── */}
+      {rechazoMov && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">🚫 Rechazar flete — Folio {rechazoMov.folio || "—"}</div>
+              <div className="text-xs text-gray-500 mt-0.5">El flete saldrá de "Por recibir" y pasará al Historial como Rechazo.</div>
+            </div>
+            <div className="px-5 py-4">
+              <label className={LBL}>¿Qué se hará con el flete? (comentario)</label>
+              <textarea className={INP} rows={4} value={rechazoComent} onChange={(e) => setRechazoComent(e.target.value)}
+                placeholder="Ej: se regresa a campo / se reprocesa / se destina a merma / se notifica a calidad…" />
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+              <button onClick={() => { setRechazoMov(null); setRechazoComent(""); }} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+              <button onClick={confirmarRechazo} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Confirmar rechazo</button>
             </div>
           </div>
         </div>
