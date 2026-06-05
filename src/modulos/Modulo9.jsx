@@ -258,13 +258,14 @@ export default function Modulo9() {
           <div className="text-xs text-gray-400 text-center py-8 italic">{movimientos.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "1180px" }}>
+            <table className="w-full text-xs" style={{ minWidth: "1320px" }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                   <th className="text-left px-3 py-2 font-medium">Folio</th>
                   <th className="text-left px-3 py-2 font-medium">Fecha salida</th>
                   <th className="text-left px-3 py-2 font-medium">Origen → Destino</th>
                   <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
+                  <th className="text-left px-3 py-2 font-medium">Producto (carga)</th>
                   <th className="text-right px-3 py-2 font-medium">Parrillas</th>
                   <th className="text-right px-3 py-2 font-medium">Bultos</th>
                   <th className="text-center px-3 py-2 font-medium">Estado</th>
@@ -289,6 +290,13 @@ export default function Modulo9() {
                       <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
                       <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
                       <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
+                      <td className="px-3 py-2 text-gray-700">
+                        {(m.cargaItems || []).filter((it) => it.prod).length ? (
+                          (m.cargaItems || []).filter((it) => it.prod).map((it, i) => (
+                            <div key={i} className="whitespace-nowrap"><span className="font-medium">{it.prod}</span>{(it.parrillas || it.bultos) ? <span className="text-gray-400"> · {it.parrillas || 0}p / {it.bultos || 0}b</span> : ""}</div>
+                          ))
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
                       <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-center">
