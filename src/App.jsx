@@ -23,7 +23,7 @@ const MODULOS = [
   { id: 9, nombre: "Recepción en Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes, hace muestreo de calidad (QCI), inspección REG-EMP-24 y puede rechazar." },
   { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋", desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
   { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛", desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
-  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica asigna y da seguimiento a los trailers (líneas, choferes, unidades) e inspección precarga REG-EMP-15." },
+  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
   { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸", desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
   { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦", desc: "Daniel/Cristina capturan los manifiestos por empresa y registran la carga en SAP." },
   { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬", desc: "Control de calidad de los embarques por producto y defectos (peso → %), con reporte QC tipo dashboard." },

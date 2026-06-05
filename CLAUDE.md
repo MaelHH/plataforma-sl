@@ -105,11 +105,14 @@ ve Mónica en el Tablero. (Pendiente: el botón ignora el filtro de día; Mercad
 no se aísla por semana — ver TODO.)
 
 ### Tablero de Tráfico (id 3) — Mónica
-Recibe el requerimiento y **asigna/da seguimiento a trailers**. Catálogos: líneas de
-transporte con subcatálogos (choferes, tractos, cajas). `status`:
-`esperando → en_instalaciones → en_ruta` (en_ruta lo pone M4 al despachar; en M3 no
-hay reversa de en_ruta). **Inspección precarga REG-EMP-15** + manifiesto de alérgenos
-por trailer, con PDF. Pestañas del pool: Activos / En ruta.
+**El rol de Mónica es solo conseguir los trailers y confirmar que llegaron** (los marca
+"en instalaciones"). De ahí en adelante (carga, evidencias, embarque…) es chamba de otra
+área. Recibe el requerimiento generado en M2 y registra/asigna los trailers. Catálogos:
+líneas de transporte con subcatálogos (choferes, tractos, cajas). `status`:
+`esperando → en_instalaciones` (lo de Mónica) `→ en_ruta` (lo pone M4 al despachar; en
+M3 no hay reversa de en_ruta). Incluye **inspección precarga REG-EMP-15** + manifiesto de
+alérgenos por trailer con PDF (la llena quien revisa el transporte antes de cargar).
+Pestañas del pool: Activos / En ruta.
 
 ### Evidencias de Carga (id 4) — Francisco
 Para trailers "en instalaciones": sube **fotos de carga** (30 parrillas, zigzag) y
