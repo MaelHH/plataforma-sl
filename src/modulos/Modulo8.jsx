@@ -14,6 +14,11 @@ export default function Modulo8() {
   const [catUbic, setCatUbic] = useState(false);
   const [verMov, setVerMov] = useState(null);
 
+  // Filtros de búsqueda de movimientos
+  const [q, setQ] = useState("");
+  const [fDestino, setFDestino] = useState("");
+  const [fRancho, setFRancho] = useState("");
+
   // modos "nuevo" en la ficha
   const [lineaNueva, setLineaNueva] = useState(false);
   const [choferNuevo, setChoferNuevo] = useState(false);
@@ -127,6 +132,22 @@ export default function Modulo8() {
   const INP_TBL = "w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none";
   const LBL = "text-xs text-gray-500 block mb-0.5";
 
+  // Filtrado de la lista de movimientos
+  const qLow = q.trim().toLowerCase();
+  const movsFiltrados = movimientos.filter((m) => {
+    if (fDestino && m.destino !== fDestino) return false;
+    if (fRancho && m.rancho !== fRancho) return false;
+    if (qLow) {
+      const campos = [m.folio, m.remision, m.rancho, m.lote, m.linea, m.chofer, m.origen, m.destino, m.viaje, m.consignado, m.distribuidor];
+      if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
+  });
+  const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))];
+  const ranchosMov = [...new Set(movimientos.map((m) => m.rancho).filter(Boolean))];
+  const hayFiltros = q || fDestino || fRancho;
+  const limpiarFiltros = () => { setQ(""); setFDestino(""); setFRancho(""); };
+
   const lineaActualId = lineaNueva ? "__nueva__" : (lineaSel?.id || "");
   const choferActualId = choferNuevo ? "__nuevo__" : ((lineaSel?.choferes || []).find((c) => c.nombre === form.chofer)?.id || "");
   const tractoActualId = tractoNuevo ? "__nuevo__" : ((lineaSel?.tractos || []).find((t) => t.placa === form.placaTracto)?.id || "");
@@ -150,11 +171,22 @@ export default function Modulo8() {
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movimientos.length})</span>
+          <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movimientos.length}` : ""})</span>
           <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
         </div>
+        {movimientos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-white">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, rancho, chofer, línea…"
+              className="flex-1 min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+            <div className="w-44"><SearchSelect className={INP} value={fDestino} onChange={setFDestino} placeholder="Destino: todos" options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
+            <div className="w-44"><SearchSelect className={INP} value={fRancho} onChange={setFRancho} placeholder="Rancho: todos" options={[{ value: "", label: "Rancho: todos" }, ...ranchosMov.map((r) => ({ value: r, label: r }))]} /></div>
+            {hayFiltros && <button onClick={limpiarFiltros} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Limpiar</button>}
+          </div>
+        )}
         {movimientos.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-8 italic">Sin movimientos. Registra el primero con "+ Nuevo movimiento".</div>
+        ) : movsFiltrados.length === 0 ? (
+          <div className="text-xs text-gray-400 text-center py-8 italic">Ningún movimiento coincide con la búsqueda.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: "900px" }}>
@@ -173,7 +205,7 @@ export default function Modulo8() {
                 </tr>
               </thead>
               <tbody>
-                {movimientos.map((m) => {
+                {movsFiltrados.map((m) => {
                   const par = m.cargaItems.reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
                   const bul = m.cargaItems.reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
                   const flete = parseFloat(m.flete) || 0;
