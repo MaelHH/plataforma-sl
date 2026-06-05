@@ -1,36 +1,73 @@
-// Mapa de México (placeholder) para Monitoreo en Ruta.
-// Muestra pines por destino con los trailers en ruta. Está listo para conectar
-// el API de TIVE: cuando llegue, se reemplazan estas posiciones aproximadas por
-// las coordenadas reales (lat/lng) de cada rastreador.
+import { useEffect, useRef } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-// Posición aproximada (% dentro del recuadro) de los destinos/orígenes conocidos.
-const PUNTOS = {
-  "Los Mochis, Sinaloa": { x: 27, y: 34 },
-  "Culiacán, Sinaloa": { x: 31, y: 40 },
-  "WM Culiacán": { x: 31, y: 40 },
-  "Guasave, Sinaloa": { x: 29, y: 37 },
-  "Hermosillo": { x: 22, y: 22 },
-  "USA Nogales": { x: 20, y: 8 },
-  "Nogales": { x: 20, y: 8 },
-  "Chihuahua": { x: 41, y: 20 },
-  "Torreón": { x: 48, y: 33 },
-  "USA Texas": { x: 72, y: 10 },
-  "McAllen": { x: 66, y: 20 },
-  "WM Monterrey": { x: 60, y: 27 },
-  "WM MEX": { x: 56, y: 62 },
-  "WM Guadalajara": { x: 44, y: 56 },
-  "WM Villahermosa": { x: 76, y: 72 },
+// Mapa real de México (Leaflet + OpenStreetMap) para Monitoreo en Ruta.
+// Coloca un pin por destino con los trailers en ruta. Listo para el API de TIVE:
+// cuando llegue, se reemplazan estas coordenadas por las del rastreador real.
+const COORDS = {
+  "Los Mochis, Sinaloa": [25.79, -108.99],
+  "Culiacán, Sinaloa": [24.81, -107.39],
+  "WM Culiacán": [24.81, -107.39],
+  "Guasave, Sinaloa": [25.57, -108.47],
+  "Hermosillo": [29.07, -110.96],
+  "USA Nogales": [31.31, -110.94],
+  "Nogales": [31.31, -110.94],
+  "Chihuahua": [28.63, -106.08],
+  "Torreón": [25.54, -103.41],
+  "USA Texas": [27.6, -99.5],
+  "McAllen": [26.20, -98.23],
+  "WM Monterrey": [25.69, -100.32],
+  "WM MEX": [19.43, -99.13],
+  "WM Guadalajara": [20.67, -103.35],
+  "WM Villahermosa": [17.99, -92.93],
 };
 
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
 export default function MapaTive({ trailers = [] }) {
-  // Agrupa trailers en ruta por destino
-  const porDestino = {};
-  trailers.forEach((t) => {
-    const d = t.dest || "Sin destino";
-    (porDestino[d] = porDestino[d] || []).push(t);
-  });
-  const grupos = Object.entries(porDestino);
-  const sinUbicacion = grupos.filter(([d]) => !PUNTOS[d]);
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+
+  // Inicializa el mapa una sola vez
+  useEffect(() => {
+    if (mapRef.current || !containerRef.current) return;
+    const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView([23.6, -102.5], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+      maxZoom: 18,
+    }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    setTimeout(() => map.invalidateSize(), 0);
+    return () => { map.remove(); mapRef.current = null; layerRef.current = null; };
+  }, []);
+
+  // Actualiza los pines cuando cambian los trailers
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    const porDestino = {};
+    trailers.forEach((t) => { const d = t.dest || "Sin destino"; (porDestino[d] = porDestino[d] || []).push(t); });
+    Object.entries(porDestino).forEach(([dest, ts]) => {
+      const c = COORDS[dest];
+      if (!c) return;
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="width:140px;height:38px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px">
+          <div style="background:#fff;border:1px solid #cbd5e1;border-radius:9999px;padding:1px 7px;font-size:10px;font-weight:600;color:#374151;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.18)">${esc(dest)} · ${ts.length}</div>
+          <div style="width:14px;height:14px;border-radius:9999px;background:#22c55e;border:2px solid #fff;box-shadow:0 0 0 3px rgba(34,197,94,.35)"></div>
+        </div>`,
+        iconSize: [140, 38],
+        iconAnchor: [70, 38],
+      });
+      L.marker(c, { icon }).addTo(layer).bindPopup(`<b>${esc(dest)}</b><br/>${ts.length} trailer(s) en ruta`);
+    });
+  }, [trailers]);
+
+  const sinUbic = [...new Set(trailers.map((t) => t.dest || "Sin destino"))].filter((d) => !COORDS[d]);
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
@@ -38,42 +75,10 @@ export default function MapaTive({ trailers = [] }) {
         <span className="text-sm font-semibold text-gray-900">🛰️ Mapa en vivo — México</span>
         <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">TIVE · tiempo real (se conectará el API)</span>
       </div>
-
-      <div className="relative w-full" style={{ height: "340px", background: "linear-gradient(160deg,#eff6ff 0%,#ecfdf5 100%)" }}>
-        {/* Silueta estilizada de México (placeholder) */}
-        <svg viewBox="0 0 100 60" preserveAspectRatio="none" className="absolute inset-0 w-full h-full opacity-30">
-          <path d="M10 9 L26 7 L33 12 L44 13 L52 9 L66 8 L74 9 L70 16 L64 22 L60 27 L58 33 L62 40 L60 48 L54 55 L48 50 L44 44 L40 47 L36 44 L33 40 L30 42 L27 38 L22 30 L18 22 L14 16 Z"
-            fill="#a7f3d0" stroke="#34d399" strokeWidth="0.5" />
-        </svg>
-        <div className="absolute top-2 left-3 text-[11px] font-bold tracking-widest text-emerald-700/40">MÉXICO</div>
-
-        {/* Pines por destino */}
-        {grupos.map(([dest, ts]) => {
-          const p = PUNTOS[dest];
-          if (!p) return null;
-          return (
-            <div key={dest} className="absolute -translate-x-1/2 -translate-y-full flex flex-col items-center" style={{ left: `${p.x}%`, top: `${p.y}%` }} title={`${dest} · ${ts.length} en ruta`}>
-              <div className="px-2 py-0.5 rounded-full bg-white border border-gray-300 shadow-sm text-[10px] font-semibold text-gray-700 whitespace-nowrap mb-0.5">{dest} · {ts.length}</div>
-              <div className="w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white shadow ring-2 ring-green-500/30"></div>
-            </div>
-          );
-        })}
-
-        {trailers.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-3xl mb-1">🛰️</div>
-              <div className="text-xs text-gray-500">No hay trailers en ruta para mostrar en el mapa.</div>
-            </div>
-          </div>
-        )}
-      </div>
-
+      <div ref={containerRef} style={{ height: "360px", width: "100%", zIndex: 0 }} />
       <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
         <span>🟢 {trailers.length} trailer{trailers.length === 1 ? "" : "s"} en ruta</span>
-        {sinUbicacion.length > 0 && (
-          <span className="text-amber-600">Sin punto en el mapa: {sinUbicacion.map(([d, ts]) => `${d} (${ts.length})`).join(", ")}</span>
-        )}
+        {sinUbic.length > 0 && <span className="text-amber-600">Sin coordenadas: {sinUbic.join(", ")}</span>}
       </div>
     </div>
   );
