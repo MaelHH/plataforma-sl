@@ -269,7 +269,7 @@ export default function Modulo3() {
             <span className="text-gray-300 text-xs">→</span>
             {showDestSel ? (
               <SearchSelect value={t.dest || "Sin asignar"} onChange={(v) => setDest(t.id, v)}
-                className={`text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}
+                className={`min-w-[120px] text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}
                 options={DESTINOS_ALL.map((d) => ({ value: d, label: d }))} />
             ) : (
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${dc}`}>{t.dest}</span>
@@ -303,7 +303,7 @@ export default function Modulo3() {
             <span className="text-xs px-2 py-1 bg-green-100 border border-green-300 text-green-700 rounded-lg font-semibold">🚛 En ruta</span>
           ) : (
             <SearchSelect value={t.status} onChange={(v) => setStatus(t.id, v)}
-              className={`text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
+              className={`w-44 text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
               options={[{ value: "esperando", label: "⏳ Esperando" }, { value: "en_instalaciones", label: "📍 En instalaciones" }]} />
           )}
         </div>
