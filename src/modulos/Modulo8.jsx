@@ -10,6 +10,7 @@ export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados } = useDatos();
 
   const [modal, setModal] = useState(false);
+  const [editId, setEditId] = useState(null); // id del movimiento que se está editando (null = nuevo)
   const [catCarga, setCatCarga] = useState(false);
   const [catUbic, setCatUbic] = useState(false);
   const [catZonas, setCatZonas] = useState(false);
@@ -44,7 +45,22 @@ export default function Modulo8() {
 
   const resetModos = () => { setLineaNueva(false); setChoferNuevo(false); setTractoNuevo(false); setCajaNueva(false); };
 
-  const abrirNuevo = () => { setForm(formVacio); resetModos(); setModal(true); };
+  const abrirNuevo = () => { setForm(formVacio); setEditId(null); resetModos(); setModal(true); };
+
+  // Editar un movimiento existente. Si ya fue recibido/rechazado en M9, avisa que la
+  // base de datos ya se afectó y hay que notificar manualmente.
+  const abrirEditar = (m) => {
+    const estado = m.recepcion?.estado;
+    if (estado === "recibido" || estado === "rechazado") {
+      window.alert(`⚠️ Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`);
+    }
+    setForm({ ...m });
+    setEditId(m.id);
+    resetModos();
+    setModal(true);
+  };
+
+  const cerrarModal = () => { setModal(false); setEditId(null); resetModos(); };
 
   const lineaSel = lineas.find((l) => l.linea === form.linea);
   const ranchoSel = ubicaciones.origenes.find((o) => o.nombre === form.rancho); // rancho elegido → sus lotes/responsables
@@ -114,8 +130,13 @@ export default function Modulo8() {
     }
     if (lineasActualizadas !== lineas) setLineas(lineasActualizadas);
 
-    const mov = { ...form, id: nuevoId("MOV_"), creado: new Date().toLocaleString("es-MX") };
-    setMovimientos((prev) => [mov, ...prev]);
+    if (editId) {
+      setMovimientos((prev) => prev.map((mm) => (mm.id === editId ? { ...form, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
+    } else {
+      const mov = { ...form, id: nuevoId("MOV_"), creado: new Date().toLocaleString("es-MX") };
+      setMovimientos((prev) => [mov, ...prev]);
+    }
+    setEditId(null);
     setModal(false);
     resetModos();
   };
@@ -244,6 +265,7 @@ export default function Modulo8() {
                       <td className="px-3 py-2 text-right font-semibold text-gray-700">{costoLb ? "$" + costoLb.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "/lb" : "—"}</td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
+                        <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
                         <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
                       </td>
                     </tr>
@@ -260,8 +282,8 @@ export default function Modulo8() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-              <div className="text-sm font-semibold text-gray-900">Nuevo movimiento — Manifiesto de carga nacional</div>
-              <button onClick={() => setModal(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <div className="text-sm font-semibold text-gray-900">{editId ? "Editar movimiento" : "Nuevo movimiento"} — Manifiesto de carga nacional</div>
+              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
             </div>
             <div className="px-5 py-4 space-y-5">
 
@@ -459,8 +481,8 @@ export default function Modulo8() {
               </div>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setModal(false)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={guardar} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Guardar movimiento</button>
+              <button onClick={cerrarModal} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+              <button onClick={guardar} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">{editId ? "Guardar cambios" : "Guardar movimiento"}</button>
             </div>
           </div>
         </div>
