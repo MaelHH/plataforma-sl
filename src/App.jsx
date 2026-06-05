@@ -15,24 +15,27 @@ import Modulo10 from "./modulos/Modulo10";
 import Modulo11 from "./modulos/Modulo11";
 import Modulo12 from "./modulos/Modulo12";
 
+// `desc`: descripción corta visible en el front (banner arriba del módulo).
+// El detalle profundo de cada módulo está en CLAUDE.md.
 const MODULOS = [
-  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈" },
-  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾" },
-  { id: 9, nombre: "Recepción en Empaque", sub: "Empaque", icono: "📥" },
-  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋" },
-  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛" },
-  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊" },
-  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸" },
-  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦" },
-  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬" },
-  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰" },
-  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️" },
-  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃" },
-  { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: "📄" },
+  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈", desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
+  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾", desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
+  { id: 9, nombre: "Recepción en Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes, hace muestreo de calidad (QCI), inspección REG-EMP-24 y puede rechazar." },
+  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋", desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
+  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛", desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
+  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica asigna y da seguimiento a los trailers (líneas, choferes, unidades) e inspección precarga REG-EMP-15." },
+  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸", desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
+  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦", desc: "Daniel/Cristina capturan los manifiestos por empresa y registran la carga en SAP." },
+  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬", desc: "Control de calidad de los embarques por producto y defectos (peso → %), con reporte QC tipo dashboard." },
+  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰", desc: "Cristina divide el flete por empresa (consolidados), con vista base de datos y export a Excel." },
+  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️", desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
+  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃", desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
+  { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: "📄", desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
 ];
 
 export default function App() {
   const [moduloActivo, setModuloActivo] = useState(0);
+  const modActivo = MODULOS.find((m) => m.id === moduloActivo);
 
   return (
     <DatosProvider>
@@ -73,6 +76,12 @@ export default function App() {
         {/* Contenido del módulo */}
         <div className="flex-1 overflow-auto">
           <div className="p-8 max-w-6xl mx-auto">
+            {modActivo?.desc && (
+              <div className="mb-4 flex items-start gap-2 text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                <span className="text-base leading-none">{modActivo.icono}</span>
+                <span><b className="text-gray-900">{modActivo.nombre}.</b> {modActivo.desc}</span>
+              </div>
+            )}
             {moduloActivo === 0 && <Dashboard />}
             {moduloActivo === 1 && <Modulo1 />}
             {moduloActivo === 2 && <Modulo2 />}

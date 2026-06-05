@@ -1,0 +1,202 @@
+# Plataforma SL — Contexto del Frontend
+
+> Documento vivo. Lo actualizamos conforme crece la app. Es la fuente de verdad del
+> contexto para entender qué hace cada parte del front.
+
+## Qué es
+
+Plataforma interna de **SL Logística** (SL Produce · SL Agrícola) para coordinar el
+flujo logístico de exportación de productos agrícolas (Bell Pepper, ejote, etc.):
+desde la planeación semanal y la salida de campo, hasta el embarque, la calidad, el
+monitoreo en ruta y la documentación. Cada módulo corresponde a un rol/persona del
+proceso.
+
+Hoy es un **frontend con datos de demo** que persisten en el navegador
+(`localStorage`). Más adelante se conectará un backend real (y APIs externas como
+**TIVE** para rastreo).
+
+## Stack técnico
+
+- **React 19** + **Vite** (build con `vite build`, dev con `vite`/Vite).
+- **Tailwind CSS v4** (`@tailwindcss/vite`).
+- **recharts** (gráficas del Dashboard), **xlsx** (export Excel en Consolidado),
+  **leaflet** (mapa real en Monitoreo).
+- ESLint (incluye reglas de react-hooks). Mantener `npx eslint src` y `npx vite build`
+  limpios antes de commitear.
+
+## Arquitectura
+
+### Estado global y persistencia
+- Todo el estado vive en `src/store/datos.jsx` (`DatosProvider` + `useDatos()`).
+- Se persiste **todo** en `localStorage` bajo la llave `plataforma_sl_estado_v1`
+  (ver `STORAGE_KEY`). Versionada para migrar cuando llegue el backend.
+- Un `useEffect` guarda el estado completo ante cualquier cambio. Si se excede la
+  cuota (p. ej. fotos base64 grandes) se hace `console.warn` sin romper la app.
+
+### Piezas clave del store (estado)
+`trailers`, `cargasEmbarques`, `monitoreo`, `catalogo` (presentaciones), `cultivos`,
+`programa`, `requerimientoGen`, `requerimientoMeta`, `responsables`, `lineas`
+(catálogo de transporte con subcatálogos choferes/tractos/cajas), `movimientos`,
+`cargaCampo`, `ubicaciones` (`origenes` = ranchos con subcatálogo `lotes` y
+`responsables`; `destinos` = empaques), `bitacora`, `materiales`, `importaciones`,
+`defectosCalidad` (defectos por producto), `inspectoresCalidad`, `lugaresCalidad`,
+`zonas` (campo Viaje), `consignados` (catálogo compartido Consignado/Distribuidor).
+
+### IDs únicos (importante)
+Usar **`nuevoId(prefix)`** del store para todo ID nuevo (usa `crypto.randomUUID`).
+NO usar contadores módulo-globales: se reinician al recargar mientras los datos
+persisten, generando IDs duplicados que hacen que borrar/editar afecte el registro
+equivocado. (Bug ya corregido en M1, M3, M4, M8.)
+
+### Componentes compartidos (`src/components/`)
+- **`SearchSelect.jsx`**: dropdown con búsqueda que reemplaza a `<select>` en toda la
+  app. El panel se dibuja en un **portal** (sobre `document.body`, posición fija) para
+  que NO lo recorte ningún contenedor con overflow (tablas/modales). El buscador
+  aparece solo si hay > `searchThreshold` opciones. `onChange(v)` entrega el valor.
+  - Ojo: si se le pasa una clase de ancho en `className`, puede chocar con el `w-full`
+    base; envolver en un contenedor con ancho o usar clases explícitas sin `w-full`.
+- **`ColaTabs.jsx`**: barra de pestañas reutilizable "Pendientes / Historial" con
+  contador. Patrón usado en M9, M12, M5, M10, M3, M4 (y referencia M7).
+- **`MapaTive.jsx`**: mapa real de México (Leaflet + OpenStreetMap) con pines por
+  destino. Coordenadas por ciudad en `COORDS`. Placeholder listo para el API de TIVE.
+
+### Generadores de PDF (`src/modulos/reportes/`) y helpers
+- `reporteCalidad.js`: `generarReporteCalidad` (muestreos QCI) y
+  `generarReporteInspeccion` (REG-EMP-24).
+- `reportePrecarga.js`: `generarPrecargaPDF` (REG-EMP-15 + manifiesto de alérgenos).
+- `expedienteCampo.js` / `expedienteExportacion.js`: expedientes consolidados (M11).
+- `helpers/calidad.js`: `pctDefecto`, `pctCategoria`, `calcQCI` (matemática del QCI por
+  gramos). Los PDFs se generan con `window.open` + `window.print()`.
+
+## Flujos del negocio
+
+1. **Planeación**: `Programa Semanal (M1)` → `Cálculo de Trailers (M2)` genera el
+   *requerimiento* → lo recibe `Tablero de Tráfico (M3)`.
+2. **Exportación (el viaje del trailer)**: `M3` asigna trailer y lo marca "en
+   instalaciones" → `Evidencias (M4)` sube fotos + distribución y "envía a Embarques"
+   (trailer pasa a "en ruta", se crea `cargaEmbarque`) → `Embarques (M5)` captura
+   manifiestos y marca SAP → `QC - Bodegas (M12)` inspecciona calidad → `Consolidado
+   (M6)` divide el flete por empresa → `Monitoreo (M7)` sigue la ruta. `Documentos
+   (M11)` imprime el expediente de exportación.
+3. **Campo (la remisión)**: `Movimientos Campo→Empaques (M8)` registra el flete con su
+   *remisión* → `Recepción en Empaque (M9)` confirma llegada + calidad/inspección/
+   rechazo. `Documentos (M11)` imprime el expediente de campo por remisión.
+4. **Importaciones (M10)**: flujo aparte de comercio exterior (importación temporal).
+
+## Módulos (detalle)
+
+> El `id` es el del menú en `App.jsx` (no es orden de pantalla). La descripción corta
+> visible en el front está en el arreglo `MODULOS` de `App.jsx` (campo `desc`).
+
+### Dashboard (id 0) — Dirección / Gerencia
+Visión general: KPIs de la semana, avance por destino (solicitados vs conseguidos),
+análisis de costos y alertas. Las gráficas de tendencia de costo son **datos demo**
+hardcodeados. Navegación por semana afecta solo los KPIs de requerimiento.
+
+### Programa Semanal (id 1) — José Carlos
+Planeación de **presentaciones por cultivo** y cajas por día (7 días). Catálogo de
+presentaciones editable (`catalogo`: `cajasPorParrilla` es la clave del cálculo). El
+programa se guarda por semana (`programa[lunesISO]`).
+
+### Cálculo de Trailers (id 2) — Kiko / Alfonso
+Calcula trailers necesarios (contratos + mercado abierto) y con **"Generar
+requerimiento"** lo guarda en `requerimientoGen[semana]` + estampa meta. Eso es lo que
+ve Mónica en el Tablero. (Pendiente: el botón ignora el filtro de día; Mercado Abierto
+no se aísla por semana — ver TODO.)
+
+### Tablero de Tráfico (id 3) — Mónica
+Recibe el requerimiento y **asigna/da seguimiento a trailers**. Catálogos: líneas de
+transporte con subcatálogos (choferes, tractos, cajas). `status`:
+`esperando → en_instalaciones → en_ruta` (en_ruta lo pone M4 al despachar; en M3 no
+hay reversa de en_ruta). **Inspección precarga REG-EMP-15** + manifiesto de alérgenos
+por trailer, con PDF. Pestañas del pool: Activos / En ruta.
+
+### Evidencias de Carga (id 4) — Francisco
+Para trailers "en instalaciones": sube **fotos de carga** (30 parrillas, zigzag) y
+**frontales**, y la **distribución por empresa** (simple o consolidado). "Enviar a
+Embarques" crea el registro en `cargasEmbarques` y pasa el trailer a "en ruta".
+Pestañas: Preparar / Enviados. (Las fotos hoy son simuladas, no se persisten imágenes
+reales.)
+
+### Embarques (id 5) — Daniel / Cristina
+Captura **manifiestos por empresa** y marca **SAP** (pendiente/cargado). "Devolver"
+borra la carga y regresa el trailer a instalaciones (¡cuidado: borra datos asociados!).
+Pestañas: Pendientes SAP / Historial. Acciones por `id` (no por índice).
+
+### Consolidado y Fletes (id 6) — Cristina
+**División del flete por empresa**. Vista **Tarjetas** (expandible) y vista **Base de
+datos** (aplanado: una fila por carga×empresa; en consolidado se repite el viaje y solo
+cambian empresa/productos/flete a cobrar — resaltadas en amarillo). **Export a Excel**.
+Filtros por fecha/destino/origen/empresa/SAP/línea/chofer.
+
+### Monitoreo en Ruta (id 7) — Francisco / Kiko
+**Mapa real de México** (Leaflet) con pines por destino de los trailers en ruta
+(placeholder para el **API de TIVE**). Eventos en tránsito: preenfriado, TIVE, retenes,
+aduanas, accidentes (sí/no + responsable + fotos + temperaturas). El `monitoreo` se
+guarda por `trailer.id`, separado de `trailers`. Pestañas: En ruta / Historial
+(entregado), con reversa no destructiva.
+
+### Movimientos Campo → Empaques (id 8) — Oscar
+Registra cada **flete que sale del campo** hacia el empaque: folio, **remisión**, viaje
+(zona), rancho + lote + responsable de cosecha, consignado/distribuidor, origen/destino,
+**descripción de la carga** (`cargaItems`: producto/parrillas/bultos) y transporte
+(reusa el catálogo de `lineas`). Catálogos: **zonas**, **ranchos** (con subcatálogo de
+lotes y responsables), **consignados** (compartido consignado/distribuidor), carga,
+ubicaciones. Filtros (texto + destino + rancho) y **botón Editar** (avisa si el flete ya
+se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Alimenta a M9.
+
+### Recepción en Empaque (id 9) — Empaque
+Confirma la **llegada de los fletes** de M8. Por flete: **muestreo de calidad** (QCI por
+gramos, folio autogenerado, arrastra datos del movimiento), **inspección REG-EMP-24**
+(vehículo/producto), **dar recepción** (declarado vs recibido), y **Rechazo** (con
+comentario de qué se hará → va al Historial como "Rechazo"). Columnas: Producto (de la
+carga), Estado, Tipo (Recepción/Rechazo). Pestañas: Por recibir / Historial. Filtros
+(texto + tipo). Inspector usa el catálogo compartido `inspectoresCalidad`.
+
+### Importaciones de Materiales (id 10) — Comercio Exterior
+Documenta **importación temporal (IMMEX)**: cada material tiene un *periodo de salida*
+(días) y se calcula la **fecha límite** para retornar/exportar sin impuesto/multa
+(alerta vigente/por vencer/vencido). Catálogo de materiales editable. PDF. Pestañas:
+En trámite / Retornadas.
+
+### Documentos / Impresiones (id 11) — Expedientes en PDF
+**Hub de impresión**: dos pestañas.
+- **Campo** (por Remisión): expediente consolidado del movimiento + recepción + calidad
+  + inspección REG-EMP-24, con accesos a los PDFs individuales.
+- **Exportación** (por flete): expediente del trailer + carga + precarga REG-EMP-15 +
+  monitoreo.
+
+### QC - Bodegas (id 12) — Control de Calidad
+Inspección de calidad de los **embarques** (de `cargasEmbarques`). Por producto, se
+capturan defectos con **peso (g)** → el **% se calcula** (peso/peso muestra), agrupados
+en QUALITY (calidad) y CONDITION (condición + plaga). **Resumen de calificación (KPIs)**
+arriba: COUNT, % GOOD, % DEFECTS, % QUALITY, % CONDITION, TEMP. Botón **📊 QC Report**
+genera un PDF estilo dashboard (Power BI): filtros, GROWER/PRODUCT, tabla, KPIs,
+desglose de defectos y barra apilada. Botones **Mandar Correo** (mailto) y **Mandar
+WhatsApp** (wa.me) con el resumen prellenado. Catálogos: defectos por producto,
+inspectores, lugares.
+
+## Convenciones / cómo extender
+
+- **Catálogos editables in-app**, sembrados con `*_INICIAL` en el store y persistidos.
+- **IDs**: siempre `nuevoId(prefix)`.
+- **Dropdowns**: usar `SearchSelect` (no `<select>` nativo).
+- **Colas de trabajo**: usar `ColaTabs` (Pendientes/Historial) cuando el flujo tenga
+  ítems que se "atienden".
+- **PDFs**: `window.open("", "_blank")` + HTML + `window.print()`.
+- **Front**: cada módulo tiene una descripción corta en `App.jsx` (`MODULOS[].desc`),
+  que se muestra como banner arriba del contenido.
+
+## TODO / pendientes conocidos
+
+- **Backend real** + migración del esquema de `localStorage`.
+- **API de TIVE**: reemplazar coordenadas fijas de `MapaTive` por ubicación en tiempo
+  real; mover los pines automáticamente.
+- **Envío real** de Correo/WhatsApp en QC-Bodegas (hoy abren el cliente con texto
+  prellenado; falta destinatario fijo / envío automático).
+- **M2**: el "Generar requerimiento" ignora el filtro de día; Mercado Abierto se cruza
+  entre semanas.
+- **M6**: `$NaN`/Infinity en reparto de flete cuando `cajasTotal === 0`.
+- **M12**: estado `rechazado` definido pero sin botón de "Rechazar"; no hay reversa a
+  "pendiente".
+- **Fotos reales**: hoy son simuladas/base64; al conectar backend, subir a storage.
