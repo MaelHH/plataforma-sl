@@ -47,7 +47,7 @@ const inspeccionConHallazgo = (insp) =>
     INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
-  const { movimientos, setMovimientos } = useDatos();
+  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad } = useDatos();
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
@@ -178,6 +178,21 @@ export default function Modulo9() {
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
+
+  // Dropdown de inspector con catálogo compartido (mismo que Aprobación de Calidad).
+  // Incluye opción para agregar uno nuevo al vuelo.
+  const selectorInspector = (value, onSet) => (
+    <SearchSelect className={INP} value={value} placeholder="— Inspector —"
+      onChange={(v) => {
+        if (v === "__nuevo__") {
+          const nombre = (window.prompt("Nombre del inspector:") || "").trim();
+          if (nombre) { if (!inspectoresCalidad.includes(nombre)) setInspectoresCalidad((p) => [...p, nombre]); onSet(nombre); }
+          return;
+        }
+        onSet(v);
+      }}
+      options={[...inspectoresCalidad.map((i) => ({ value: i, label: i })), { value: "__nuevo__", label: "➕ Agregar inspector…" }]} />
+  );
 
   // Compara declarado vs recibido para resaltar diferencias en la ficha
   const declaradoVsRecibido = (m, f) => {
@@ -459,7 +474,7 @@ export default function Modulo9() {
                 {/* Encabezado del muestreo */}
                 <div className="grid grid-cols-4 gap-2 mb-4">
                   <div><label className={LBL}>Lote (paredes)</label><input className={INP} value={mu.lote} onChange={(e) => updMuestreo("lote", e.target.value)} placeholder="Paredes" /></div>
-                  <div><label className={LBL}>Inspector</label><input className={INP} value={mu.inspector} onChange={(e) => updMuestreo("inspector", e.target.value)} placeholder="Quien muestrea" /></div>
+                  <div><label className={LBL}>Inspector</label>{selectorInspector(mu.inspector, (v) => updMuestreo("inspector", v))}</div>
                   <div><label className={LBL}>Folio muestreo / ID</label><input className={INP} value={mu.folio} onChange={(e) => updMuestreo("folio", e.target.value)} placeholder="201" /></div>
                   <div><label className={LBL}>Peso muestra</label><input type="number" className={INP} value={mu.pesoMuestra} onChange={(e) => updMuestreo("pesoMuestra", e.target.value)} placeholder="39.30" /></div>
                 </div>
@@ -615,8 +630,8 @@ export default function Modulo9() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div><label className={LBL}>Elaboró</label><input className={INP} value={insp.elaboro} onChange={(e) => updInsp("elaboro", e.target.value)} placeholder="Nombre de quien elabora" /></div>
-                <div><label className={LBL}>Nombre del supervisor</label><input className={INP} value={insp.supervisor} onChange={(e) => updInsp("supervisor", e.target.value)} placeholder="Supervisor" /></div>
+                <div><label className={LBL}>Elaboró (inspector)</label>{selectorInspector(insp.elaboro, (v) => updInsp("elaboro", v))}</div>
+                <div><label className={LBL}>Nombre del supervisor</label>{selectorInspector(insp.supervisor, (v) => updInsp("supervisor", v))}</div>
               </div>
             </div>
 
