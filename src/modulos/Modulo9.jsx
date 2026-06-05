@@ -5,9 +5,10 @@ import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import ColaTabs from "../components/ColaTabs";
 
-// Muestreo vacío. Arrastra lote y fecha del movimiento de campo cuando se recibe.
-const muestreoVacio = (m) => ({
-  inspector: "", folio: "", lote: m?.lote || "", pesoMuestra: "", fecha: m?.fecha || hoyISO(),
+// Muestreo vacío. Arrastra lote y fecha del movimiento de campo, y un folio
+// consecutivo autogenerado.
+const muestreoVacio = (m, folio) => ({
+  inspector: "", folio: folio != null ? String(folio) : "", lote: m?.lote || "", pesoMuestra: "", fecha: m?.fecha || hoyISO(),
   defectos: Object.fromEntries(DEFECTOS_QC.map((d) => [d.id, ""])),
   fotos: {}, // 1 foto por defecto: { [defId]: dataURL }
 });
@@ -61,8 +62,16 @@ export default function Modulo9() {
   const [muestreos, setMuestreos] = useState([]); // muestreos en edición (hasta 3)
   const [mActivo, setMActivo] = useState(0); // pestaña activa
 
+  // Siguiente folio de muestreo: máximo numérico existente + 1 (arranca en 201).
+  const siguienteFolioMuestreo = () => {
+    const nums = [];
+    movimientos.forEach((mov) => (mov.muestreos || []).forEach((mu) => { const n = parseInt(mu.folio, 10); if (!isNaN(n)) nums.push(n); }));
+    muestreos.forEach((mu) => { const n = parseInt(mu.folio, 10); if (!isNaN(n)) nums.push(n); });
+    return nums.length ? Math.max(...nums) + 1 : 201;
+  };
+
   const abrirMuestreo = (m) => {
-    const existentes = m.muestreos && m.muestreos.length ? m.muestreos : [muestreoVacio(m)];
+    const existentes = m.muestreos && m.muestreos.length ? m.muestreos : [muestreoVacio(m, siguienteFolioMuestreo())];
     setMuestreos(existentes);
     setMActivo(0);
     setMuestreoMov(m);
@@ -74,7 +83,7 @@ export default function Modulo9() {
 
   const agregarMuestreo = () => {
     if (muestreos.length >= MAX_MUESTREOS) return;
-    setMuestreos((prev) => [...prev, muestreoVacio(muestreoMov)]);
+    setMuestreos((prev) => [...prev, muestreoVacio(muestreoMov, siguienteFolioMuestreo())]);
     setMActivo(muestreos.length);
   };
   const eliminarMuestreo = (idx) => {
