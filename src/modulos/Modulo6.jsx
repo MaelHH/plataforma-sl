@@ -7,6 +7,7 @@ export default function Modulo6() {
   const { cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
   const CATALOGO = [CAT_VACIO, ...catalogo];
   const [cargaSel, setCargaSel] = useState(null);
+  const [vista, setVista] = useState("tarjetas"); // tarjetas | tabla
 
   // ── Filtros ──
   const [fDest, setFDest] = useState("");
@@ -45,64 +46,50 @@ export default function Modulo6() {
   const hayFiltros = fDest || fOrigen || fLinea || fChofer || fEmpresa || fFecha || fSap;
   const limpiarFiltros = () => { setFDest(""); setFOrigen(""); setFLinea(""); setFChofer(""); setFEmpresa(""); setFFecha(""); setFSap(""); };
 
-  // ── Exportar a Excel (solo lo filtrado) ──
-  const exportarExcel = () => {
+  // Productos (etiquetas) de la distribución de una empresa
+  const productosDe = (data) => {
+    const labels = [...new Set((data || []).map((p) => { const c = CATALOGO.find((x) => x.id === p.prod); return c && c.id ? c.label : null; }).filter(Boolean))];
+    return labels.join(", ");
+  };
+
+  // ── Aplanado tipo base de datos: una fila por (carga × empresa) ──
+  // En consolidado, los datos del viaje se repiten y solo cambian empresa,
+  // productos y flete a cobrar.
+  const construirFilas = () => {
     const filas = [];
-    cargasFiltradas.forEach(({ c: carga }) => {
-      const flete = parseFloat(carga.trailer.flete) || 0;
+    cargasFiltradas.forEach(({ c: carga, i: ci }) => {
+      const t = carga.trailer || {};
+      const flete = parseFloat(t.flete) || 0;
       const emps = empresasDe(carga);
-      // Si hay filtro de empresa, exporta solo esa
-      const empsExport = fEmpresa ? emps.filter((e) => e === fEmpresa) : emps;
+      const empsF = fEmpresa ? emps.filter((e) => e === fEmpresa) : emps;
       if (!carga.consolidado) {
-        empsExport.forEach((eid) => {
+        empsF.forEach((eid) => {
           const emp = EMPRESAS.find((e) => e.id === eid);
-          filas.push({
-            Manifiesto: carga.manifiestos?.[eid] || "",
-            Fecha: carga.trailer.fecha || "",
-            Destino: carga.trailer.dest || "",
-            Linea: carga.trailer.linea || "",
-            Chofer: carga.trailer.chofer || "",
-            Placas: carga.trailer.placaTracto || "",
-            Tipo: "Simple",
-            Empresa: emp?.label || "Sin empresa",
-            Cajas: "",
-            "% Flete": "100%",
-            "Flete a cobrar": flete,
-            "Flete total": flete,
-            SAP: carga.sapStatus === "cargado" ? "Cargado" : "Pendiente",
-          });
+          filas.push({ key: carga.id + "_" + eid, ci, eid, sap: carga.sapStatus, manifiesto: carga.manifiestos?.[eid] || "", fecha: t.fecha || "", destino: t.dest || "", origen: t.origen || "", linea: t.linea || "", chofer: t.chofer || "", placas: t.placaTracto || "", economico: t.economicoCaja || "", tipo: "Simple", empresa: emp?.label || "Sin empresa", productos: productosDe(carga.distEmpresas?.[eid]), cajas: "", pct: "100%", fProp: flete, fleteTotal: flete });
         });
       } else {
         const cajasTotal = carga.empresasSel.reduce((a, eid) => a + cajasDe(carga.distEmpresas[eid] || []), 0);
-        empsExport.forEach((eid) => {
+        empsF.forEach((eid) => {
           const emp = EMPRESAS.find((e) => e.id === eid);
           const cajasEmp = cajasDe(carga.distEmpresas[eid] || []);
           const pct = cajasTotal > 0 ? Math.round((cajasEmp / cajasTotal) * 100) : 0;
           const fProp = flete > 0 && cajasTotal > 0 ? Number(((cajasEmp / cajasTotal) * flete).toFixed(2)) : 0;
-          filas.push({
-            Manifiesto: carga.manifiestos?.[eid] || "",
-            Fecha: carga.trailer.fecha || "",
-            Destino: carga.trailer.dest || "",
-            Linea: carga.trailer.linea || "",
-            Chofer: carga.trailer.chofer || "",
-            Placas: carga.trailer.placaTracto || "",
-            Tipo: "Consolidado",
-            Empresa: emp?.label || "",
-            Cajas: cajasEmp,
-            "% Flete": pct + "%",
-            "Flete a cobrar": fProp,
-            "Flete total": flete,
-            SAP: carga.sapStatus === "cargado" ? "Cargado" : "Pendiente",
-          });
+          filas.push({ key: carga.id + "_" + eid, ci, eid, sap: carga.sapStatus, manifiesto: carga.manifiestos?.[eid] || "", fecha: t.fecha || "", destino: t.dest || "", origen: t.origen || "", linea: t.linea || "", chofer: t.chofer || "", placas: t.placaTracto || "", economico: t.economicoCaja || "", tipo: "Consolidado", empresa: emp?.label || "", productos: productosDe(carga.distEmpresas[eid]), cajas: cajasEmp, pct: pct + "%", fProp, fleteTotal: flete });
         });
       }
     });
+    return filas;
+  };
 
+  // ── Exportar a Excel (solo lo filtrado) ──
+  const exportarExcel = () => {
+    const filas = construirFilas().map((f) => ({
+      Manifiesto: f.manifiesto, Fecha: f.fecha, Origen: f.origen, Destino: f.destino, Linea: f.linea, Chofer: f.chofer, Placas: f.placas, Economico: f.economico, Tipo: f.tipo, Empresa: f.empresa, Productos: f.productos, Cajas: f.cajas, "% Flete": f.pct, "Flete a cobrar": f.fProp, "Flete total": f.fleteTotal, SAP: f.sap === "cargado" ? "Cargado" : "Pendiente",
+    }));
     if (filas.length === 0) {
       alert("No hay cargas para exportar con los filtros actuales.");
       return;
     }
-
     const ws = XLSX.utils.json_to_sheet(filas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
@@ -111,6 +98,7 @@ export default function Modulo6() {
   };
 
   const SEL = "text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
+  const filasPlanas = construirFilas();
 
   return (
     <div>
@@ -167,12 +155,17 @@ export default function Modulo6() {
             {hayFiltros && <div className="text-xs text-gray-400 mt-2">Mostrando {cargasFiltradas.length} de {cargasEmbarques.length}</div>}
           </div>
 
-          <div className="flex justify-end mb-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+              <button onClick={() => setVista("tarjetas")} className={`text-xs px-3 py-1.5 font-medium ${vista === "tarjetas" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}>🗂️ Tarjetas</button>
+              <button onClick={() => setVista("tabla")} className={`text-xs px-3 py-1.5 font-medium ${vista === "tabla" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}>🧮 Base de datos</button>
+            </div>
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2">
               📊 Descargar a Excel{hayFiltros ? " (filtrado)" : ""}
             </button>
           </div>
 
+          {vista === "tarjetas" ? (
           <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: "700px" }}>
               <thead>
@@ -277,6 +270,58 @@ export default function Modulo6() {
               </tbody>
             </table>
           </div>
+          ) : (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: "1320px" }}>
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                    <th className="text-left px-2 py-2 font-medium whitespace-nowrap">Fecha</th>
+                    <th className="text-left px-2 py-2 font-medium">Destino</th>
+                    <th className="text-left px-2 py-2 font-medium">Origen</th>
+                    <th className="text-left px-2 py-2 font-medium">Línea</th>
+                    <th className="text-left px-2 py-2 font-medium">Chofer</th>
+                    <th className="text-left px-2 py-2 font-medium">Placas</th>
+                    <th className="text-left px-2 py-2 font-medium">Económico</th>
+                    <th className="text-center px-2 py-2 font-medium">Tipo</th>
+                    <th className="text-left px-2 py-2 font-medium bg-yellow-50">Empresa</th>
+                    <th className="text-left px-2 py-2 font-medium bg-yellow-50">Productos</th>
+                    <th className="text-right px-2 py-2 font-medium">Cajas</th>
+                    <th className="text-right px-2 py-2 font-medium">% Flete</th>
+                    <th className="text-right px-2 py-2 font-medium bg-yellow-50">Flete a cobrar</th>
+                    <th className="text-right px-2 py-2 font-medium">Flete total</th>
+                    <th className="text-left px-2 py-2 font-medium">Manifiesto</th>
+                    <th className="text-center px-2 py-2 font-medium">SAP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasPlanas.length === 0 ? (
+                    <tr><td colSpan={16} className="text-center text-xs text-gray-400 italic py-6">Sin resultados con estos filtros</td></tr>
+                  ) : filasPlanas.map((f) => (
+                    <tr key={f.key} className={`border-b border-gray-100 ${f.sap === "cargado" ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
+                      <td className="px-2 py-1.5 whitespace-nowrap font-semibold text-gray-700">{f.fecha || "—"}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{f.destino || "—"}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap text-gray-600">{f.origen || "—"}</td>
+                      <td className="px-2 py-1.5 text-gray-700">{f.linea || "—"}</td>
+                      <td className="px-2 py-1.5 text-gray-600">{f.chofer || "—"}</td>
+                      <td className="px-2 py-1.5 font-mono text-gray-600 whitespace-nowrap">{f.placas || "—"}</td>
+                      <td className="px-2 py-1.5 font-mono text-gray-600 whitespace-nowrap">{f.economico || "—"}</td>
+                      <td className="px-2 py-1.5 text-center"><span className={`px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${f.tipo === "Consolidado" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-600"}`}>{f.tipo}</span></td>
+                      <td className="px-2 py-1.5 bg-yellow-50/60"><span className={`px-2 py-0.5 rounded font-semibold whitespace-nowrap ${empBadge[f.eid] || "bg-gray-100 text-gray-700"}`}>{f.empresa}</span></td>
+                      <td className="px-2 py-1.5 bg-yellow-50/60 text-gray-600">{f.productos || "—"}</td>
+                      <td className="px-2 py-1.5 text-right">{f.cajas !== "" ? Number(f.cajas).toLocaleString() : "—"}</td>
+                      <td className="px-2 py-1.5 text-right">{f.pct}</td>
+                      <td className="px-2 py-1.5 text-right bg-yellow-50/60 font-bold text-green-700">${Number(f.fProp).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 text-right text-gray-500">${Number(f.fleteTotal).toLocaleString()}</td>
+                      <td className="px-2 py-1.5 font-mono text-gray-700">{f.manifiesto || <span className="text-amber-600 italic">falta</span>}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button onClick={() => toggleSap(f.ci)} className={`px-2 py-0.5 rounded-full font-semibold border ${f.sap === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"}`}>{f.sap === "cargado" ? "✓" : "⏳"}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
