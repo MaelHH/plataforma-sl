@@ -124,12 +124,14 @@ export default function Modulo4() {
         const isFront = parrNum <= 2;
         return (
           <div key={idx} className={`flex items-center gap-1.5 py-1 border-b border-gray-100 ${blocked ? "opacity-30" : ""}`}>
-            <div className={`w-6 text-center text-xs font-bold ${isFront ? "text-blue-500" : "text-gray-500"}`}>{parrNum}{isFront ? "🚛" : ""}</div>
-            <SearchSelect value={p.prod} disabled={blocked}
-              onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
-              className={`flex-1 text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}
-              options={CATALOGO.map((c) => ({ value: c.id, label: c.label }))} />
-            <div className={`w-14 text-center text-xs font-semibold rounded px-1 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-700" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
+            <div className={`w-7 shrink-0 text-center text-xs font-bold ${isFront ? "text-blue-500" : "text-gray-500"}`}>{parrNum}{isFront ? "🚛" : ""}</div>
+            <div className="flex-1 min-w-0">
+              <SearchSelect value={p.prod} disabled={blocked}
+                onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
+                className={`w-full text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}
+                options={CATALOGO.map((c) => ({ value: c.id, label: c.label }))} />
+            </div>
+            <div className={`w-11 shrink-0 text-center text-[10px] font-semibold rounded px-0.5 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-600" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
           </div>
         );
       });
