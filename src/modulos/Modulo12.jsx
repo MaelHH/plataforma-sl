@@ -14,7 +14,10 @@ const calidadVacia = (producto) => ({
   inspector: "",
   lugar: "",
   fecha: hoyISO(),
-  defectos: {}, // { [defId]: { presente, notas, fotos:[dataURL] } }
+  folio: "", pesoMuestra: "",
+  grower: "SL Agrícola, SA de CV", lote: "", size: "", count: "",
+  temperatura: "", conteos: "", truck: "", manifiesto: "",
+  defectos: {}, // { [defId]: { presente, pct, notas, fotos:[dataURL] } }
   observaciones: "",
   resueltoPor: "",
   resueltoTs: "",
@@ -126,6 +129,13 @@ export default function Modulo12() {
   const [nuevoProd, setNuevoProd] = useState("");
   const prodEditar = defectosCalidad[catProdSel] ? catProdSel : (productos[0] || "");
 
+  // ── KPIs estilo QC REPORT ──
+  const pctDe = (d) => parseFloat(insp?.defectos?.[d.id]?.pct) || 0;
+  const pctQuality = defectosProducto.filter((d) => d.cat === "calidad").reduce((a, d) => a + pctDe(d), 0);
+  const pctCondition = defectosProducto.filter((d) => d.cat === "condicion" || d.cat === "plaga").reduce((a, d) => a + pctDe(d), 0);
+  const pctDefects = pctQuality + pctCondition;
+  const pctGood = Math.max(0, 100 - pctDefects);
+
   // ── Resumen, PDF y envío (correo / WhatsApp) ──
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const defectosConHallazgo = () => (insp ? defectosProducto.filter((d) => insp.defectos[d.id]?.presente) : []);
@@ -139,6 +149,7 @@ export default function Modulo12() {
       `Producto: ${insp.producto || "—"}`,
       `Folio: ${insp.folio || "—"} · Peso muestra: ${insp.pesoMuestra || "—"}`,
       `Inspector: ${insp.inspector || "—"} · Lugar: ${insp.lugar || "—"} · Fecha: ${insp.fecha || "—"}`,
+      `% Good Quality: ${pctGood.toFixed(1)}% · % Defects: ${pctDefects.toFixed(2)}% (Calidad ${pctQuality.toFixed(2)}% / Condición ${pctCondition.toFixed(2)}%)`,
       `Defectos con hallazgo (${hall.length}): ${hall.join(", ") || "ninguno"}`,
       `Estado: ${CALIDAD_ESTADOS[insp.estado]?.label || "Pendiente"}`,
       insp.observaciones ? `Observaciones: ${insp.observaciones}` : "",
@@ -147,65 +158,105 @@ export default function Modulo12() {
 
   const mandarCorreo = () => {
     const asunto = `Calidad QC Bodegas — ${cargaSel?.trailer?.dest || ""} ${cargaSel?.fecha || ""}`.trim();
-    window.location.href = `mailto:?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(resumenTexto())}`;
+    window.location.assign(`mailto:?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(resumenTexto())}`);
   };
   const mandarWapp = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(resumenTexto())}`, "_blank");
   };
 
-  const generarPDF = () => {
-    const c = cargaSel;
+  // QC REPORT estilo dashboard (Power BI)
+  const generarReporteQC = () => {
     const win = window.open("", "_blank");
-    if (!win) { alert("Permite las ventanas emergentes para generar el PDF."); return; }
-    const filas = defectosProducto.map((d) => {
-      const reg = insp.defectos[d.id] || {};
-      const cat = CATS_QC[d.cat];
-      return `<tr>
-        <td>${esc(cat?.label || d.cat)}</td>
-        <td>${esc(d.label)}</td>
-        <td style="text-align:center;font-weight:700;color:${reg.presente ? "#dc2626" : "#16a34a"}">${reg.presente ? "SÍ" : "no"}</td>
-        <td>${esc(reg.notas)}</td>
-      </tr>`;
+    if (!win) { alert("Permite las ventanas emergentes para generar el reporte."); return; }
+
+    const defsConPct = defectosProducto.map((d) => ({ d, pct: pctDe(d) })).filter((x) => x.pct > 0);
+    const filasDef = defsConPct.length ? defsConPct.map(({ d, pct }) =>
+      `<tr><td>${esc(d.label)}</td><td style="text-transform:uppercase">${esc((CATS_QC[d.cat]?.label || d.cat).replace("% D. ", ""))}</td><td style="text-align:right;font-weight:700">${pct.toFixed(2)}%</td></tr>`
+    ).join("") : `<tr><td colspan="3" style="text-align:center;color:#999">Sin defectos capturados (captura el % por defecto)</td></tr>`;
+
+    const colores = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899"];
+    const segs = defsConPct.map(({ d, pct }, i) => {
+      const w = pctDefects > 0 ? (pct / pctDefects) * 100 : 0;
+      return `<div style="width:${w}%;background:${colores[i % colores.length]};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;overflow:hidden" title="${esc(d.label)}">${pct.toFixed(2)}%</div>`;
     }).join("");
-    const estCfg = CALIDAD_ESTADOS[insp.estado] || CALIDAD_ESTADOS.pendiente;
+    const leyenda = defsConPct.map(({ d }, i) => `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:11px"><span style="width:9px;height:9px;border-radius:9999px;display:inline-block;background:${colores[i % colores.length]}"></span>${esc(d.label)}</span>`).join("");
+
+    const kpi = (label, val, green) => `<div class="kpi"><div class="kl">${label}</div><div class="kv" style="${green ? "background:#22c55e;color:#fff" : ""}">${val}</div></div>`;
+    const countTxt = insp.count ? Number(insp.count).toLocaleString() : "—";
+
     win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
-      <title>Calidad QC Bodegas - ${esc(insp.folio) || ""}</title>
+      <title>QC Report - ${esc(insp.folio) || ""}</title>
       <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, Arial, sans-serif; color: #1f2937; margin: 28px; font-size: 12px; }
-        h1 { font-size: 18px; margin: 0; color: #4338ca; }
-        .sub { color: #6b7280; font-size: 12px; margin: 2px 0 16px; }
-        .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
-        .logo { font-weight: 800; font-size: 22px; color: #4338ca; }
-        .info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
-        .info div { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; }
-        .info label { display: block; color: #9ca3af; font-size: 10px; text-transform: uppercase; }
-        .info span { font-weight: 700; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-        th { background: #f3f4f6; text-align: left; padding: 5px 8px; font-size: 10px; color: #6b7280; text-transform: uppercase; border: 1px solid #e5e7eb; }
-        td { padding: 4px 8px; border: 1px solid #eee; }
-        .obs { margin-top: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; font-size: 11px; }
-        @media print { body { margin: 12mm; } }
+        body { font-family: Arial, sans-serif; color: #111; margin: 16px; font-size: 12px; background:#fff; }
+        .topbar { display:flex; align-items:stretch; gap:6px; margin-bottom:8px; }
+        .title { background:#e5e7eb; color:#16a34a; font-weight:800; font-size:24px; padding:8px 18px; border-radius:4px; display:flex; align-items:center; }
+        .filt { border:1px solid #d1d5db; border-radius:4px; min-width:88px; overflow:hidden; }
+        .filt .l { font-size:9px; font-weight:700; text-align:center; background:#111; color:#fff; padding:2px; }
+        .filt .v { font-size:12px; padding:5px 8px; }
+        .band { display:flex; gap:6px; margin-bottom:8px; }
+        .band > div { flex:1; border:1px solid #d1d5db; }
+        .band .bh { background:#111; color:#fff; text-align:center; font-weight:700; font-size:11px; padding:3px; }
+        .band .bv { text-align:center; font-size:18px; padding:8px; }
+        table.meta { width:100%; border-collapse:collapse; margin-bottom:8px; }
+        table.meta th { background:#111; color:#fff; text-align:left; padding:4px 8px; font-size:10px; }
+        table.meta td { border:1px solid #e5e7eb; padding:4px 8px; }
+        .kpis { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:10px; }
+        .kpi { border:1px solid #d1d5db; }
+        .kpi .kl { background:#111; color:#fff; text-align:center; font-weight:700; font-size:10px; padding:3px; }
+        .kpi .kv { text-align:center; font-size:24px; font-weight:800; padding:10px 4px; }
+        .cols { display:flex; gap:10px; }
+        .cols .left { width:42%; }
+        .cols .right { flex:1; }
+        table.def { width:100%; border-collapse:collapse; }
+        table.def th { background:#111; color:#fff; text-align:left; padding:4px 8px; font-size:10px; }
+        table.def td { border:1px solid #e5e7eb; padding:4px 8px; }
+        .bar { display:flex; height:42px; border:1px solid #e5e7eb; border-radius:4px; overflow:hidden; }
+        @media print { body { margin: 8mm; } }
       </style></head><body>
-      <div class="head">
-        <div><h1>Control de Calidad — QC Bodegas</h1><div class="sub">SL Logística · inspección de embarque · Estado: ${esc(estCfg.label)}</div></div>
-        <div class="logo">SL</div>
+      <div class="topbar">
+        <div class="title">QC REPORT</div>
+        <div class="filt"><div class="l">GROWER</div><div class="v">${esc(insp.grower) || "All"}</div></div>
+        <div class="filt"><div class="l">PRODUCT</div><div class="v">${esc(insp.producto) || "All"}</div></div>
+        <div class="filt"><div class="l">DATE</div><div class="v">${esc(insp.fecha) || "—"}</div></div>
+        <div class="filt"><div class="l">MANIFIESTO</div><div class="v">${esc(insp.manifiesto) || "All"}</div></div>
+        <div class="filt"><div class="l">ID MUESTRA</div><div class="v">${esc(insp.folio) || "—"}</div></div>
+        <div class="filt"><div class="l">SUPERVISOR</div><div class="v">${esc(insp.inspector) || "—"}</div></div>
       </div>
-      <div class="info">
-        <div><label>Folio</label><span>${esc(insp.folio) || "—"}</span></div>
-        <div><label>Peso muestra</label><span>${esc(insp.pesoMuestra) || "—"}</span></div>
-        <div><label>Producto</label><span>${esc(insp.producto) || "—"}</span></div>
-        <div><label>Fecha</label><span>${esc(insp.fecha) || "—"}</span></div>
-        <div><label>Inspector</label><span>${esc(insp.inspector) || "—"}</span></div>
-        <div><label>Lugar</label><span>${esc(insp.lugar) || "—"}</span></div>
-        <div><label>Destino</label><span>${esc(c?.trailer?.dest) || "—"}</span></div>
-        <div><label>Chofer</label><span>${esc(c?.trailer?.chofer) || "—"}</span></div>
+      <div class="band">
+        <div><div class="bh">GROWER</div><div class="bv">${esc(insp.grower) || "—"}</div></div>
+        <div><div class="bh">PRODUCT</div><div class="bv">${esc(insp.producto) || "—"}${insp.size ? " — " + esc(insp.size) : ""}</div></div>
       </div>
-      <table>
-        <thead><tr><th>Categoría</th><th>Defecto</th><th style="text-align:center;width:70px">Hallazgo</th><th>Notas</th></tr></thead>
-        <tbody>${filas || `<tr><td colspan="4" style="text-align:center;color:#999">Sin defectos definidos para este producto</td></tr>`}</tbody>
+      <table class="meta">
+        <thead><tr><th>FECHA REAL</th><th>LOTE</th><th>GROWER</th><th>PRODUCT</th><th>SIZE</th><th>LOCATION</th><th>INSPECTOR</th><th>COMMENTS</th></tr></thead>
+        <tbody><tr>
+          <td>${esc(insp.fecha) || "—"}</td><td>${esc(insp.lote) || "—"}</td><td>${esc(insp.grower) || "—"}</td><td>${esc(insp.producto) || "—"}</td><td>${esc(insp.size) || "—"}</td><td>${esc(insp.lugar) || "—"}</td><td>${esc(insp.inspector) || "—"}</td><td>${esc(insp.observaciones) || "—"}</td>
+        </tr></tbody>
       </table>
-      ${insp.observaciones ? `<div class="obs"><b>Observaciones:</b> ${esc(insp.observaciones)}</div>` : ""}
+      <div class="kpis">
+        ${kpi("COUNT", countTxt)}
+        ${kpi("% GOOD QUALITY", pctGood.toFixed(1) + "%", true)}
+        ${kpi("% DEFECTS", pctDefects.toFixed(2) + "%")}
+        ${kpi("% DEFECTS QUALITY", pctQuality > 0 ? pctQuality.toFixed(2) + "%" : "(Blank)")}
+        ${kpi("% DEFECTS CONDITION", pctCondition > 0 ? pctCondition.toFixed(2) + "%" : "(Blank)")}
+        ${kpi("TEMPERATURA", insp.temperatura ? esc(insp.temperatura) : "—", !!insp.temperatura)}
+        ${kpi("CONTEOS", insp.conteos ? esc(insp.conteos) : "(Blank)")}
+      </div>
+      <div class="cols">
+        <div class="left">
+          <table class="def">
+            <thead><tr><th>DEFECTS</th><th>DEFECT</th><th style="text-align:right">% CALIDAD</th></tr></thead>
+            <tbody>${filasDef}</tbody>
+          </table>
+          <div style="margin-top:8px;font-size:11px;border:1px solid #d1d5db"><div style="background:#111;color:#fff;text-align:center;font-weight:700;padding:3px">TRUCK</div><div style="text-align:center;padding:6px">${esc(insp.truck) || "(Blank)"}</div></div>
+        </div>
+        <div class="right">
+          <div style="background:#111;color:#fff;text-align:center;font-weight:700;padding:3px;font-size:11px">% DEFECTS</div>
+          <div style="margin:6px 0">${leyenda || '<span style="color:#999;font-size:11px">Sin defectos</span>'}</div>
+          <div class="bar">${segs || '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#999">Sin defectos capturados</div>'}</div>
+          <div style="text-align:right;font-size:11px;color:#6b7280;margin-top:4px">Total defectos: <b>${pctDefects.toFixed(2)}%</b></div>
+        </div>
+      </div>
       <script>window.onload = function(){ window.print(); }</script>
       </body></html>`);
     win.document.close();
@@ -317,8 +368,23 @@ export default function Modulo12() {
                   </select>
                 </div>
                 <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={insp.fecha} onChange={(e) => upd("fecha", e.target.value)} /></div>
-                <div><label className={LBL}>Folio</label><input className={INP} value={insp.folio || ""} onChange={(e) => upd("folio", e.target.value)} placeholder="No." /></div>
+                <div><label className={LBL}>Folio (ID muestra)</label><input className={INP} value={insp.folio || ""} onChange={(e) => upd("folio", e.target.value)} placeholder="No." /></div>
                 <div><label className={LBL}>Peso muestra</label><input type="number" className={INP} value={insp.pesoMuestra || ""} onChange={(e) => upd("pesoMuestra", e.target.value)} placeholder="g" /></div>
+              </div>
+
+              {/* Datos de cabecera del QC Report */}
+              <div>
+                <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Datos del reporte QC</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div><label className={LBL}>Grower</label><input className={INP} value={insp.grower || ""} onChange={(e) => upd("grower", e.target.value)} /></div>
+                  <div><label className={LBL}>Lote</label><input className={INP} value={insp.lote || ""} onChange={(e) => upd("lote", e.target.value)} /></div>
+                  <div><label className={LBL}>Size</label><input className={INP} value={insp.size || ""} onChange={(e) => upd("size", e.target.value)} placeholder="Bolsas" /></div>
+                  <div><label className={LBL}>Count (unidades)</label><input type="number" className={INP} value={insp.count || ""} onChange={(e) => upd("count", e.target.value)} /></div>
+                  <div><label className={LBL}>Temperatura</label><input type="number" className={INP} value={insp.temperatura || ""} onChange={(e) => upd("temperatura", e.target.value)} placeholder="°F" /></div>
+                  <div><label className={LBL}>Conteos</label><input className={INP} value={insp.conteos || ""} onChange={(e) => upd("conteos", e.target.value)} /></div>
+                  <div><label className={LBL}>Truck</label><input className={INP} value={insp.truck || ""} onChange={(e) => upd("truck", e.target.value)} /></div>
+                  <div><label className={LBL}>Manifiesto</label><input className={INP} value={insp.manifiesto || ""} onChange={(e) => upd("manifiesto", e.target.value)} /></div>
+                </div>
               </div>
 
               {!insp.producto ? (
@@ -349,7 +415,8 @@ export default function Modulo12() {
                                       <input type="checkbox" checked={!!reg.presente} onChange={(e) => updDefecto(d.id, "presente", e.target.checked)} className="accent-indigo-600" />
                                       <span className={`text-xs ${reg.presente ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
                                     </label>
-                                    <input className={INP + " flex-1 min-w-[140px]"} value={reg.notas} onChange={(e) => updDefecto(d.id, "notas", e.target.value)} placeholder="Notas / % / observación" />
+                                    <input type="number" step="0.01" className={INP + " w-20"} value={reg.pct || ""} onChange={(e) => updDefecto(d.id, "pct", e.target.value)} placeholder="%" title="% del defecto" />
+                                    <input className={INP + " flex-1 min-w-[120px]"} value={reg.notas} onChange={(e) => updDefecto(d.id, "notas", e.target.value)} placeholder="Notas / observación" />
                                     <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap" title="Agregar fotos">
                                       📷 Foto
                                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => subirFotos(d.id, e.target.files)} />
@@ -377,9 +444,23 @@ export default function Modulo12() {
               )}
 
               {insp.producto && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 flex items-center justify-between text-xs">
-                  <span className="text-indigo-700 font-semibold">Resumen</span>
-                  <span className="text-gray-600">Defectos con hallazgo: <b className={nConDefecto > 0 ? "text-red-600" : "text-green-700"}>{nConDefecto}</b> de {defectosProducto.length}</span>
+                <div>
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Resumen QC (vista previa del reporte)</div>
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                    {[
+                      ["COUNT", insp.count ? Number(insp.count).toLocaleString() : "—", "text-gray-900"],
+                      ["% GOOD", pctGood.toFixed(1) + "%", "bg-green-500 text-white"],
+                      ["% DEFECTS", pctDefects.toFixed(2) + "%", "text-gray-900"],
+                      ["% QUALITY", pctQuality > 0 ? pctQuality.toFixed(2) + "%" : "—", "text-blue-700"],
+                      ["% CONDITION", pctCondition > 0 ? pctCondition.toFixed(2) + "%" : "—", "text-amber-700"],
+                      ["TEMP", insp.temperatura || "—", insp.temperatura ? "bg-green-500 text-white" : "text-gray-900"],
+                    ].map(([l, v, cls]) => (
+                      <div key={l} className="border border-gray-200 rounded-lg overflow-hidden text-center">
+                        <div className="bg-gray-800 text-white text-[9px] font-bold py-0.5">{l}</div>
+                        <div className={`text-base font-extrabold py-1.5 ${cls}`}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -397,7 +478,7 @@ export default function Modulo12() {
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 flex-wrap justify-between items-center sticky bottom-0 bg-white">
               <div className="flex gap-2 flex-wrap">
-                <button onClick={generarPDF} className="text-xs px-3 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📄 PDF</button>
+                <button onClick={generarReporteQC} className="text-xs px-3 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📊 QC Report</button>
                 <button onClick={mandarCorreo} className="text-xs px-3 py-2 border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-50">📧 Mandar Correo</button>
                 <button onClick={mandarWapp} className="text-xs px-3 py-2 border border-green-300 text-green-700 rounded-lg font-semibold hover:bg-green-50">💬 Mandar WhatsApp</button>
               </div>
