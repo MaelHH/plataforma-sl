@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
+import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
-
-let nextCatId = 1;
 
 // Lunes de la semana actual en formato YYYY-MM-DD
 function lunesActual() {
@@ -85,7 +83,7 @@ export default function Modulo1() {
   // ── Editor de catálogo ──
   const updCat = (id, campo, val) => setCatalogo((prev) => prev.map((c) => (c.id === id ? { ...c, [campo]: (campo === "cajasPorParrilla" || campo === "librasPorCaja") ? (parseInt(val) || 0) : val } : c)));
   const addCat = () => {
-    const id = "NUEVO_" + nextCatId++;
+    const id = nuevoId("PRES_");
     const color = COLORES_CAT[catalogo.length % COLORES_CAT.length];
     setCatalogo((prev) => [...prev, { id, label: "Nueva presentación", color, cajasPorParrilla: 0, cultivo: tab, librasPorCaja: 0 }]);
   };

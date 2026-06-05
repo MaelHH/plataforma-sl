@@ -1,12 +1,6 @@
 import { useState } from "react";
-import { useDatos } from "../store/datos";
+import { useDatos, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
-
-let nextMovId = 1;
-let nextLineaId = 500;
-let nextSubId = 500;
-let nextCargaId = 500;
-let nextUbiId = 500;
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -95,7 +89,7 @@ export default function Modulo8() {
     if (lineaNueva && (form.linea || "").trim()) {
       const existe = lineas.some((l) => l.linea.toLowerCase() === form.linea.trim().toLowerCase());
       if (!existe) {
-        lineasActualizadas = [...lineasActualizadas, { id: "LN_" + nextLineaId++, linea: form.linea.trim(), contacto: form.contacto || "", numero: form.numero || "", choferes: [], tractos: [], cajas: [] }];
+        lineasActualizadas = [...lineasActualizadas, { id: nuevoId("LN_"), linea: form.linea.trim(), contacto: form.contacto || "", numero: form.numero || "", choferes: [], tractos: [], cajas: [] }];
       }
     }
     const idxL = lineasActualizadas.findIndex((l) => l.linea.toLowerCase() === (form.linea || "").trim().toLowerCase());
@@ -103,16 +97,16 @@ export default function Modulo8() {
       const L = { ...lineasActualizadas[idxL] };
       L.choferes = [...(L.choferes || [])]; L.tractos = [...(L.tractos || [])]; L.cajas = [...(L.cajas || [])];
       if (choferNuevo && (form.chofer || "").trim() && !L.choferes.some((c) => c.nombre.toLowerCase() === form.chofer.trim().toLowerCase()))
-        L.choferes.push({ id: "CH_" + nextSubId++, nombre: form.chofer.trim(), telefono: form.telefono || "", licencia: form.licencia || "" });
+        L.choferes.push({ id: nuevoId("CH_"), nombre: form.chofer.trim(), telefono: form.telefono || "", licencia: form.licencia || "" });
       if (tractoNuevo && (form.placaTracto || "").trim() && !L.tractos.some((t) => t.placa.toLowerCase() === form.placaTracto.trim().toLowerCase()))
-        L.tractos.push({ id: "TR_" + nextSubId++, marcaModelo: form.marcaModelo || "", placa: form.placaTracto.trim() });
+        L.tractos.push({ id: nuevoId("TR_"), marcaModelo: form.marcaModelo || "", placa: form.placaTracto.trim() });
       if (cajaNueva && (form.placaCaja || "").trim() && !L.cajas.some((c) => c.placa.toLowerCase() === form.placaCaja.trim().toLowerCase()))
-        L.cajas.push({ id: "CJ_" + nextSubId++, economico: form.economicoCaja || "", placa: form.placaCaja.trim() });
+        L.cajas.push({ id: nuevoId("CJ_"), economico: form.economicoCaja || "", placa: form.placaCaja.trim() });
       lineasActualizadas = lineasActualizadas.map((l, i) => (i === idxL ? L : l));
     }
     if (lineasActualizadas !== lineas) setLineas(lineasActualizadas);
 
-    const mov = { ...form, id: nextMovId++, creado: new Date().toLocaleString("es-MX") };
+    const mov = { ...form, id: nuevoId("MOV_"), creado: new Date().toLocaleString("es-MX") };
     setMovimientos((prev) => [mov, ...prev]);
     setModal(false);
     resetModos();
@@ -122,11 +116,11 @@ export default function Modulo8() {
 
   // ── Editores de catálogos ──
   const updCarga = (id, val) => setCargaCampo((prev) => prev.map((c) => c.id === id ? { ...c, label: val } : c));
-  const addCarga = () => setCargaCampo((prev) => [...prev, { id: "CC_" + nextCargaId++, label: "Nuevo tipo" }]);
+  const addCarga = () => setCargaCampo((prev) => [...prev, { id: nuevoId("CC_"), label: "Nuevo tipo" }]);
   const delCarga = (id) => setCargaCampo((prev) => prev.filter((c) => c.id !== id));
 
   const updUbic = (tipo, id, val) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].map((u) => u.id === id ? { ...u, nombre: val } : u) }));
-  const addUbic = (tipo) => setUbicaciones((prev) => ({ ...prev, [tipo]: [...prev[tipo], { id: "U_" + nextUbiId++, nombre: tipo === "origenes" ? "Nuevo rancho" : "Nuevo empaque" }] }));
+  const addUbic = (tipo) => setUbicaciones((prev) => ({ ...prev, [tipo]: [...prev[tipo], { id: nuevoId("U_"), nombre: tipo === "origenes" ? "Nuevo rancho" : "Nuevo empaque" }] }));
   const delUbic = (tipo, id) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].filter((u) => u.id !== id) }));
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";

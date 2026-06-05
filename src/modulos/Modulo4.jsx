@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
+import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 
@@ -61,7 +61,7 @@ export default function Modulo4() {
 
   const enviar = () => {
     const nueva = {
-      id: Date.now(),
+      id: nuevoId("CARGA_"),
       fecha: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
       trailer: { ...trailerSel },
       consolidado,

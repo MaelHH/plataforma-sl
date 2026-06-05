@@ -24,11 +24,13 @@ export function ahora() {
   };
 }
 
-function nuevoId() {
+// Genera un ID único (no colisiona aunque se recargue la página). Acepta un
+// prefijo opcional para mantener el formato legible de cada catálogo (LN_, CH_…).
+export function nuevoId(prefix = "") {
   try {
-    return crypto.randomUUID();
+    return prefix + crypto.randomUUID();
   } catch {
-    return "ev_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 }
 

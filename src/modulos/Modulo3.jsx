@@ -2,11 +2,7 @@ import { useState } from "react";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
-import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
-
-let nextId = 100;
-let nextLineaId = 1;
-let nextSubId = 1;
+import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
 function lunesActual() {
   const hoy = new Date();
@@ -61,7 +57,7 @@ export default function Modulo3() {
   const resetModos = () => { setLineaNueva(false); setChoferNuevo(false); setTractoNuevo(false); setCajaNueva(false); };
 
   const addTrailer = () => {
-    const t = { ...EMPTY_TRAILER, id: nextId++, fecha: diaFil, origen: ORIGEN, dest: "Sin asignar", status: "esperando" };
+    const t = { ...EMPTY_TRAILER, id: nuevoId("T_"), fecha: diaFil, origen: ORIGEN, dest: "Sin asignar", status: "esperando" };
     setTrailers((prev) => [...prev, t]);
     setForm({ ...t });
     resetModos();
@@ -82,7 +78,7 @@ export default function Modulo3() {
     if (lineaNueva && (form.linea || "").trim()) {
       const existe = lineas.some((l) => l.linea.toLowerCase() === form.linea.trim().toLowerCase());
       if (!existe) {
-        const nueva = { id: "LN_" + nextLineaId++, linea: form.linea.trim(), contacto: form.contacto || "", numero: form.numero || "", choferes: [], tractos: [], cajas: [] };
+        const nueva = { id: nuevoId("LN_"), linea: form.linea.trim(), contacto: form.contacto || "", numero: form.numero || "", choferes: [], tractos: [], cajas: [] };
         lineasActualizadas = [...lineasActualizadas, nueva];
       }
     }
@@ -96,15 +92,15 @@ export default function Modulo3() {
 
       if (choferNuevo && (form.chofer || "").trim()) {
         const existe = L.choferes.some((c) => c.nombre.toLowerCase() === form.chofer.trim().toLowerCase());
-        if (!existe) L.choferes.push({ id: "CH_" + nextSubId++, nombre: form.chofer.trim(), telefono: form.telefono || "", licencia: form.licencia || "" });
+        if (!existe) L.choferes.push({ id: nuevoId("CH_"), nombre: form.chofer.trim(), telefono: form.telefono || "", licencia: form.licencia || "" });
       }
       if (tractoNuevo && (form.placaTracto || "").trim()) {
         const existe = L.tractos.some((t) => t.placa.toLowerCase() === form.placaTracto.trim().toLowerCase());
-        if (!existe) L.tractos.push({ id: "TR_" + nextSubId++, marcaModelo: form.marcaModelo || "", placa: form.placaTracto.trim() });
+        if (!existe) L.tractos.push({ id: nuevoId("TR_"), marcaModelo: form.marcaModelo || "", placa: form.placaTracto.trim() });
       }
       if (cajaNueva && (form.placaCaja || "").trim()) {
         const existe = L.cajas.some((c) => c.placa.toLowerCase() === form.placaCaja.trim().toLowerCase());
-        if (!existe) L.cajas.push({ id: "CJ_" + nextSubId++, economico: form.economicoCaja || "", placa: form.placaCaja.trim() });
+        if (!existe) L.cajas.push({ id: nuevoId("CJ_"), economico: form.economicoCaja || "", placa: form.placaCaja.trim() });
       }
 
       lineasActualizadas = lineasActualizadas.map((l, i) => (i === idxLinea ? L : l));
@@ -202,7 +198,7 @@ export default function Modulo3() {
 
   // ── Editor catálogo de líneas ──
   const updLinea = (id, campo, val) => setLineas((prev) => prev.map((l) => (l.id === id ? { ...l, [campo]: val } : l)));
-  const addLinea = () => setLineas((prev) => [...prev, { id: "LN_" + nextLineaId++, linea: "Nueva línea", contacto: "", numero: "", choferes: [], tractos: [], cajas: [] }]);
+  const addLinea = () => setLineas((prev) => [...prev, { id: nuevoId("LN_"), linea: "Nueva línea", contacto: "", numero: "", choferes: [], tractos: [], cajas: [] }]);
   const delLinea = (id) => setLineas((prev) => prev.filter((l) => l.id !== id));
 
   // ── Editor catálogo de choferes/tractos/cajas ──
@@ -230,9 +226,9 @@ export default function Modulo3() {
   const addSub = (tipo) => {
     if (lineas.length === 0) return;
     const lineaId = lineas[0].id;
-    const nuevo = tipo === "choferes" ? { id: "CH_" + nextSubId++, nombre: "Nuevo chofer", telefono: "", licencia: "" }
-      : tipo === "tractos" ? { id: "TR_" + nextSubId++, marcaModelo: "Marca/Modelo", placa: "Placa" }
-      : { id: "CJ_" + nextSubId++, economico: "Económico", placa: "Placa" };
+    const nuevo = tipo === "choferes" ? { id: nuevoId("CH_"), nombre: "Nuevo chofer", telefono: "", licencia: "" }
+      : tipo === "tractos" ? { id: nuevoId("TR_"), marcaModelo: "Marca/Modelo", placa: "Placa" }
+      : { id: nuevoId("CJ_"), economico: "Económico", placa: "Placa" };
     setLineas((prev) => prev.map((l) => l.id === lineaId ? { ...l, [tipo]: [...(l[tipo] || []), nuevo] } : l));
   };
 
