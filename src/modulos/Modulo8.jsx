@@ -234,7 +234,7 @@ export default function Modulo8() {
                   return (
                     <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-700">{m.fecha || "—"}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
                       <td className="px-3 py-2 text-gray-700">{m.rancho || "—"}{m.lote ? ` · ${m.lote}` : ""}</td>
                       <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
                       <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
