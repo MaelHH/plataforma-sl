@@ -410,15 +410,14 @@ export default function Modulo12() {
                               const catBorder = { calidad: "border-l-blue-400", condicion: "border-l-amber-400", plaga: "border-l-red-400" }[d.cat];
                               return (
                                 <div key={d.id} className={`px-3 py-2 border-l-2 ${catBorder} ${reg.presente ? "bg-red-50/40" : ""}`}>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-[160px]">
+                                  <div className="flex items-center gap-2">
+                                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
                                       <input type="checkbox" checked={!!reg.presente} onChange={(e) => updDefecto(d.id, "presente", e.target.checked)} className="accent-indigo-600" />
-                                      <span className={`text-xs ${reg.presente ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
+                                      <span className={`text-xs truncate ${reg.presente ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
                                     </label>
-                                    <input type="number" step="0.01" className={INP + " w-20"} value={reg.pct || ""} onChange={(e) => updDefecto(d.id, "pct", e.target.value)} placeholder="%" title="% del defecto" />
-                                    <input className={INP + " flex-1 min-w-[120px]"} value={reg.notas} onChange={(e) => updDefecto(d.id, "notas", e.target.value)} placeholder="Notas / observación" />
-                                    <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap" title="Agregar fotos">
-                                      📷 Foto
+                                    <input type="number" step="0.01" className={INP + " w-20 shrink-0 text-right"} value={reg.pct || ""} onChange={(e) => updDefecto(d.id, "pct", e.target.value)} placeholder="%" title="% del defecto" />
+                                    <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap shrink-0" title="Agregar fotos">
+                                      📷{reg.fotos?.length ? ` ${reg.fotos.length}` : ""}
                                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => subirFotos(d.id, e.target.files)} />
                                     </label>
                                   </div>
