@@ -258,7 +258,7 @@ export default function Modulo8() {
               {/* Descripción de la carga */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Descripción de la carga</div>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 rounded-lg">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500">

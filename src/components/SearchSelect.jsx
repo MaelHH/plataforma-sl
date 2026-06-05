@@ -1,8 +1,13 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 // Dropdown con búsqueda. Reemplaza a <select> en toda la app para soportar
 // listas gigantes. El buscador aparece solo cuando hay más de `searchThreshold`
 // opciones (en listas chicas se comporta como un select normal).
+//
+// El panel de opciones se dibuja en un PORTAL (sobre document.body, posición
+// fija) para que NUNCA lo recorte un contenedor con overflow (tablas con scroll,
+// modales, etc.).
 //
 // Props:
 //   value        valor seleccionado
@@ -24,7 +29,9 @@ export default function SearchSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0); // índice resaltado por teclado
+  const [coords, setCoords] = useState(null); // { top, left, width } del panel flotante
   const rootRef = useRef(null);
+  const panelRef = useRef(null);
   const inputRef = useRef(null);
 
   const selected = options.find((o) => o.value === value) || null;
@@ -37,30 +44,44 @@ export default function SearchSelect({
 
   const mostrarBuscador = options.length > searchThreshold;
 
-  // Cerrar al hacer clic fuera
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
+  // Calcula la posición del panel a partir del botón (posición fija en viewport).
+  const recalcular = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
 
-  // Al abrir: enfocar el buscador (solo ref, sin setState dentro del effect)
-  useEffect(() => {
-    if (open && mostrarBuscador) {
-      const id = setTimeout(() => inputRef.current?.focus(), 0);
-      return () => clearTimeout(id);
-    }
-  }, [open, mostrarBuscador]);
-
-  // Abrir/cerrar reseteando la búsqueda al abrir
   const toggle = () => {
     if (disabled) return;
     setOpen((o) => {
-      if (!o) { setQ(""); setHi(0); }
+      if (!o) { setQ(""); setHi(0); recalcular(); }
       return !o;
     });
   };
+
+  // Mientras está abierto: reposicionar al hacer scroll/resize, cerrar al clic fuera,
+  // enfocar el buscador.
+  useEffect(() => {
+    if (!open) return;
+    recalcular();
+    if (mostrarBuscador) setTimeout(() => inputRef.current?.focus(), 0);
+
+    const onScroll = () => recalcular();
+    const onDown = (e) => {
+      if (rootRef.current?.contains(e.target)) return;
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open, mostrarBuscador, recalcular]);
 
   const elegir = (op) => {
     if (op.disabled) return;
@@ -87,8 +108,12 @@ export default function SearchSelect({
         <span className="text-gray-400 text-[10px] shrink-0">▾</span>
       </button>
 
-      {open && (
-        <div className="absolute z-[60] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+      {open && coords && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: "fixed", top: coords.top, left: coords.left, width: coords.width, zIndex: 9999 }}
+          className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+        >
           {mostrarBuscador && (
             <div className="p-1.5 border-b border-gray-100">
               <input
@@ -126,7 +151,8 @@ export default function SearchSelect({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
