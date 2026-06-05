@@ -7,11 +7,13 @@ function hoyISO() {
 }
 
 export default function Modulo8() {
-  const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas } = useDatos();
+  const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados } = useDatos();
 
   const [modal, setModal] = useState(false);
   const [catCarga, setCatCarga] = useState(false);
   const [catUbic, setCatUbic] = useState(false);
+  const [catZonas, setCatZonas] = useState(false);
+  const [catConsig, setCatConsig] = useState(false);
   const [verMov, setVerMov] = useState(null);
 
   // Filtros de búsqueda de movimientos
@@ -45,6 +47,7 @@ export default function Modulo8() {
   const abrirNuevo = () => { setForm(formVacio); resetModos(); setModal(true); };
 
   const lineaSel = lineas.find((l) => l.linea === form.linea);
+  const ranchoSel = ubicaciones.origenes.find((o) => o.nombre === form.rancho); // rancho elegido → sus lotes/responsables
 
   // ── Carga (descripción) ──
   const updCargaItem = (i, campo, val) => setForm((f) => ({ ...f, cargaItems: f.cargaItems.map((it, j) => j === i ? { ...it, [campo]: val } : it) }));
@@ -125,8 +128,23 @@ export default function Modulo8() {
   const delCarga = (id) => setCargaCampo((prev) => prev.filter((c) => c.id !== id));
 
   const updUbic = (tipo, id, val) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].map((u) => u.id === id ? { ...u, nombre: val } : u) }));
-  const addUbic = (tipo) => setUbicaciones((prev) => ({ ...prev, [tipo]: [...prev[tipo], { id: nuevoId("U_"), nombre: tipo === "origenes" ? "Nuevo rancho" : "Nuevo empaque" }] }));
+  const addUbic = (tipo) => setUbicaciones((prev) => ({ ...prev, [tipo]: [...prev[tipo], tipo === "origenes" ? { id: nuevoId("U_"), nombre: "Nuevo rancho", lotes: [], responsables: [] } : { id: nuevoId("U_"), nombre: "Nuevo empaque" }] }));
   const delUbic = (tipo, id) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].filter((u) => u.id !== id) }));
+
+  // Subcatálogos del rancho (lotes / responsables de cosecha) — arreglos de texto
+  const addRanchoSub = (ranchoId, sub) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: [...(o[sub] || []), sub === "lotes" ? "Nuevo lote" : "Nuevo responsable"] } : o) }));
+  const updRanchoSub = (ranchoId, sub, idx, val) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: (o[sub] || []).map((x, j) => j === idx ? val : x) } : o) }));
+  const delRanchoSub = (ranchoId, sub, idx) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: (o[sub] || []).filter((_, j) => j !== idx) } : o) }));
+
+  // Catálogo de zonas (Viaje) — arreglo de texto
+  const addZona = () => setZonas((p) => [...p, "Nueva zona"]);
+  const updZona = (i, val) => setZonas((p) => p.map((z, j) => j === i ? val : z));
+  const delZona = (i) => setZonas((p) => p.filter((_, j) => j !== i));
+
+  // Catálogo compartido Consignado/Distribuidor — arreglo de texto
+  const addConsig = () => setConsignados((p) => [...p, "Nueva empresa"]);
+  const updConsig = (i, val) => setConsignados((p) => p.map((c, j) => j === i ? val : c));
+  const delConsig = (i) => setConsignados((p) => p.filter((_, j) => j !== i));
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const INP_TBL = "w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none";
@@ -162,8 +180,10 @@ export default function Modulo8() {
           <p className="text-sm text-gray-500 mt-0.5">Oscar · manifiesto de carga nacional desde campo</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCatCarga(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📦 Catálogo de carga</button>
+          <button onClick={() => setCatCarga(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📦 Carga</button>
           <button onClick={() => setCatUbic(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📍 Ranchos / Empaques</button>
+          <button onClick={() => setCatZonas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🗺️ Zonas</button>
+          <button onClick={() => setCatConsig(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🏢 Consignados</button>
           <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold">OS</div>
           <span className="text-sm font-medium text-gray-700">Oscar</span>
         </div>
@@ -251,16 +271,25 @@ export default function Modulo8() {
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className={LBL}>Folio</label><input className={INP} value={form.folio} onChange={(e) => setForm((f) => ({ ...f, folio: e.target.value }))} placeholder="No. 0203" /></div>
                   <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} /></div>
-                  <div><label className={LBL}>Viaje (zona)</label><input className={INP} value={form.viaje} onChange={(e) => setForm((f) => ({ ...f, viaje: e.target.value }))} placeholder="San Quintín, B.C." /></div>
+                  <div><label className={LBL}>Viaje (zona)</label>
+                    <SearchSelect className={INP} value={form.viaje} onChange={(v) => setForm((f) => ({ ...f, viaje: v }))} placeholder="— Zona —"
+                      options={zonas.map((z) => ({ value: z, label: z }))} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2 mt-2">
                   <div>
                     <label className={LBL}>Rancho</label>
-                    <input className={INP} list="dl-origenes" value={form.rancho} onChange={(e) => setForm((f) => ({ ...f, rancho: e.target.value }))} placeholder="Rancho / campo" />
-                    <datalist id="dl-origenes">{ubicaciones.origenes.map((o) => <option key={o.id} value={o.nombre} />)}</datalist>
+                    <SearchSelect className={INP} value={form.rancho} onChange={(v) => setForm((f) => ({ ...f, rancho: v, lote: "", responsableCosecha: "" }))} placeholder="— Rancho —"
+                      options={ubicaciones.origenes.map((o) => ({ value: o.nombre, label: o.nombre }))} />
                   </div>
-                  <div><label className={LBL}>Lote</label><input className={INP} value={form.lote} onChange={(e) => setForm((f) => ({ ...f, lote: e.target.value }))} placeholder="Paredes" /></div>
-                  <div><label className={LBL}>Responsable cosecha</label><input className={INP} value={form.responsableCosecha} onChange={(e) => setForm((f) => ({ ...f, responsableCosecha: e.target.value }))} /></div>
+                  <div><label className={LBL}>Lote</label>
+                    <SearchSelect className={INP} value={form.lote} onChange={(v) => setForm((f) => ({ ...f, lote: v }))} disabled={!ranchoSel}
+                      placeholder={ranchoSel ? "— Lote —" : "Elige rancho"} options={(ranchoSel?.lotes || []).map((l) => ({ value: l, label: l }))} />
+                  </div>
+                  <div><label className={LBL}>Responsable cosecha</label>
+                    <SearchSelect className={INP} value={form.responsableCosecha} onChange={(v) => setForm((f) => ({ ...f, responsableCosecha: v }))} disabled={!ranchoSel}
+                      placeholder={ranchoSel ? "— Responsable —" : "Elige rancho"} options={(ranchoSel?.responsables || []).map((r) => ({ value: r, label: r }))} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div><label className={LBL}>Hora inicio cosecha</label><input type="time" className={INP} value={form.horaInicio} onChange={(e) => setForm((f) => ({ ...f, horaInicio: e.target.value }))} /></div>
@@ -272,8 +301,14 @@ export default function Modulo8() {
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Consignado / ruta</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className={LBL}>Consignado</label><input className={INP} value={form.consignado} onChange={(e) => setForm((f) => ({ ...f, consignado: e.target.value }))} placeholder="SL Agrícola SA de CV" /></div>
-                  <div><label className={LBL}>Distribuidor</label><input className={INP} value={form.distribuidor} onChange={(e) => setForm((f) => ({ ...f, distribuidor: e.target.value }))} placeholder="SL Agrícola SA de CV" /></div>
+                  <div><label className={LBL}>Consignado</label>
+                    <SearchSelect className={INP} value={form.consignado} onChange={(v) => setForm((f) => ({ ...f, consignado: v }))} placeholder="— Consignado —"
+                      options={consignados.map((c) => ({ value: c, label: c }))} />
+                  </div>
+                  <div><label className={LBL}>Distribuidor</label>
+                    <SearchSelect className={INP} value={form.distribuidor} onChange={(v) => setForm((f) => ({ ...f, distribuidor: v }))} placeholder="— Distribuidor —"
+                      options={consignados.map((c) => ({ value: c, label: c }))} />
+                  </div>
                   <div>
                     <label className={LBL}>Origen</label>
                     <input className={INP} list="dl-origenes2" value={form.origen} onChange={(e) => setForm((f) => ({ ...f, origen: e.target.value }))} placeholder="Origen" />
@@ -510,18 +545,42 @@ export default function Modulo8() {
       {/* ── Modal ubicaciones ── */}
       {catUbic && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Ranchos / Empaques</div>
               <button onClick={() => setCatUbic(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
             </div>
-            <div className="px-5 py-4 grid grid-cols-2 gap-4">
+            <div className="px-5 py-4 space-y-5">
               <div>
-                <div className="text-xs font-bold text-gray-700 mb-2">📍 Orígenes (ranchos)</div>
+                <div className="text-xs font-bold text-gray-700 mb-2">📍 Ranchos · con sus lotes y responsables de cosecha</div>
                 {ubicaciones.origenes.map((o) => (
-                  <div key={o.id} className="flex items-center gap-2 mb-2">
-                    <input value={o.nombre} onChange={(e) => updUbic("origenes", o.id, e.target.value)} className={INP_TBL} />
-                    <button onClick={() => delUbic("origenes", o.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <div key={o.id} className="border border-gray-200 rounded-lg p-3 mb-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <input value={o.nombre} onChange={(e) => updUbic("origenes", o.id, e.target.value)} className={INP_TBL + " font-semibold"} />
+                      <button onClick={() => delUbic("origenes", o.id)} className="text-gray-300 hover:text-red-500 text-sm" title="Eliminar rancho">✕</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 pl-1">
+                      <div>
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Lotes</div>
+                        {(o.lotes || []).map((l, i) => (
+                          <div key={i} className="flex items-center gap-1 mb-1">
+                            <input value={l} onChange={(e) => updRanchoSub(o.id, "lotes", i, e.target.value)} className={INP_TBL} />
+                            <button onClick={() => delRanchoSub(o.id, "lotes", i)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                          </div>
+                        ))}
+                        <button onClick={() => addRanchoSub(o.id, "lotes")} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded font-medium">+ Lote</button>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Responsables de cosecha</div>
+                        {(o.responsables || []).map((r, i) => (
+                          <div key={i} className="flex items-center gap-1 mb-1">
+                            <input value={r} onChange={(e) => updRanchoSub(o.id, "responsables", i, e.target.value)} className={INP_TBL} />
+                            <button onClick={() => delRanchoSub(o.id, "responsables", i)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                          </div>
+                        ))}
+                        <button onClick={() => addRanchoSub(o.id, "responsables")} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded font-medium">+ Responsable</button>
+                      </div>
+                    </div>
                   </div>
                 ))}
                 <button onClick={() => addUbic("origenes")} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar rancho</button>
@@ -539,6 +598,57 @@ export default function Modulo8() {
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
               <button onClick={() => setCatUbic(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal zonas (Viaje) ── */}
+      {catZonas && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">🗺️ Zonas (Viaje)</div>
+              <button onClick={() => setCatZonas(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="px-5 py-4">
+              {zonas.map((z, i) => (
+                <div key={i} className="flex items-center gap-2 mb-2">
+                  <input value={z} onChange={(e) => updZona(i, e.target.value)} className={INP_TBL} />
+                  <button onClick={() => delZona(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                </div>
+              ))}
+              <button onClick={addZona} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar zona</button>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setCatZonas(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal consignados / distribuidores (catálogo compartido) ── */}
+      {catConsig && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">🏢 Consignados / Distribuidores</div>
+                <div className="text-xs text-gray-500 mt-0.5">Mismo catálogo para ambos campos</div>
+              </div>
+              <button onClick={() => setCatConsig(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="px-5 py-4">
+              {consignados.map((c, i) => (
+                <div key={i} className="flex items-center gap-2 mb-2">
+                  <input value={c} onChange={(e) => updConsig(i, e.target.value)} className={INP_TBL} />
+                  <button onClick={() => delConsig(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                </div>
+              ))}
+              <button onClick={addConsig} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar empresa</button>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setCatConsig(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
             </div>
           </div>
         </div>

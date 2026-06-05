@@ -335,12 +335,13 @@ const CARGA_CAMPO_INICIAL = [
   { id: "CC5", label: "Taras" },
 ];
 
-// Catálogo de orígenes (ranchos/campos) y destinos (empaques) para movimientos internos
+// Catálogo de orígenes (ranchos/campos) y destinos (empaques) para movimientos internos.
+// Cada rancho tiene su subcatálogo de lotes y responsables de cosecha.
 const UBICACIONES_INICIAL = {
   origenes: [
-    { id: "OR1", nombre: "San Quintín, B.C." },
-    { id: "OR2", nombre: "Los Mochis, Sinaloa" },
-    { id: "OR3", nombre: "Culiacán, Sinaloa" },
+    { id: "OR1", nombre: "San Quintín, B.C.", lotes: ["Paredes", "El Llano"], responsables: ["Juan Pérez"] },
+    { id: "OR2", nombre: "Los Mochis, Sinaloa", lotes: [], responsables: [] },
+    { id: "OR3", nombre: "Culiacán, Sinaloa", lotes: [], responsables: [] },
   ],
   destinos: [
     { id: "DE1", nombre: "Empaque Los Mochis" },
@@ -348,6 +349,12 @@ const UBICACIONES_INICIAL = {
     { id: "DE3", nombre: "Empaque Guasave" },
   ],
 };
+
+// Catálogo de zonas (campo "Viaje" en movimientos internos)
+export const ZONAS_INICIAL = ["Baja California", "Jalisco", "Sinaloa", "Sonora", "McAllen", "Nogales"];
+
+// Catálogo compartido de empresas para Consignado y Distribuidor
+export const CONSIGNADOS_INICIAL = ["SL Agrícola", "CACO", "CAT", "SL Produce"];
 
 const mockTrailers = [
   { id: 1, fecha: "Lun 26", origen: ORIGEN, dest: "USA Texas", status: "en_instalaciones", linea: "Transportes del Pacífico", contacto: "Ramón Soto", numero: "667-123-4567", chofer: "Carlos Mendoza", marcaModelo: "Kenworth T680", placaTracto: "ABC-1234", economicoCaja: "C-0042", placaCaja: "XYZ-9876", licencia: "LIC-88721", telefono: "667-987-6543", flete: "18500" },
@@ -380,17 +387,19 @@ export function DatosProvider({ children }) {
   const [defectosCalidad, setDefectosCalidad] = useState(guardado.defectosCalidad ?? DEFECTOS_POR_CULTIVO_INICIAL); // catálogo editable: producto → defectos
   const [inspectoresCalidad, setInspectoresCalidad] = useState(guardado.inspectoresCalidad ?? INSPECTORES_QC_INICIAL); // inspectores de calidad
   const [lugaresCalidad, setLugaresCalidad] = useState(guardado.lugaresCalidad ?? LUGARES_QC_INICIAL); // lugares de inspección
+  const [zonas, setZonas] = useState(guardado.zonas ?? ZONAS_INICIAL); // catálogo de zonas (campo Viaje)
+  const [consignados, setConsignados] = useState(guardado.consignados ?? CONSIGNADOS_INICIAL); // catálogo compartido consignado/distribuidor
 
   // Persistir todo el estado en localStorage ante cualquier cambio.
   useEffect(() => {
-    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad };
+    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
     } catch (e) {
       // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
       console.warn("No se pudo guardar en localStorage:", e);
     }
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -405,6 +414,7 @@ export function DatosProvider({ children }) {
     requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
+    zonas, setZonas, consignados, setConsignados,
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
