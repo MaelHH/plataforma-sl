@@ -126,6 +126,91 @@ export default function Modulo12() {
   const [nuevoProd, setNuevoProd] = useState("");
   const prodEditar = defectosCalidad[catProdSel] ? catProdSel : (productos[0] || "");
 
+  // ── Resumen, PDF y envío (correo / WhatsApp) ──
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const defectosConHallazgo = () => (insp ? defectosProducto.filter((d) => insp.defectos[d.id]?.presente) : []);
+
+  const resumenTexto = () => {
+    const c = cargaSel;
+    const hall = defectosConHallazgo().map((d) => d.label);
+    return [
+      "Inspección de Calidad — QC Bodegas",
+      `Embarque: ${c?.fecha || ""} · ${c?.trailer?.dest || ""} · ${c?.trailer?.chofer || ""}`,
+      `Producto: ${insp.producto || "—"}`,
+      `Folio: ${insp.folio || "—"} · Peso muestra: ${insp.pesoMuestra || "—"}`,
+      `Inspector: ${insp.inspector || "—"} · Lugar: ${insp.lugar || "—"} · Fecha: ${insp.fecha || "—"}`,
+      `Defectos con hallazgo (${hall.length}): ${hall.join(", ") || "ninguno"}`,
+      `Estado: ${CALIDAD_ESTADOS[insp.estado]?.label || "Pendiente"}`,
+      insp.observaciones ? `Observaciones: ${insp.observaciones}` : "",
+    ].filter(Boolean).join("\n");
+  };
+
+  const mandarCorreo = () => {
+    const asunto = `Calidad QC Bodegas — ${cargaSel?.trailer?.dest || ""} ${cargaSel?.fecha || ""}`.trim();
+    window.location.href = `mailto:?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(resumenTexto())}`;
+  };
+  const mandarWapp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(resumenTexto())}`, "_blank");
+  };
+
+  const generarPDF = () => {
+    const c = cargaSel;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Permite las ventanas emergentes para generar el PDF."); return; }
+    const filas = defectosProducto.map((d) => {
+      const reg = insp.defectos[d.id] || {};
+      const cat = CATS_QC[d.cat];
+      return `<tr>
+        <td>${esc(cat?.label || d.cat)}</td>
+        <td>${esc(d.label)}</td>
+        <td style="text-align:center;font-weight:700;color:${reg.presente ? "#dc2626" : "#16a34a"}">${reg.presente ? "SÍ" : "no"}</td>
+        <td>${esc(reg.notas)}</td>
+      </tr>`;
+    }).join("");
+    const estCfg = CALIDAD_ESTADOS[insp.estado] || CALIDAD_ESTADOS.pendiente;
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
+      <title>Calidad QC Bodegas - ${esc(insp.folio) || ""}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, Arial, sans-serif; color: #1f2937; margin: 28px; font-size: 12px; }
+        h1 { font-size: 18px; margin: 0; color: #4338ca; }
+        .sub { color: #6b7280; font-size: 12px; margin: 2px 0 16px; }
+        .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; }
+        .logo { font-weight: 800; font-size: 22px; color: #4338ca; }
+        .info { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0; }
+        .info div { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; }
+        .info label { display: block; color: #9ca3af; font-size: 10px; text-transform: uppercase; }
+        .info span { font-weight: 700; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th { background: #f3f4f6; text-align: left; padding: 5px 8px; font-size: 10px; color: #6b7280; text-transform: uppercase; border: 1px solid #e5e7eb; }
+        td { padding: 4px 8px; border: 1px solid #eee; }
+        .obs { margin-top: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; font-size: 11px; }
+        @media print { body { margin: 12mm; } }
+      </style></head><body>
+      <div class="head">
+        <div><h1>Control de Calidad — QC Bodegas</h1><div class="sub">SL Logística · inspección de embarque · Estado: ${esc(estCfg.label)}</div></div>
+        <div class="logo">SL</div>
+      </div>
+      <div class="info">
+        <div><label>Folio</label><span>${esc(insp.folio) || "—"}</span></div>
+        <div><label>Peso muestra</label><span>${esc(insp.pesoMuestra) || "—"}</span></div>
+        <div><label>Producto</label><span>${esc(insp.producto) || "—"}</span></div>
+        <div><label>Fecha</label><span>${esc(insp.fecha) || "—"}</span></div>
+        <div><label>Inspector</label><span>${esc(insp.inspector) || "—"}</span></div>
+        <div><label>Lugar</label><span>${esc(insp.lugar) || "—"}</span></div>
+        <div><label>Destino</label><span>${esc(c?.trailer?.dest) || "—"}</span></div>
+        <div><label>Chofer</label><span>${esc(c?.trailer?.chofer) || "—"}</span></div>
+      </div>
+      <table>
+        <thead><tr><th>Categoría</th><th>Defecto</th><th style="text-align:center;width:70px">Hallazgo</th><th>Notas</th></tr></thead>
+        <tbody>${filas || `<tr><td colspan="4" style="text-align:center;color:#999">Sin defectos definidos para este producto</td></tr>`}</tbody>
+      </table>
+      ${insp.observaciones ? `<div class="obs"><b>Observaciones:</b> ${esc(insp.observaciones)}</div>` : ""}
+      <script>window.onload = function(){ window.print(); }</script>
+      </body></html>`);
+    win.document.close();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -209,7 +294,7 @@ export default function Modulo12() {
 
             <div className="px-5 py-4 space-y-4">
               {/* Producto / Inspector / Lugar / Fecha */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <div>
                   <label className={LBL}>Producto (define los defectos)</label>
                   <select className={INP} value={insp.producto} onChange={(e) => upd("producto", e.target.value)}>
@@ -232,6 +317,8 @@ export default function Modulo12() {
                   </select>
                 </div>
                 <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={insp.fecha} onChange={(e) => upd("fecha", e.target.value)} /></div>
+                <div><label className={LBL}>Folio</label><input className={INP} value={insp.folio || ""} onChange={(e) => upd("folio", e.target.value)} placeholder="No." /></div>
+                <div><label className={LBL}>Peso muestra</label><input type="number" className={INP} value={insp.pesoMuestra || ""} onChange={(e) => upd("pesoMuestra", e.target.value)} placeholder="g" /></div>
               </div>
 
               {!insp.producto ? (
@@ -289,6 +376,13 @@ export default function Modulo12() {
                 </div>
               )}
 
+              {insp.producto && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 flex items-center justify-between text-xs">
+                  <span className="text-indigo-700 font-semibold">Resumen</span>
+                  <span className="text-gray-600">Defectos con hallazgo: <b className={nConDefecto > 0 ? "text-red-600" : "text-green-700"}>{nConDefecto}</b> de {defectosProducto.length}</span>
+                </div>
+              )}
+
               <div>
                 <label className={LBL}>Observaciones / motivo de la decisión</label>
                 <textarea rows={2} className={INP} value={insp.observaciones} onChange={(e) => upd("observaciones", e.target.value)} placeholder="Observaciones generales del embarque" />
@@ -301,9 +395,16 @@ export default function Modulo12() {
               )}
             </div>
 
-            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
-              <button onClick={guardar} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">💾 Guardar (sin decidir)</button>
-              <button onClick={() => resolver("aprobado")} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">✓ Inspeccionar</button>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 flex-wrap justify-between items-center sticky bottom-0 bg-white">
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={generarPDF} className="text-xs px-3 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📄 PDF</button>
+                <button onClick={mandarCorreo} className="text-xs px-3 py-2 border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-50">📧 Mandar Correo</button>
+                <button onClick={mandarWapp} className="text-xs px-3 py-2 border border-green-300 text-green-700 rounded-lg font-semibold hover:bg-green-50">💬 Mandar WhatsApp</button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={guardar} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">💾 Guardar (sin decidir)</button>
+                <button onClick={() => resolver("aprobado")} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">✓ Inspeccionar</button>
+              </div>
             </div>
           </div>
         </div>
