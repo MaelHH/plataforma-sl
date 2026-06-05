@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDatos, DC, EMPRESAS } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
+import MapaTive from "../components/MapaTive";
 
 const EVENTOS = [
   { id: "preenfriado", label: "Preenfriado", icon: "❄️", color: "blue" },
@@ -313,6 +314,8 @@ export default function Modulo7() {
           <span className="text-sm font-medium text-gray-700">Francisco / Kiko</span>
         </div>
       </div>
+
+      <MapaTive trailers={enRutaAll} />
 
       <div className="flex border border-gray-200 rounded-lg overflow-hidden w-fit mb-4">
         <button onClick={() => setTab("ruta")} className={`px-4 py-1.5 text-sm ${tab === "ruta" ? "bg-gray-100 font-semibold text-gray-900" : "bg-white text-gray-500"}`}>En ruta ({enRuta.length})</button>
