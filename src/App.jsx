@@ -24,7 +24,7 @@ const MODULOS = [
   { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊" },
   { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸" },
   { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦" },
-  { id: 12, nombre: "Aprobación de Calidad", sub: "Control de Calidad", icono: "🔬" },
+  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬" },
   { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰" },
   { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️" },
   { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃" },

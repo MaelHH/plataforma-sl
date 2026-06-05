@@ -130,7 +130,7 @@ export default function Modulo12() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">Aprobación de Calidad</h1>
+          <h1 className="text-base font-semibold text-gray-900">QC - Bodegas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inspección de calidad de los embarques antes de liberar · fotos por defecto, según el producto</p>
         </div>
         <div className="flex items-center gap-2">

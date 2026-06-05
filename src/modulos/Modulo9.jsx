@@ -258,20 +258,18 @@ export default function Modulo9() {
           <div className="text-xs text-gray-400 text-center py-8 italic">{movimientos.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "1320px" }}>
+            <table className="w-full text-xs" style={{ minWidth: "1000px" }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
-                  <th className="text-left px-3 py-2 font-medium">Folio</th>
-                  <th className="text-left px-3 py-2 font-medium">Fecha salida</th>
-                  <th className="text-left px-3 py-2 font-medium">Origen → Destino</th>
-                  <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
-                  <th className="text-left px-3 py-2 font-medium">Producto (carga)</th>
-                  <th className="text-right px-3 py-2 font-medium">Parrillas</th>
-                  <th className="text-right px-3 py-2 font-medium">Bultos</th>
-                  <th className="text-center px-3 py-2 font-medium">Estado</th>
-                  <th className="text-center px-3 py-2 font-medium">Tipo</th>
-                  <th className="text-center px-3 py-2 font-medium">Calidad (QCI)</th>
-                  <th className="text-center px-3 py-2 font-medium"></th>
+                  <th className="text-left px-2 py-2 font-medium">Folio</th>
+                  <th className="text-left px-2 py-2 font-medium">Fecha</th>
+                  <th className="text-left px-2 py-2 font-medium">Ruta</th>
+                  <th className="text-left px-2 py-2 font-medium">Línea / Chofer</th>
+                  <th className="text-left px-2 py-2 font-medium">Producto</th>
+                  <th className="text-right px-2 py-2 font-medium">Parr/Bultos</th>
+                  <th className="text-center px-2 py-2 font-medium">Estado</th>
+                  <th className="text-center px-2 py-2 font-medium">QCI</th>
+                  <th className="text-center px-2 py-2 font-medium"></th>
                 </tr>
               </thead>
               <tbody>
@@ -286,41 +284,35 @@ export default function Modulo9() {
                   const qciProm = nMu ? m.muestreos.reduce((a, mu) => a + calcQCI(mu), 0) / nMu : null;
                   return (
                     <tr key={m.id} className={`border-b border-gray-100 ${recibido ? (novedad ? "bg-red-50/40" : "bg-green-50/40") : rechazado ? "bg-red-50/40" : "hover:bg-gray-50"}`}>
-                      <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
-                      <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
-                      <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
-                      <td className="px-3 py-2 text-gray-700">
+                      <td className="px-2 py-2 font-bold text-red-600">{m.folio || "—"}</td>
+                      <td className="px-2 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
+                      <td className="px-2 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
+                      <td className="px-2 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
+                      <td className="px-2 py-2 text-gray-700">
                         {(m.cargaItems || []).filter((it) => it.prod).length ? (
                           (m.cargaItems || []).filter((it) => it.prod).map((it, i) => (
                             <div key={i} className="whitespace-nowrap"><span className="font-medium">{it.prod}</span>{(it.parrillas || it.bultos) ? <span className="text-gray-400"> · {it.parrillas || 0}p / {it.bultos || 0}b</span> : ""}</div>
                           ))
                         ) : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-right whitespace-nowrap"><span className="font-semibold text-green-700">{par || 0}</span><span className="text-gray-300"> / </span><span className="font-semibold text-blue-700">{bul ? bul.toLocaleString() : 0}</span></td>
+                      <td className="px-2 py-2 text-center">
                         {recibido ? (
-                          <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>
-                            {novedad ? "⚠️" : "✓"}
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>{novedad ? "⚠️" : "✓"}</span>
+                            <span className="text-[10px] text-green-700 font-semibold">Recepción</span>
+                          </div>
                         ) : rechazado ? (
-                          <span title="Rechazado" className="inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm bg-red-100 text-red-700 border-red-200">❌</span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span title="Rechazado" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-red-100 text-red-700 border-red-200">❌</span>
+                            <span className="text-[10px] text-red-700 font-semibold">Rechazo</span>
+                            {r?.comentario && <div className="text-[9px] text-gray-500 max-w-[110px] truncate" title={r.comentario}>{r.comentario}</div>}
+                          </div>
                         ) : (
-                          <span title="Por recibir" className="inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200">⏳</span>
+                          <span title="Por recibir" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200">⏳</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        {recibido ? (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold whitespace-nowrap">Recepción</span>
-                        ) : rechazado ? (
-                          <div>
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-semibold whitespace-nowrap">Rechazo</span>
-                            {r?.comentario && <div className="text-[10px] text-gray-500 mt-0.5 max-w-[160px] mx-auto truncate" title={r.comentario}>{r.comentario}</div>}
-                          </div>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         {qciProm !== null ? (
                           <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${qciProm >= 90 ? "bg-green-100 text-green-700" : qciProm >= 80 ? "bg-lime-100 text-lime-700" : qciProm >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
                             {qciProm.toFixed(2)}%
@@ -329,7 +321,7 @@ export default function Modulo9() {
                         {nMu > 0 && <div className="text-gray-400 text-[10px] mt-0.5">{nMu}/{MAX_MUESTREOS} muestreo{nMu > 1 ? "s" : ""}</div>}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-col gap-1 items-stretch min-w-[130px]">
+                        <div className="flex flex-col gap-1 items-stretch min-w-[108px]">
                           <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
                           <button onClick={() => abrirInspeccion(m)} className={`text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}>🚛 {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "Inspección ⚠️" : "Inspección ✓") : "Inspección"}</button>
                           {recibido ? (
