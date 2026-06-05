@@ -130,7 +130,9 @@ export default function Modulo12() {
   const prodEditar = defectosCalidad[catProdSel] ? catProdSel : (productos[0] || "");
 
   // ── KPIs estilo QC REPORT ──
-  const pctDe = (d) => parseFloat(insp?.defectos?.[d.id]?.pct) || 0;
+  // El % de cada defecto se calcula con el peso (g) capturado / el peso de la muestra.
+  const pesoMuestraNum = parseFloat(insp?.pesoMuestra) || 0;
+  const pctDe = (d) => { const g = parseFloat(insp?.defectos?.[d.id]?.peso) || 0; return pesoMuestraNum > 0 ? (g / pesoMuestraNum) * 100 : 0; };
   const pctQuality = defectosProducto.filter((d) => d.cat === "calidad").reduce((a, d) => a + pctDe(d), 0);
   const pctCondition = defectosProducto.filter((d) => d.cat === "condicion" || d.cat === "plaga").reduce((a, d) => a + pctDe(d), 0);
   const pctDefects = pctQuality + pctCondition;
@@ -387,6 +389,27 @@ export default function Modulo12() {
                 </div>
               </div>
 
+              {insp.producto && (
+                <div>
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Resumen QC (calificación)</div>
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                    {[
+                      ["COUNT", insp.count ? Number(insp.count).toLocaleString() : "—", "text-gray-900"],
+                      ["% GOOD", pctGood.toFixed(1) + "%", "bg-green-500 text-white"],
+                      ["% DEFECTS", pctDefects.toFixed(2) + "%", "text-gray-900"],
+                      ["% QUALITY", pctQuality > 0 ? pctQuality.toFixed(2) + "%" : "—", "text-blue-700"],
+                      ["% CONDITION", pctCondition > 0 ? pctCondition.toFixed(2) + "%" : "—", "text-amber-700"],
+                      ["TEMP", insp.temperatura || "—", insp.temperatura ? "bg-green-500 text-white" : "text-gray-900"],
+                    ].map(([l, v, cls]) => (
+                      <div key={l} className="border border-gray-200 rounded-lg overflow-hidden text-center">
+                        <div className="bg-gray-800 text-white text-[9px] font-bold py-0.5">{l}</div>
+                        <div className={`text-base font-extrabold py-1.5 ${cls}`}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!insp.producto ? (
                 <div className="text-center text-xs text-gray-400 italic py-8 border border-dashed border-gray-200 rounded-xl">Selecciona un producto para ver sus defectos.</div>
               ) : defectosProducto.length === 0 ? (
@@ -415,7 +438,8 @@ export default function Modulo12() {
                                       <input type="checkbox" checked={!!reg.presente} onChange={(e) => updDefecto(d.id, "presente", e.target.checked)} className="accent-indigo-600" />
                                       <span className={`text-xs truncate ${reg.presente ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
                                     </label>
-                                    <input type="number" step="0.01" className={INP + " w-20 shrink-0 text-right"} value={reg.pct || ""} onChange={(e) => updDefecto(d.id, "pct", e.target.value)} placeholder="%" title="% del defecto" />
+                                    <input type="number" step="0.01" className="w-20 shrink-0 text-right text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white" value={reg.peso || ""} onChange={(e) => updDefecto(d.id, "peso", e.target.value)} placeholder="g" title="Peso del defecto (g)" />
+                                    <span className="w-12 shrink-0 text-right text-[10px] text-gray-400">{pctDe(d).toFixed(1)}%</span>
                                     <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap shrink-0" title="Agregar fotos">
                                       📷{reg.fotos?.length ? ` ${reg.fotos.length}` : ""}
                                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => subirFotos(d.id, e.target.files)} />
@@ -438,27 +462,6 @@ export default function Modulo12() {
                         </div>
                       );
                     })}
-                  </div>
-                </div>
-              )}
-
-              {insp.producto && (
-                <div>
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Resumen QC (vista previa del reporte)</div>
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-                    {[
-                      ["COUNT", insp.count ? Number(insp.count).toLocaleString() : "—", "text-gray-900"],
-                      ["% GOOD", pctGood.toFixed(1) + "%", "bg-green-500 text-white"],
-                      ["% DEFECTS", pctDefects.toFixed(2) + "%", "text-gray-900"],
-                      ["% QUALITY", pctQuality > 0 ? pctQuality.toFixed(2) + "%" : "—", "text-blue-700"],
-                      ["% CONDITION", pctCondition > 0 ? pctCondition.toFixed(2) + "%" : "—", "text-amber-700"],
-                      ["TEMP", insp.temperatura || "—", insp.temperatura ? "bg-green-500 text-white" : "text-gray-900"],
-                    ].map(([l, v, cls]) => (
-                      <div key={l} className="border border-gray-200 rounded-lg overflow-hidden text-center">
-                        <div className="bg-gray-800 text-white text-[9px] font-bold py-0.5">{l}</div>
-                        <div className={`text-base font-extrabold py-1.5 ${cls}`}>{v}</div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
