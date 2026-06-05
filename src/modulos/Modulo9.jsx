@@ -328,19 +328,21 @@ export default function Modulo9() {
                         ) : <span className="text-gray-300">—</span>}
                         {nMu > 0 && <div className="text-gray-400 text-[10px] mt-0.5">{nMu}/{MAX_MUESTREOS} muestreo{nMu > 1 ? "s" : ""}</div>}
                       </td>
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
-                        <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
-                        <button onClick={() => abrirInspeccion(m)} className={`text-xs px-2 py-1 border rounded-lg bg-white mr-1 ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}>🚛 {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "Inspección ⚠️" : "Inspección ✓") : "Inspección"}</button>
-                        {recibido ? (
-                          <>
-                            <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-1 items-stretch min-w-[130px]">
+                          <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
+                          <button onClick={() => abrirInspeccion(m)} className={`text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}>🚛 {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "Inspección ⚠️" : "Inspección ✓") : "Inspección"}</button>
+                          {recibido ? (
+                            <>
+                              <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">👁️ Ver</button>
+                              <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
+                            </>
+                          ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
-                          </>
-                        ) : rechazado ? (
-                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
-                        ) : (
-                          <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-700">Dar recepción</button>
-                        )}
+                          ) : (
+                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-2 py-1.5 rounded-lg font-medium hover:bg-emerald-700">Dar recepción</button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
