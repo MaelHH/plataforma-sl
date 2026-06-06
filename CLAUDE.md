@@ -179,6 +179,19 @@ desglose de defectos y barra apilada. Botones **Mandar Correo** (mailto) y **Man
 WhatsApp** (wa.me) con el resumen prellenado. Catálogos: defectos por producto,
 inspectores, lugares.
 
+## Restricciones del negocio (importantes)
+
+- **SAP es mono-empresa (NO multiempresas).** Cada empresa (SL Agrícola, CAT, CACO, SL
+  Produce) se sube a SAP por separado. En viajes **consolidados** NO se sube una sola
+  vez: hay que **dividir y subir la parte de cada empresa de forma independiente**.
+  - Dónde aplica: el "subir a SAP" vive en **Embarques (M5)** y **Consolidado (M6)**.
+  - **Hueco actual / a corregir**: `carga.sapStatus` es **un solo flag por carga**, pero
+    debería ser **por empresa** (como ya están `carga.manifiestos[eid]` y el reparto de
+    flete). Plan: `sapStatus` por empresa (`{ [eid]: "pendiente"|"cargado", docSAP? }`);
+    la carga está "completa en SAP" solo cuando todas sus empresas están cargadas. La
+    vista "Base de datos" de M6 (una fila por empresa) ya encaja con esto.
+  - Regla general: **donde se suba a SAP, siempre dividir el trabajo por empresa.**
+
 ## Convenciones / cómo extender
 
 - **Catálogos editables in-app**, sembrados con `*_INICIAL` en el store y persistidos.
