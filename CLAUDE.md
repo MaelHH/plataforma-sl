@@ -122,15 +122,25 @@ Pestañas: Preparar / Enviados. (Las fotos hoy son simuladas, no se persisten im
 reales.)
 
 ### Embarques (id 5) — Daniel / Cristina
-Captura **manifiestos por empresa** y marca **SAP** (pendiente/cargado). "Devolver"
-borra la carga y regresa el trailer a instalaciones (¡cuidado: borra datos asociados!).
-Pestañas: Pendientes SAP / Historial. Acciones por `id` (no por índice).
+**Es donde se REGISTRA el embarque** (paso operativo). Captura **manifiestos por
+empresa** (folio) y marca **SAP** (pendiente/cargado). "Devolver" borra la carga y
+regresa el trailer a instalaciones (¡cuidado: borra datos asociados!). Pestañas:
+Pendientes SAP / Historial. Acciones por `id` (no por índice).
+
+**Diferencia con M6 (Consolidado):** M5 = *registrar* (manifiestos + SAP). M6 =
+*repartir el flete por empresa / reportar / cobrar*. Ambos tocan `cargasEmbarques` y el
+SAP, por eso aplica aquí la regla de **SAP por empresa** (ver Restricciones).
 
 ### Consolidado y Fletes (id 6) — Cristina
-**División del flete por empresa**. Vista **Tarjetas** (expandible) y vista **Base de
-datos** (aplanado: una fila por carga×empresa; en consolidado se repite el viaje y solo
-cambian empresa/productos/flete a cobrar — resaltadas en amarillo). **Export a Excel**.
-Filtros por fecha/destino/origen/empresa/SAP/línea/chofer.
+**Es donde se REPARTE el flete por empresa / se reporta / se cobra** (paso de
+análisis). Calcula cuánto del flete le toca a cada empresa (proporcional a las cajas).
+Vista **Tarjetas** (expandible) y vista **Base de datos** (aplanado: una fila por
+carga×empresa; en consolidado se repite el viaje y solo cambian empresa/productos/flete
+a cobrar — resaltadas en amarillo). **Export a Excel**. Filtros por
+fecha/destino/origen/empresa/SAP/línea/chofer.
+
+**Diferencia con M5 (Embarques):** M6 *no captura manifiestos*; los lee y los usa para
+el reporte. M5 es el registro; M6 es el reparto/cobro.
 
 ### Monitoreo en Ruta (id 7) — Francisco / Kiko
 **Mapa real de México** (Leaflet) con pines por destino de los trailers en ruta
@@ -170,7 +180,9 @@ En trámite / Retornadas.
   monitoreo.
 
 ### QC - Bodegas (id 12) — Control de Calidad
-Inspección de calidad de los **embarques** (de `cargasEmbarques`). Por producto, se
+**Control de calidad en las bodegas de EE.UU.**, cuando el embarque ya llegó a destino
+(por eso en el menú va **después de Monitoreo en Ruta**). Inspección de calidad de los
+**embarques** (de `cargasEmbarques`). Por producto, se
 capturan defectos con **peso (g)** → el **% se calcula** (peso/peso muestra), agrupados
 en QUALITY (calidad) y CONDITION (condición + plaga). **Resumen de calificación (KPIs)**
 arriba: COUNT, % GOOD, % DEFECTS, % QUALITY, % CONDITION, TEMP. Botón **📊 QC Report**

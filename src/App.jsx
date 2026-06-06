@@ -25,10 +25,10 @@ const MODULOS = [
   { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛", desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
   { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
   { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸", desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
-  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦", desc: "Daniel/Cristina capturan los manifiestos por empresa y registran la carga en SAP." },
-  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬", desc: "Control de calidad de los embarques por producto y defectos (peso → %), con reporte QC tipo dashboard." },
-  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰", desc: "Cristina divide el flete por empresa (consolidados), con vista base de datos y export a Excel." },
+  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦", desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
+  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰", desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
   { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️", desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
+  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬", desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
   { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃", desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
   { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: "📄", desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
 ];
