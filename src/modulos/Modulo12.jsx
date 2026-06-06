@@ -122,7 +122,7 @@ export default function Modulo12() {
   );
 
   const defectosProducto = insp ? defectosCalidad[insp.producto] || [] : [];
-  const nConDefecto = insp ? defectosProducto.filter((d) => insp.defectos[d.id]?.presente).length : 0;
+  const nConDefecto = insp ? defectosProducto.filter((d) => (parseFloat(insp.defectos[d.id]?.peso) || 0) > 0).length : 0;
 
   // Editor de defectos: producto seleccionado
   const [catProdSel, setCatProdSel] = useState(productos[0] || "");
@@ -140,7 +140,7 @@ export default function Modulo12() {
 
   // ── Resumen, PDF y envío (correo / WhatsApp) ──
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const defectosConHallazgo = () => (insp ? defectosProducto.filter((d) => insp.defectos[d.id]?.presente) : []);
+  const defectosConHallazgo = () => (insp ? defectosProducto.filter((d) => (parseFloat(insp.defectos[d.id]?.peso) || 0) > 0) : []);
 
   const resumenTexto = () => {
     const c = cargaSel;
@@ -429,15 +429,13 @@ export default function Modulo12() {
                           <div className={`text-xs font-semibold mb-1 ${catCfg.color}`}>{catCfg.label}</div>
                           <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
                             {defs.map((d) => {
-                              const reg = insp.defectos[d.id] || { presente: false, notas: "", fotos: [] };
+                              const reg = insp.defectos[d.id] || { peso: "", fotos: [] };
+                              const tienePeso = (parseFloat(reg.peso) || 0) > 0;
                               const catBorder = { calidad: "border-l-blue-400", condicion: "border-l-amber-400", plaga: "border-l-red-400" }[d.cat];
                               return (
-                                <div key={d.id} className={`px-3 py-2 border-l-2 ${catBorder} ${reg.presente ? "bg-red-50/40" : ""}`}>
+                                <div key={d.id} className={`px-3 py-2 border-l-2 ${catBorder} ${tienePeso ? "bg-red-50/40" : ""}`}>
                                   <div className="flex items-center gap-2">
-                                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                                      <input type="checkbox" checked={!!reg.presente} onChange={(e) => updDefecto(d.id, "presente", e.target.checked)} className="accent-indigo-600" />
-                                      <span className={`text-xs truncate ${reg.presente ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
-                                    </label>
+                                    <span className={`text-xs truncate flex-1 min-w-0 ${tienePeso ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
                                     <input type="number" step="0.01" className="w-20 shrink-0 text-right text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white" value={reg.peso || ""} onChange={(e) => updDefecto(d.id, "peso", e.target.value)} placeholder="g" title="Peso del defecto (g)" />
                                     <span className="w-12 shrink-0 text-right text-[10px] text-gray-400">{pctDe(d).toFixed(1)}%</span>
                                     <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap shrink-0" title="Agregar fotos">
