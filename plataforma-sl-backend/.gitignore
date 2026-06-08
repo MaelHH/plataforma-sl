@@ -1,0 +1,19 @@
+# Entorno
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Base de datos local (SQLite de dev)
+*.db
+*.sqlite3
+
+# Storage local de fotos/uploads
+/storage/
+
+# Herramientas
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
