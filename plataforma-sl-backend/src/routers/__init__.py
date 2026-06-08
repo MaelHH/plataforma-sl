@@ -5,6 +5,7 @@ from src.routers import (
     bitacora,
     cargas,
     catalogos,
+    estado,
     importaciones,
     monitoreo,
     movimientos,
@@ -13,6 +14,7 @@ from src.routers import (
 )
 
 api_router = APIRouter()
+api_router.include_router(estado.router)
 api_router.include_router(catalogos.router)
 api_router.include_router(trailers.router)
 api_router.include_router(cargas.router)

@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components --
    El store expone a propósito constantes/utilidades junto al DatosProvider. */
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import { getEstado, guardarColecciones } from "../services/api";
 
 // ─── PERSISTENCIA (localStorage) + ESTAMPADO DE TIEMPO ───
 // Versionado de la llave para poder migrar el esquema cuando llegue el backend real.
@@ -390,7 +391,73 @@ export function DatosProvider({ children }) {
   const [zonas, setZonas] = useState(guardado.zonas ?? ZONAS_INICIAL); // catálogo de zonas (campo Viaje)
   const [consignados, setConsignados] = useState(guardado.consignados ?? CONSIGNADOS_INICIAL); // catálogo compartido consignado/distribuidor
 
-  // Persistir todo el estado en localStorage ante cualquier cambio.
+  // ─── CONEXIÓN CON EL BACKEND (sync por colección) ───
+  // La lógica de los módulos NO cambia: solo cambia de dónde se lee y a dónde se persiste.
+  // - Al montar: hidrata el estado desde GET /estado (si el backend responde).
+  // - Ante cualquier cambio: guarda en localStorage (caché offline) y sincroniza con la API
+  //   SOLO las colecciones que cambiaron (PUT /estado parcial), con debounce.
+  const [hidratado, setHidratado] = useState(false);
+  const backendVivo = useRef(false);
+  const baseSync = useRef(null);     // baseline para diff (estado ya sincronizado)
+  const syncTimer = useRef(null);
+  const pendienteSync = useRef({});
+
+  // Hidratación inicial desde el backend (una sola vez).
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const est = await getEstado();
+        if (cancelado) return;
+        if (est.trailers) setTrailers(est.trailers);
+        if (est.cargasEmbarques) setCargasEmbarques(est.cargasEmbarques);
+        if (est.monitoreo) setMonitoreo(est.monitoreo);
+        if (est.catalogo) setCatalogo(est.catalogo);
+        if (est.cultivos) setCultivos(est.cultivos);
+        if (est.programa) setPrograma(est.programa);
+        if (est.requerimientoGen) setRequerimientoGen(est.requerimientoGen);
+        if (est.requerimientoMeta) setRequerimientoMeta(est.requerimientoMeta);
+        if (est.responsables) setResponsables(est.responsables);
+        if (est.lineas) setLineas(est.lineas);
+        if (est.movimientos) setMovimientos(est.movimientos);
+        if (est.cargaCampo) setCargaCampo(est.cargaCampo);
+        if (est.ubicaciones) setUbicaciones(est.ubicaciones);
+        if (est.bitacora) setBitacora(est.bitacora);
+        if (est.materiales) setMateriales(est.materiales);
+        if (est.importaciones) setImportaciones(est.importaciones);
+        if (est.defectosCalidad) setDefectosCalidad(est.defectosCalidad);
+        if (est.inspectoresCalidad) setInspectoresCalidad(est.inspectoresCalidad);
+        if (est.lugaresCalidad) setLugaresCalidad(est.lugaresCalidad);
+        if (est.zonas) setZonas(est.zonas);
+        if (est.consignados) setConsignados(est.consignados);
+        backendVivo.current = true;
+      } catch (e) {
+        // Sin backend: seguimos con la caché de localStorage (modo offline).
+        console.warn("Backend no disponible; usando caché local:", e);
+        backendVivo.current = false;
+      } finally {
+        if (!cancelado) setHidratado(true);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  // Programa el envío (debounced) de las colecciones cambiadas.
+  const scheduleSync = useCallback((cambiadas) => {
+    Object.assign(pendienteSync.current, cambiadas);
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      const payload = pendienteSync.current;
+      pendienteSync.current = {};
+      try {
+        await guardarColecciones(payload);
+      } catch (e) {
+        console.warn("No se pudo sincronizar con el backend:", e);
+      }
+    }, 600);
+  }, []);
+
+  // Caché local SIEMPRE + sync por colección con el backend tras la hidratación.
   useEffect(() => {
     const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados };
     try {
@@ -399,7 +466,15 @@ export function DatosProvider({ children }) {
       // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
       console.warn("No se pudo guardar en localStorage:", e);
     }
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados]);
+    if (!hidratado || !backendVivo.current) return;       // no sincronizar hasta hidratar / si no hay backend
+    if (baseSync.current === null) { baseSync.current = estado; return; }  // baseline = estado hidratado (sin sync)
+    const cambiadas = {};
+    for (const k of Object.keys(estado)) {
+      if (JSON.stringify(estado[k]) !== JSON.stringify(baseSync.current[k])) cambiadas[k] = estado[k];
+    }
+    baseSync.current = estado;
+    if (Object.keys(cambiadas).length) scheduleSync(cambiadas);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, hidratado, scheduleSync]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
