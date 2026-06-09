@@ -77,7 +77,7 @@ function TablaCalculadora() {
 }
 
 export default function Modulo2() {
-  const { programa, catalogo, cultivos, setRequerimientoGen, setRequerimientoMeta, registrarEvento } = useDatos();
+  const { programa, catalogo, cultivos, requerimientoGen, setRequerimientoGen, setRequerimientoMeta, registrarEvento } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const [diaFil, setDiaFil] = useState("Todos");
   const [maData, setMaData] = useState({});
@@ -119,6 +119,7 @@ export default function Modulo2() {
   const totMA = Object.values(maData).reduce((a, v) => a + (parseInt(v) || 0), 0);
   const [generado, setGenerado] = useState(false);
   const generarRequerimiento = () => {
+    const anterior = requerimientoGen[semana] || []; // lo que Mónica tenía antes
     const reqs = [];
     Object.entries(acumulado).forEach(([key, parr]) => {
       const [cultivo, dest, diStr] = key.split("||");
@@ -133,19 +134,31 @@ export default function Modulo2() {
       const di = dias.indexOf(fecha);
       reqs.push({ tipo: "M. Abierto", fecha, diIdx: di, origen: ORIGEN, dest, sol });
     });
-    setRequerimientoGen((prev) => ({ ...prev, [semana]: reqs }));
-    // Estampado de tiempo del envío Kiko → Mónica
+
     const t = ahora();
-    const totalTrailers = reqs.reduce((a, r) => a + (r.sol || 0), 0);
-    setRequerimientoMeta((prev) => ({ ...prev, [semana]: { enviadoTs: t.iso, enviadoLocal: t.local, actor: "Kiko", lineas: reqs.length, trailers: totalTrailers } }));
+    const total = reqs.reduce((a, r) => a + (r.sol || 0), 0);
+
+    // ── Diff para avisar a Mónica QUÉ cambió (solo si ya había un requerimiento previo) ──
+    const porDestino = (lista) => { const m = {}; (lista || []).forEach((r) => { m[r.dest] = (m[r.dest] || 0) + (r.sol || 0); }); return m; };
+    const antesMap = porDestino(anterior), ahoraMap = porDestino(reqs);
+    const dests = [...new Set([...Object.keys(antesMap), ...Object.keys(ahoraMap)])].sort();
+    const items = dests.map((d) => ({ dest: d, antes: antesMap[d] || 0, ahora: ahoraMap[d] || 0 })).filter((x) => x.antes !== x.ahora);
+    const huboCambio = anterior.length > 0 && JSON.stringify(anterior) !== JSON.stringify(reqs);
+    const cambios = huboCambio
+      ? { ts: t.local, items, totalAntes: anterior.reduce((a, r) => a + (r.sol || 0), 0), totalAhora: total, soloDetalles: items.length === 0 }
+      : null;
+
+    setRequerimientoGen((prev) => ({ ...prev, [semana]: reqs }));
+    // `avisoVisto` arranca en false cuando hubo cambio → dispara el mensaje a Mónica.
+    setRequerimientoMeta((prev) => ({ ...prev, [semana]: { enviadoTs: t.iso, enviadoLocal: t.local, actor: "Kiko", lineas: reqs.length, trailers: total, cambios, avisoVisto: !cambios } }));
     registrarEvento({
       evento: "requerimiento_enviado",
       modulo: "Cálculo de Trailers",
       actor: "Kiko",
       destino: "Tablero de Tráfico (Mónica)",
       ref: semana,
-      detalle: `Requerimiento de ${reqs.length} línea(s) / ${totalTrailers} trailer(s) enviado a Mónica`,
-      meta: { semana, lineas: reqs.length, trailers: totalTrailers },
+      detalle: `Requerimiento de ${reqs.length} línea(s) / ${total} trailer(s) enviado a Mónica${cambios ? " (ACTUALIZADO)" : ""}`,
+      meta: { semana, lineas: reqs.length, trailers: total, cambios },
     });
     setGenerado(true);
     setTimeout(() => setGenerado(false), 2500);

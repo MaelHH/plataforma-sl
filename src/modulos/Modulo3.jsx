@@ -13,7 +13,7 @@ function lunesActual() {
 }
 
 export default function Modulo3() {
-  const { trailers, setTrailers, requerimientoGen, requerimientoMeta, lineas, setLineas } = useDatos();
+  const { trailers, setTrailers, requerimientoGen, requerimientoMeta, setRequerimientoMeta, lineas, setLineas } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const dias = calcularDias(semana);
   const [diaFil, setDiaFil] = useState(dias[0]);
@@ -53,6 +53,9 @@ export default function Modulo3() {
   });
   const resumenArr = Object.values(resumenSemana).sort((a, b) => b.total - a.total);
   const totalSemana = resumenArr.reduce((a, r) => a + r.total, 0);
+
+  // Mónica vio el aviso de cambio de Kiko → se marca como visto (deja de aparecer).
+  const marcarAvisoVisto = () => setRequerimientoMeta((prev) => ({ ...prev, [semana]: { ...prev[semana], avisoVisto: true } }));
 
   const resetModos = () => { setLineaNueva(false); setChoferNuevo(false); setTractoNuevo(false); setCajaNueva(false); };
 
@@ -345,6 +348,39 @@ export default function Modulo3() {
         </div>
         <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">Siguiente ▶</button>
       </div>
+
+      {/* Aviso: Kiko actualizó el requerimiento (resumen de qué cambió) */}
+      {requerimientoMeta[semana]?.cambios && !requerimientoMeta[semana]?.avisoVisto && (() => {
+        const c = requerimientoMeta[semana].cambios;
+        const dT = c.totalAhora - c.totalAntes;
+        return (
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="text-sm font-bold text-amber-800">🔔 Kiko actualizó el requerimiento</div>
+                <div className="text-xs text-amber-700 mb-2">Ya se actualizó lo que ves abajo · {c.ts}</div>
+                {c.items.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                    {c.items.map((it) => {
+                      const d = it.ahora - it.antes;
+                      return (
+                        <div key={it.dest} className="text-xs bg-white border border-amber-200 rounded-lg px-2 py-1 flex items-center justify-between gap-2">
+                          <span className="font-medium text-gray-700 truncate">{it.dest}</span>
+                          <span className="whitespace-nowrap"><span className="text-gray-400">{it.antes}</span> <span className="text-gray-300">→</span> <b className="text-gray-800">{it.ahora}</b> <span className={d > 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>({d > 0 ? "+" : ""}{d})</span></span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-xs text-amber-700">Se ajustaron detalles (fechas/tipo) sin cambiar los totales por destino.</div>
+                )}
+                <div className="text-xs text-gray-600 mt-2">Total: <span className="text-gray-400">{c.totalAntes}</span> → <b>{c.totalAhora}</b> trailer(s) <span className={dT > 0 ? "text-green-600 font-semibold" : dT < 0 ? "text-red-600 font-semibold" : "text-gray-400"}>({dT > 0 ? "+" : ""}{dT})</span></div>
+              </div>
+              <button onClick={marcarAvisoVisto} className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 whitespace-nowrap shrink-0">Entendido</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* RESUMEN EJECUTIVO */}
       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-5">
