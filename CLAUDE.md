@@ -214,6 +214,9 @@ inspectores, lugares.
 - **PDFs**: `window.open("", "_blank")` + HTML + `window.print()`.
 - **Front**: cada módulo tiene una descripción corta en `App.jsx` (`MODULOS[].desc`),
   que se muestra como banner arriba del contenido.
+- **Documentación de procesos/automatizaciones** (incl. las de SAP): en `docs/` con el
+  formato estándar del equipo. Ver `docs/README.md` y la plantilla
+  `docs/_PLANTILLA-proceso.md`. Cada proceso nuevo = un archivo en `docs/procesos/`.
 
 ## TODO / pendientes conocidos
 
