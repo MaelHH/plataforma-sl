@@ -10,6 +10,8 @@ completo y todos documentemos **con el mismo formato**.
 
 ## 🚀 Para empezar (devs nuevos)
 
+0. **¿Dónde va todo?** → [`ESTADO.md`](ESTADO.md) — tablero único: qué está hecho, qué
+   está corriendo y qué falta (con dueños). **Empieza aquí.**
 1. **Contexto del frontend** → [`../CLAUDE.md`](../CLAUDE.md) — qué es la app, stack,
    arquitectura (store + localStorage + backend), flujos de negocio y **detalle por
    módulo**. Es la mejor primera lectura.
