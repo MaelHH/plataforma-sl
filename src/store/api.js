@@ -3,8 +3,11 @@
 //  - Singletons (objetos únicos):  /api/state/{clave}    GET/PUT
 //  - Auth:                          /api/auth/...
 //
-// La URL base se toma de VITE_API_URL (en .env) o usa localhost:8000 por defecto.
-export const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "");
+// La URL base se toma de VITE_API_URL (en .env). Si no, usa el MISMO host desde el
+// que se abrió la app, en el puerto 8000. Así funciona tanto en tu compu (localhost)
+// como cuando un colega entra por tu IP local (http://192.168.x.x:5173 → :8000).
+const hostBackend = typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : "http://localhost:8000";
+export const API_URL = (import.meta.env.VITE_API_URL || hostBackend).replace(/\/$/, "");
 
 // Colecciones (arrays de objetos con `id`) y singletons (objetos / arrays simples).
 export const COLECCIONES = [
