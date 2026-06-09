@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { useDatos, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 
@@ -168,6 +169,33 @@ export default function Modulo8() {
   const updConsig = (i, val) => setConsignados((p) => p.map((c, j) => j === i ? val : c));
   const delConsig = (i) => setConsignados((p) => p.filter((_, j) => j !== i));
 
+  // ── Exportar a Excel (respeta los filtros activos) ──
+  const exportarExcel = () => {
+    if (movsFiltrados.length === 0) { alert("No hay movimientos para exportar con los filtros actuales."); return; }
+    const filas = movsFiltrados.map((m) => {
+      const par = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
+      const bul = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
+      const flete = parseFloat(m.flete) || 0;
+      const libras = parseFloat(m.pesoBascula) || 0;
+      return {
+        Folio: m.folio || "", Fecha: m.fecha || "", Remisión: m.remision || "",
+        Viaje: m.viaje || "", Rancho: m.rancho || "", Lote: m.lote || "",
+        "Resp. cosecha": m.responsableCosecha || "", Consignado: m.consignado || "",
+        Distribuidor: m.distribuidor || "", Origen: m.origen || "", Destino: m.destino || "",
+        Línea: m.linea || "", Chofer: m.chofer || "", "Placa tracto": m.placaTracto || "",
+        "No. caja": m.economicoCaja || "",
+        Productos: (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", "),
+        Parrillas: par, Bultos: bul, "Peso báscula": libras || "",
+        Flete: flete || "", "$/lb": flete > 0 && libras > 0 ? Number((flete / libras).toFixed(2)) : "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Movimientos_Campo_${hoy}.xlsx`);
+  };
+
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const INP_TBL = "w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -214,7 +242,10 @@ export default function Modulo8() {
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
           <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movimientos.length}` : ""})</span>
-          <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
+          <div className="flex items-center gap-2">
+            <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 flex items-center gap-1">📊 Excel{hayFiltros ? " (filtrado)" : ""}</button>
+            <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
+          </div>
         </div>
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-white">
