@@ -4,6 +4,7 @@ import SearchSelect from "../components/SearchSelect";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import ColaTabs from "../components/ColaTabs";
+import AvisoSAP from "../components/AvisoSAP";
 
 // Muestreo vacío. Arrastra lote y fecha del movimiento de campo, y un folio
 // consecutivo autogenerado.
@@ -139,6 +140,8 @@ export default function Modulo9() {
 
   const upd = (campo, val) => setForm((f) => ({ ...f, [campo]: val }));
 
+  // ⚠️ [SAP] Al dar recepción se generará en SAP: una ORDEN DE PRODUCCIÓN (materia prima)
+  // y una ORDEN DE COMPRA (flete, documentado). Integración pendiente — ver docs/CLAUDE.md.
   const confirmar = () => {
     const recepcion = { ...form, estado: "recibido", confirmado: new Date().toLocaleString("es-MX") };
     setMovimientos((prev) => prev.map((m) => (m.id === recibir.id ? { ...m, recepcion } : m)));
@@ -233,6 +236,8 @@ export default function Modulo9() {
         {stat("Rechazados", rechazados.length, "text-red-600")}
         {stat("Con novedad", conNovedad.length, "text-amber-600")}
       </div>
+
+      <AvisoSAP>Al dar recepción se generará en SAP una <b>orden de producción</b> (materia prima) y una <b>orden de compra</b> (flete).</AvisoSAP>
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },

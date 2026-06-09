@@ -196,7 +196,14 @@ inspectores, lugares.
 - **SAP es mono-empresa (NO multiempresas).** Cada empresa (SL Agrícola, CAT, CACO, SL
   Produce) se sube a SAP por separado. En viajes **consolidados** NO se sube una sola
   vez: hay que **dividir y subir la parte de cada empresa de forma independiente**.
-  - Dónde aplica: el "subir a SAP" vive en **Embarques (M5)** y **Consolidado (M6)**.
+  - **Puntos de integración con SAP (definidos por el negocio):**
+    - **Recepción en Empaque (M9):** al dar recepción → genera una **orden de producción**
+      (materia prima) y una **orden de compra** (flete, documentado).
+    - **Consolidado y Fletes (M6):** impacta SAP con el **manifiesto** y los **fletes**
+      (por empresa).
+  - **Cómo ubicarlos:** en el código busca el marcador `[SAP]` (comentarios
+    `// ⚠️ [SAP] …`); en la app, el componente `AvisoSAP` pone un letrero amarillo en
+    esos módulos. (Integración real **pendiente de implementar**.)
   - **Hueco actual / a corregir**: `carga.sapStatus` es **un solo flag por carga**, pero
     debería ser **por empresa** (como ya están `carga.manifiestos[eid]` y el reparto de
     flete). Plan: `sapStatus` por empresa (`{ [eid]: "pendiente"|"cargado", docSAP? }`);

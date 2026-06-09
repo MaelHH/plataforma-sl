@@ -2,6 +2,7 @@ import { useState, Fragment } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
+import AvisoSAP from "../components/AvisoSAP";
 
 export default function Modulo6() {
   const { cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
@@ -18,6 +19,9 @@ export default function Modulo6() {
   const [fFecha, setFFecha] = useState("");
   const [fSap, setFSap] = useState("");
 
+  // ⚠️ [SAP] Punto de integración: aquí se impacta SAP con el MANIFIESTO y los FLETES,
+  // dividido por empresa (SAP es mono-empresa). Hoy solo togglea sapStatus; integración
+  // real pendiente — ver docs/CLAUDE.md.
   const toggleSap = (i) =>
     setCargasEmbarques((prev) => prev.map((c, j) => (j === i ? { ...c, sapStatus: c.sapStatus === "pendiente" ? "cargado" : "pendiente" } : c)));
 
@@ -112,6 +116,8 @@ export default function Modulo6() {
           <span className="text-sm font-medium text-gray-700">Cristina</span>
         </div>
       </div>
+
+      <AvisoSAP monoEmpresa>Aquí se impacta SAP con el <b>manifiesto</b> y los <b>fletes</b>.</AvisoSAP>
 
       {cargasEmbarques.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
