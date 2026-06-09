@@ -13,7 +13,7 @@ function lunesActual() {
 }
 
 export default function Modulo3() {
-  const { trailers, setTrailers, requerimientoGen, requerimientoMeta, setRequerimientoMeta, lineas, setLineas } = useDatos();
+  const { trailers, setTrailers, requerimientoGen, requerimientoMeta, setRequerimientoMeta, lineas, setLineas, bitacora } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const dias = calcularDias(semana);
   const [diaFil, setDiaFil] = useState(dias[0]);
@@ -25,12 +25,15 @@ export default function Modulo3() {
   const [inspForm, setInspForm] = useState(null);
   const [inspTab, setInspTab] = useState("precarga"); // "precarga" | "alergenos"
   const [tabPool, setTabPool] = useState("activos"); // activos | historial
+  const [verHistorial, setVerHistorial] = useState(false); // historial de cambios del requerimiento
   const [lineaNueva, setLineaNueva] = useState(false);
   const [choferNuevo, setChoferNuevo] = useState(false);
   const [tractoNuevo, setTractoNuevo] = useState(false);
   const [cajaNueva, setCajaNueva] = useState(false);
 
   const reqSemana = requerimientoGen[semana] || [];
+  // Historial de envíos/cambios del requerimiento de esta semana (de la bitácora, ya persistida en el backend)
+  const histReq = bitacora.filter((e) => e.evento === "requerimiento_enviado" && e.meta?.semana === semana);
 
   const hoy = trailers.filter((t) => t.fecha === diaFil);
   const hoyActivos = hoy.filter((t) => t.status !== "en_ruta");
@@ -390,6 +393,9 @@ export default function Modulo3() {
             <div className="text-xs text-gray-500 mt-0.5">Requerimiento total enviado desde Cálculo de Trailers</div>
             {requerimientoMeta[semana]?.enviadoLocal && (
               <div className="text-xs text-blue-600 mt-1 font-medium">📥 Recibido de {requerimientoMeta[semana].actor || "Kiko"}: {requerimientoMeta[semana].enviadoLocal}</div>
+            )}
+            {histReq.length > 0 && (
+              <button onClick={() => setVerHistorial(true)} className="text-xs mt-1 px-2 py-0.5 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-700 font-medium">🕑 Historial de cambios ({histReq.length})</button>
             )}
           </div>
           <div className="text-right">
@@ -892,6 +898,52 @@ export default function Modulo3() {
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
               <button onClick={() => setCatChoferes(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: historial de cambios del requerimiento (auditoría, desde la bitácora) */}
+      {verHistorial && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">🕑 Historial de cambios del requerimiento</div>
+                <div className="text-xs text-gray-500 mt-0.5">Semana {etiquetaSemana(semana)} · cada envío de Kiko queda guardado (auditoría)</div>
+              </div>
+              <button onClick={() => setVerHistorial(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {histReq.length === 0 ? (
+                <div className="text-xs text-gray-400 italic text-center py-6">Sin envíos registrados para esta semana.</div>
+              ) : histReq.map((e, idx) => {
+                const c = e.meta?.cambios;
+                const esUltimo = idx === 0;
+                return (
+                  <div key={e.id} className={`border rounded-xl p-3 ${esUltimo ? "border-blue-300 bg-blue-50/40" : "border-gray-200"}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-xs font-semibold text-gray-800">{e.actor || "Kiko"} · {e.tsLocal}{esUltimo && <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">actual</span>}</div>
+                      <div className="text-xs text-gray-500">{e.meta?.trailers ?? "—"} trailer(s) · {e.meta?.lineas ?? "—"} línea(s)</div>
+                    </div>
+                    {c ? (
+                      c.items?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.items.map((it) => {
+                            const d = it.ahora - it.antes;
+                            return <span key={it.dest} className="text-[11px] bg-white border border-gray-200 rounded px-1.5 py-0.5">{it.dest}: {it.antes}→{it.ahora} <span className={d > 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>({d > 0 ? "+" : ""}{d})</span></span>;
+                          })}
+                        </div>
+                      ) : <div className="text-[11px] text-gray-500 mt-1">Se ajustaron detalles (fechas/tipo) sin cambiar totales por destino.</div>
+                    ) : (
+                      <div className="text-[11px] text-gray-500 mt-1">Envío inicial del requerimiento.</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end sticky bottom-0 bg-white">
+              <button onClick={() => setVerHistorial(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Cerrar</button>
             </div>
           </div>
         </div>

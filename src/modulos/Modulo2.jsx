@@ -158,7 +158,8 @@ export default function Modulo2() {
       destino: "Tablero de Tráfico (Mónica)",
       ref: semana,
       detalle: `Requerimiento de ${reqs.length} línea(s) / ${total} trailer(s) enviado a Mónica${cambios ? " (ACTUALIZADO)" : ""}`,
-      meta: { semana, lineas: reqs.length, trailers: total, cambios },
+      // Guardamos la foto COMPLETA del requerimiento enviado + el diff (auditoría).
+      meta: { semana, lineas: reqs.length, trailers: total, cambios, reqs },
     });
     setGenerado(true);
     setTimeout(() => setGenerado(false), 2500);
