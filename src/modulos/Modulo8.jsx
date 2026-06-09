@@ -54,7 +54,8 @@ export default function Modulo8() {
     if (estado === "recibido" || estado === "rechazado") {
       window.alert(`⚠️ Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`);
     }
-    setForm({ ...m });
+    // Protege contra registros del backend que vienen sin todos los campos.
+    setForm({ ...formVacio, ...m, cargaItems: m.cargaItems?.length ? m.cargaItems : [{ prod: "", parrillas: "", bultos: "" }] });
     setEditId(m.id);
     resetModos();
     setModal(true);
@@ -247,8 +248,8 @@ export default function Modulo8() {
               </thead>
               <tbody>
                 {movsFiltrados.map((m) => {
-                  const par = m.cargaItems.reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
-                  const bul = m.cargaItems.reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
+                  const par = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
+                  const bul = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
                   const flete = parseFloat(m.flete) || 0;
                   const libras = parseFloat(m.pesoBascula) || 0;
                   const costoLb = flete > 0 && libras > 0 ? flete / libras : 0;
@@ -513,7 +514,7 @@ export default function Modulo8() {
                 <table className="w-full">
                   <thead><tr className="text-gray-400"><th className="text-left py-1">Producto</th><th className="text-right py-1">Parrillas</th><th className="text-right py-1">Bultos</th></tr></thead>
                   <tbody>
-                    {verMov.cargaItems.map((it, i) => (
+                    {(verMov.cargaItems || []).map((it, i) => (
                       <tr key={i} className="border-t border-gray-100"><td className="py-1">{it.prod || "—"}</td><td className="py-1 text-right">{it.parrillas || "—"}</td><td className="py-1 text-right">{it.bultos || "—"}</td></tr>
                     ))}
                   </tbody>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Component } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
 
@@ -41,6 +41,25 @@ const MODULOS = [
   { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃", desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
   { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: "📄", desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
 ];
+
+// Red de seguridad: si un módulo truena, muestra el error y deja seguir navegando.
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error("Error en módulo:", error, info); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <div className="text-sm font-semibold text-red-700 mb-1">⚠️ Este módulo tuvo un error</div>
+          <div className="text-xs text-red-600 mb-3 font-mono break-words">{String(this.state.error?.message || this.state.error)}</div>
+          <div className="text-xs text-gray-500">Cambia de módulo en el menú o recarga la página. Si pasa seguido, dime qué dice el mensaje de arriba.</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [moduloActivo, setModuloActivo] = useState(0);
@@ -92,19 +111,21 @@ export default function App() {
                 <span><b className="text-gray-900">{modActivo.nombre}.</b> {modActivo.desc}</span>
               </div>
             )}
-            {moduloActivo === 0 && <Dashboard />}
-            {moduloActivo === 1 && <Modulo1 />}
-            {moduloActivo === 2 && <Modulo2 />}
-            {moduloActivo === 3 && <Modulo3 />}
-            {moduloActivo === 4 && <Modulo4 />}
-            {moduloActivo === 5 && <Modulo5 />}
-            {moduloActivo === 6 && <Modulo6 />}
-            {moduloActivo === 7 && <Modulo7 />}
-            {moduloActivo === 8 && <Modulo8 />}
-            {moduloActivo === 9 && <Modulo9 />}
-            {moduloActivo === 10 && <Modulo10 />}
-            {moduloActivo === 11 && <Modulo11 />}
-            {moduloActivo === 12 && <Modulo12 />}
+            <ErrorBoundary key={moduloActivo}>
+              {moduloActivo === 0 && <Dashboard />}
+              {moduloActivo === 1 && <Modulo1 />}
+              {moduloActivo === 2 && <Modulo2 />}
+              {moduloActivo === 3 && <Modulo3 />}
+              {moduloActivo === 4 && <Modulo4 />}
+              {moduloActivo === 5 && <Modulo5 />}
+              {moduloActivo === 6 && <Modulo6 />}
+              {moduloActivo === 7 && <Modulo7 />}
+              {moduloActivo === 8 && <Modulo8 />}
+              {moduloActivo === 9 && <Modulo9 />}
+              {moduloActivo === 10 && <Modulo10 />}
+              {moduloActivo === 11 && <Modulo11 />}
+              {moduloActivo === 12 && <Modulo12 />}
+            </ErrorBoundary>
           </div>
         </div>
       </div>
