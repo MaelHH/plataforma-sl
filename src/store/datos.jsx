@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components --
    El store expone a propósito constantes/utilidades junto al DatosProvider. */
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import * as api from "./api";
 
 // ─── PERSISTENCIA (localStorage) + ESTAMPADO DE TIEMPO ───
 // Versionado de la llave para poder migrar el esquema cuando llegue el backend real.
@@ -362,6 +363,66 @@ const mockTrailers = [
   { id: 3, fecha: "Mar 27", origen: ORIGEN, dest: "McAllen", status: "esperando", linea: "Logística Sinaloa", contacto: "Pedro Vega", numero: "669-777-1122", chofer: "José Luis Torres", marcaModelo: "Freightliner Cascadia", placaTracto: "GHI-9012", economicoCaja: "C-0103", placaCaja: "PQR-8765", licencia: "LIC-33180", telefono: "669-444-2211", flete: "22000" },
 ];
 
+// ─── CONEXIÓN AL BACKEND ───
+// Configuración de cada clave del estado: `tipo` ("col" = colección con id, "kv" =
+// objeto único) y `seed` (catálogo inicial a sembrar si el backend viene vacío).
+const CONFIG = {
+  trailers: { tipo: "col", seed: null },
+  cargasEmbarques: { tipo: "col", seed: null },
+  monitoreo: { tipo: "kv", seed: null },
+  catalogo: { tipo: "col", seed: CATALOGO_INICIAL },
+  cultivos: { tipo: "col", seed: CULTIVOS_INICIAL },
+  programa: { tipo: "kv", seed: null },
+  requerimientoGen: { tipo: "kv", seed: null },
+  requerimientoMeta: { tipo: "kv", seed: null },
+  responsables: { tipo: "kv", seed: ["Francisco Flores", "Kiko"] },
+  lineas: { tipo: "col", seed: LINEAS_INICIAL },
+  movimientos: { tipo: "col", seed: null },
+  cargaCampo: { tipo: "col", seed: CARGA_CAMPO_INICIAL },
+  ubicaciones: { tipo: "kv", seed: UBICACIONES_INICIAL },
+  bitacora: { tipo: "col", seed: null },
+  materiales: { tipo: "col", seed: MATERIALES_INICIAL },
+  importaciones: { tipo: "col", seed: null },
+  defectosCalidad: { tipo: "kv", seed: DEFECTOS_POR_CULTIVO_INICIAL },
+  inspectoresCalidad: { tipo: "kv", seed: INSPECTORES_QC_INICIAL },
+  lugaresCalidad: { tipo: "kv", seed: LUGARES_QC_INICIAL },
+  zonas: { tipo: "kv", seed: ZONAS_INICIAL },
+  consignados: { tipo: "kv", seed: CONSIGNADOS_INICIAL },
+};
+
+// Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
+// Colecciones: upsert por id (PUT) + borrar lo que ya no está. Singletons: PUT completo.
+async function sincronizarBackend(snap, prevRef) {
+  const prev = prevRef.current || {};
+  for (const k of Object.keys(CONFIG)) {
+    const cfg = CONFIG[k];
+    const nuevo = snap[k];
+    const anterior = prev[k];
+    if (JSON.stringify(nuevo) === JSON.stringify(anterior)) continue;
+    try {
+      if (cfg.tipo === "col") {
+        const prevArr = Array.isArray(anterior) ? anterior : [];
+        const nuevoArr = Array.isArray(nuevo) ? nuevo : [];
+        const prevMap = new Map(prevArr.map((x) => [x.id, x]));
+        const ids = new Set(nuevoArr.map((x) => x.id));
+        for (const item of nuevoArr) {
+          if (item.id == null) continue;
+          const p = prevMap.get(item.id);
+          if (!p || JSON.stringify(p) !== JSON.stringify(item)) await api.actualizar(k, item.id, item);
+        }
+        for (const item of prevArr) {
+          if (item.id != null && !ids.has(item.id)) await api.borrar(k, item.id);
+        }
+      } else {
+        await api.putState(k, nuevo);
+      }
+    } catch (e) {
+      console.warn("Error sincronizando", k, e);
+    }
+  }
+  return snap;
+}
+
 // ─── CONTEXT ───
 const DatosContext = createContext(null);
 
@@ -390,16 +451,75 @@ export function DatosProvider({ children }) {
   const [zonas, setZonas] = useState(guardado.zonas ?? ZONAS_INICIAL); // catálogo de zonas (campo Viaje)
   const [consignados, setConsignados] = useState(guardado.consignados ?? CONSIGNADOS_INICIAL); // catálogo compartido consignado/distribuidor
 
-  // Persistir todo el estado en localStorage ante cualquier cambio.
+  const [fuente, setFuente] = useState("local"); // "local" | "backend"
+  const [cargando, setCargando] = useState(true);
+
+  const setters = {
+    trailers: setTrailers, cargasEmbarques: setCargasEmbarques, monitoreo: setMonitoreo,
+    catalogo: setCatalogo, cultivos: setCultivos, programa: setPrograma,
+    requerimientoGen: setRequerimientoGen, requerimientoMeta: setRequerimientoMeta,
+    responsables: setResponsables, lineas: setLineas, movimientos: setMovimientos,
+    cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
+    materiales: setMateriales, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
+    inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
+    zonas: setZonas, consignados: setConsignados,
+  };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados };
+  const prevRef = useRef(null);
+  const debRef = useRef(null);
+
+  // Carga inicial: intenta el backend; si no responde, se queda en modo local.
   useEffect(() => {
-    const estado = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
-    } catch (e) {
-      // Puede excederse la cuota (p. ej. fotos base64 grandes). No rompemos la app.
-      console.warn("No se pudo guardar en localStorage:", e);
-    }
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados]);
+    let cancel = false;
+    (async () => {
+      if (!(await api.disponible())) { setCargando(false); return; }
+      try {
+        const cargado = {};
+        for (const k of Object.keys(CONFIG)) {
+          const cfg = CONFIG[k];
+          let val;
+          if (cfg.tipo === "col") {
+            val = await api.getColeccion(k);
+            if ((!Array.isArray(val) || val.length === 0) && cfg.seed) {
+              for (const item of cfg.seed) await api.crear(k, item);
+              val = cfg.seed;
+            }
+            val = Array.isArray(val) ? val : [];
+          } else {
+            val = await api.getState(k);
+            if (val == null && cfg.seed != null) { await api.putState(k, cfg.seed); val = cfg.seed; }
+            if (val == null) val = {};
+          }
+          if (cancel) return;
+          cargado[k] = val;
+          setters[k]?.(val);
+        }
+        if (cancel) return;
+        prevRef.current = cargado;
+        setFuente("backend");
+      } catch (e) {
+        console.warn("No se pudo cargar del backend; se usa modo local:", e);
+      } finally {
+        if (!cancel) setCargando(false);
+      }
+    })();
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persistencia: localStorage SIEMPRE (caché offline); backend si está conectado (debounced).
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(valores)); }
+    catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
+
+    if (fuente !== "backend" || cargando) return;
+    clearTimeout(debRef.current);
+    const snap = valores;
+    debRef.current = setTimeout(() => {
+      sincronizarBackend(snap, prevRef).then((s) => { prevRef.current = s; });
+    }, 800);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -418,6 +538,7 @@ export function DatosProvider({ children }) {
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
+    fuente, cargando, // estado de conexión al backend
   };
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }

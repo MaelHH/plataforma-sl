@@ -1,6 +1,15 @@
 import { useState } from "react";
 import "./index.css";
-import { DatosProvider } from "./store/datos";
+import { DatosProvider, useDatos } from "./store/datos";
+
+// Indicador de conexión al backend (verde = backend, ámbar = modo local).
+function EstadoConexion() {
+  const { fuente, cargando } = useDatos();
+  if (cargando) return <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-300 animate-pulse"></span>Conectando…</span>;
+  return fuente === "backend"
+    ? <span className="flex items-center gap-1.5 text-green-600"><span className="w-2 h-2 rounded-full bg-green-500"></span>Backend conectado</span>
+    : <span className="flex items-center gap-1.5 text-amber-600" title="El backend no respondió; los datos se guardan solo en este navegador."><span className="w-2 h-2 rounded-full bg-amber-500"></span>Modo local (sin backend)</span>;
+}
 import Dashboard from "./modulos/Dashboard";
 import Modulo1 from "./modulos/Modulo1";
 import Modulo2 from "./modulos/Modulo2";
@@ -68,8 +77,9 @@ export default function App() {
               </button>
             ))}
           </nav>
-          <div className="p-4 border-t border-gray-100 text-xs text-gray-400">
-            📍 Los Mochis, Sinaloa
+          <div className="p-4 border-t border-gray-100 text-xs text-gray-400 space-y-1">
+            <EstadoConexion />
+            <div>📍 Los Mochis, Sinaloa</div>
           </div>
         </div>
 
