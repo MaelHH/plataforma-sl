@@ -26,7 +26,10 @@ const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(
 const KG_TEORICO_BIN = 240;
 const fmt = (n) => Math.round(n || 0).toLocaleString();
 const binsRecibidosDe = (m) => parseInt(m.vaciado?.binsRecibidos, 10) || 0;
-const kgRecibidosDe = (m) => parseFloat(m.vaciado?.kgRecibidos) || 0;
+// kg recibido: si no se capturó a mano, usa el PESO de la recepción (lo que realmente llegó).
+const kgRecibidosDe = (m) => (m.vaciado && "kgRecibidos" in m.vaciado)
+  ? (parseFloat(m.vaciado.kgRecibidos) || 0)
+  : (parseFloat(m.recepcion?.pesoRecibido) || 0);
 const binsVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
 const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 // Mermado = bins que NO entraron a empaque (se descartan); también salen del piso.
@@ -177,7 +180,7 @@ export default function Modulo9() {
 
   // ── Vaciado a Empaque ── (bins y kg SIEMPRE reales, capturados a mano)
   // base() conserva todo el objeto vaciado (incluye mermas) para no perder datos al editar.
-  const baseVac = (m) => ({ binsRecibidos: "", kgRecibidos: "", eventos: [], mermas: [], ...(m.vaciado || {}) });
+  const baseVac = (m) => ({ eventos: [], mermas: [], ...(m.vaciado || {}) });
   const setRecibido = (id, campo, val) =>
     setMovimientos((prev) => prev.map((m) => (m.id === id
       ? { ...m, vaciado: { ...baseVac(m), [campo]: val } }
@@ -378,7 +381,7 @@ export default function Modulo9() {
                     <th className="text-center px-3 py-2 font-medium">Recibido (bins / kg)</th>
                     <th className="text-left px-3 py-2 font-medium">Vaciados a empaque</th>
                     <th className="text-left px-3 py-2 font-medium">Mermados (no entró)</th>
-                    <th className="text-right px-3 py-2 font-medium">Disponible en piso</th>
+                    <th className="text-right px-3 py-2 font-medium">Piso (inventario)</th>
                     <th className="text-center px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -392,6 +395,10 @@ export default function Modulo9() {
                     const mer = m.vaciado?.mermas || [];
                     const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
                     const completo = recB > 0 && pisoB === 0;
+                    const rcp = m.recepcion || {};
+                    const refBul = parseInt(rcp.bultosRecibidos, 10) || 0;
+                    // kg recibido a mostrar en el input: lo capturado, o el peso de la recepción.
+                    const kgRecVal = (m.vaciado && "kgRecibidos" in m.vaciado) ? m.vaciado.kgRecibidos : (rcp.pesoRecibido ?? "");
                     return (
                       <tr key={m.id} className={`border-b border-gray-100 ${completo ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
                         <td className="px-3 py-2 font-bold text-red-600 whitespace-nowrap align-top">{m.remision || m.folio || "—"}</td>
@@ -400,8 +407,12 @@ export default function Modulo9() {
                           <div className="flex items-center justify-center gap-1.5">
                             <input type="number" className="w-16 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.binsRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "binsRecibidos", e.target.value)} placeholder="bins" />
                             <span className="text-gray-300">/</span>
-                            <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.kgRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
+                            <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
                             {recB > 0 && <button type="button" onClick={() => setRecibido(m.id, "kgRecibidos", String(recB * KG_TEORICO_BIN))} title={`Peso teórico: ${recB} × 240 = ${fmt(recB * KG_TEORICO_BIN)} kg (cuando no hay tiempo de pesar)`} className="text-[10px] text-indigo-500 hover:text-indigo-700 whitespace-nowrap">≈240</button>}
+                          </div>
+                          <div className="text-[10px] text-gray-400 text-center mt-1 leading-tight">
+                            recepción: {parseInt(rcp.parrillasRecibidas, 10) || 0} parr · {refBul} bultos · {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg
+                            {refBul > 0 && <button type="button" onClick={() => setRecibido(m.id, "binsRecibidos", String(refBul))} className="ml-1 text-indigo-500 hover:text-indigo-700 underline">usar como bins</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-gray-600 align-top">
@@ -435,14 +446,19 @@ export default function Modulo9() {
                           ) : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-right whitespace-nowrap align-top">
-                          {pisoB > 0 || (recB > 0 && pisoK > 0)
-                            ? <div>
-                                <span className="font-semibold text-amber-700">{pisoB} bins · {fmt(pisoK)} kg</span>
-                                <div className="text-[10px] text-gray-400">rec {recB} − vac {vacB}{merB ? ` − mer ${merB}` : ""} = {pisoB}</div>
-                              </div>
-                            : completo
-                              ? <span className="font-semibold text-green-700">✓ sin piso</span>
-                              : <span className="text-gray-300">—</span>}
+                          {completo
+                            ? <span className="font-semibold text-green-700">✓ sin piso</span>
+                            : pisoB > 0
+                              ? <div>
+                                  <span className="font-semibold text-amber-700">{pisoB} bins · {fmt(pisoK)} kg</span>
+                                  <div className="text-[10px] text-gray-400">rec {recB} − vac {vacB}{merB ? ` − mer ${merB}` : ""} = {pisoB} bins</div>
+                                </div>
+                              : recK > 0
+                                ? <div>
+                                    <span className="font-semibold text-amber-700">{fmt(pisoK)} kg</span>
+                                    <div className="text-[10px] text-gray-400">recibido sin pesar a bins · captura bins para cerrar</div>
+                                  </div>
+                                : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-center align-top">
                           {(recB > 0 || recK > 0) && !completo && (
