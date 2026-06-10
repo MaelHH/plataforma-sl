@@ -25,10 +25,12 @@ const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(
 // Solo en la visual "Vaciado por hora" mostramos bins teóricos = kg / 240.
 const KG_POR_BIN_TEO = 240;
 const fmt = (n) => Math.round(n || 0).toLocaleString();
-// kg recibido: si no se capturó a mano, usa el PESO de la recepción (lo que realmente llegó).
-const kgRecibidosDe = (m) => (m.vaciado && "kgRecibidos" in m.vaciado)
-  ? (parseFloat(m.vaciado.kgRecibidos) || 0)
-  : (parseFloat(m.recepcion?.pesoRecibido) || 0);
+// kg recibido: si no se capturó a mano, usa el PESO de la recepción; y si esta vino vacía,
+// cae al peso de báscula del movimiento de campo (blindaje para fletes sin peso en recepción).
+const kgRecibidosDe = (m) => {
+  if (m.vaciado && "kgRecibidos" in m.vaciado) return parseFloat(m.vaciado.kgRecibidos) || 0;
+  return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+};
 const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
 const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
@@ -527,7 +529,7 @@ export default function Modulo9() {
                     const completo = recK > 0 && pisoK === 0;  // kg manda
                     const rcp = m.recepcion || {};
                     // kg recibido a mostrar en el input: lo capturado, o el peso de la recepción.
-                    const kgRecVal = (m.vaciado && "kgRecibidos" in m.vaciado) ? m.vaciado.kgRecibidos : (rcp.pesoRecibido ?? "");
+                    const kgRecVal = (m.vaciado && "kgRecibidos" in m.vaciado) ? m.vaciado.kgRecibidos : (rcp.pesoRecibido || m.pesoBascula || "");
                     return (
                       <tr key={m.id} className={`border-b border-gray-100 ${completo ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
                         <td className="px-3 py-2 whitespace-nowrap align-top">
