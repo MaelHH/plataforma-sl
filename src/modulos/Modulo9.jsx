@@ -21,8 +21,10 @@ function hoyISO() {
 // Suma de un campo numérico en los renglones de carga
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
 
-// ── Vaciado a Empaque ── Bins y kg SIEMPRE reales (capturados a mano, sin conversión).
-const fmt = (n) => (n || 0).toLocaleString();
+// ── Vaciado a Empaque ── Bins y kg reales. El kg teórico (240/bin) es solo un atajo
+// para cuando no hay tiempo de pesar; nunca se aplica automático.
+const KG_TEORICO_BIN = 240;
+const fmt = (n) => Math.round(n || 0).toLocaleString();
 const binsRecibidosDe = (m) => parseInt(m.vaciado?.binsRecibidos, 10) || 0;
 const kgRecibidosDe = (m) => parseFloat(m.vaciado?.kgRecibidos) || 0;
 const binsVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
@@ -162,8 +164,8 @@ export default function Modulo9() {
   };
 
   const reabrir = (id) => {
-    if (!window.confirm("¿Reabrir este flete? Volverá a 'Por recibir'.")) return;
-    setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined } : m)));
+    if (!window.confirm("¿Reabrir este flete? Volverá a 'Por recibir' y se borrará el vaciado registrado.")) return;
+    setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined, vaciado: undefined } : m)));
   };
 
   // ── Vaciado a Empaque ── (bins y kg SIEMPRE reales, capturados a mano)
@@ -193,7 +195,7 @@ export default function Modulo9() {
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
   const confirmarRechazo = () => {
     const recepcion = { estado: "rechazado", comentario: rechazoComent, confirmado: new Date().toLocaleString("es-MX") };
-    setMovimientos((prev) => prev.map((m) => (m.id === rechazoMov.id ? { ...m, recepcion } : m)));
+    setMovimientos((prev) => prev.map((m) => (m.id === rechazoMov.id ? { ...m, recepcion, vaciado: undefined } : m)));
     setRechazoMov(null); setRechazoComent("");
     cerrarMuestreo(); cerrarInspeccion();
   };
@@ -225,7 +227,10 @@ export default function Modulo9() {
   const totBinsVac = recibidos.reduce((a, m) => a + binsVaciadosDe(m), 0);
   const totKgVac = recibidos.reduce((a, m) => a + kgVaciadosDe(m), 0);
   const totBinsPiso = recibidos.reduce((a, m) => a + binsEnPisoDe(m), 0);
-  const totKgPiso = recibidos.reduce((a, m) => a + kgEnPisoDe(m), 0);
+  // Kg en piso: solo de los que aún tienen bins físicos en piso (los completos ya no cuentan).
+  const totKgPiso = recibidos.filter((m) => binsEnPisoDe(m) > 0).reduce((a, m) => a + kgEnPisoDe(m), 0);
+  // Merma del día: en los ya vaciados por completo, kg recibidos − kg vaciados (puede ser + o −).
+  const totMerma = vaciadosHist.reduce((a, m) => a + (kgRecibidosDe(m) - kgVaciadosDe(m)), 0);
 
   // Desglose por hora: agrupa todos los vaciados del día por franja horaria.
   const porHora = (() => {
@@ -356,6 +361,7 @@ export default function Modulo9() {
                             <input type="number" className="w-16 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.binsRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "binsRecibidos", e.target.value)} placeholder="bins" />
                             <span className="text-gray-300">/</span>
                             <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.kgRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
+                            {recB > 0 && <button type="button" onClick={() => setRecibido(m.id, "kgRecibidos", String(recB * KG_TEORICO_BIN))} title={`Peso teórico: ${recB} × 240 = ${fmt(recB * KG_TEORICO_BIN)} kg (cuando no hay tiempo de pesar)`} className="text-[10px] text-indigo-500 hover:text-indigo-700 whitespace-nowrap">≈240</button>}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-gray-600 align-top">
@@ -373,10 +379,12 @@ export default function Modulo9() {
                             </div>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap align-top">
-                          {pisoB > 0 || pisoK > 0
-                            ? <span className="text-amber-700">{pisoB} bins<br /><span className="text-[11px] font-normal">{fmt(pisoK)} kg</span></span>
-                            : (recB > 0 ? <span className="text-green-700">✓ vaciado</span> : <span className="text-gray-300">—</span>)}
+                        <td className="px-3 py-2 text-right whitespace-nowrap align-top">
+                          {pisoB > 0
+                            ? <span className="font-semibold text-amber-700">{pisoB} bins<br /><span className="text-[11px] font-normal">{fmt(pisoK)} kg en piso</span></span>
+                            : completo
+                              ? <div><span className="font-semibold text-green-700">✓ vaciado</span>{Math.round(recK - vacK) !== 0 && <div className="text-[10px] text-gray-400">merma {fmt(recK - vacK)} kg</div>}</div>
+                              : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-center align-top">
                           {(recB > 0 || recK > 0) && !completo && <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>}
@@ -405,6 +413,12 @@ export default function Modulo9() {
                   </div>
                 ))}
               </div>
+              {Math.round(totMerma) !== 0 && (
+                <div className="text-[11px] text-gray-500 mt-2">
+                  Merma acumulada (ya vaciados): <b className={totMerma > 0 ? "text-amber-700" : "text-blue-600"}>{fmt(totMerma)} kg</b>
+                  <span className="text-gray-400"> · recibido − vaciado de los manifiestos completos</span>
+                </div>
+              )}
             </div>
             {/* Desglose por hora */}
             <div>
@@ -890,7 +904,15 @@ export default function Modulo9() {
                 <input type="number" className={INP} value={vaciarBins} onChange={(e) => setVaciarBins(e.target.value)} placeholder="Ej: 5" autoFocus />
               </div>
               <div>
-                <label className={LBL}>Kg vaciados (real)</label>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-xs text-gray-500">Kg vaciados (real)</label>
+                  {(parseInt(vaciarBins, 10) || 0) > 0 && (
+                    <button type="button" onClick={() => setVaciarKg(String((parseInt(vaciarBins, 10) || 0) * KG_TEORICO_BIN))}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800">
+                      usar teórico (≈240/bin = {fmt((parseInt(vaciarBins, 10) || 0) * KG_TEORICO_BIN)} kg)
+                    </button>
+                  )}
+                </div>
                 <input type="number" className={INP} value={vaciarKg} onChange={(e) => setVaciarKg(e.target.value)} placeholder="Ej: 1,180" />
               </div>
             </div>
