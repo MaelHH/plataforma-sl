@@ -378,7 +378,7 @@ export default function Modulo9() {
                     <th className="text-center px-3 py-2 font-medium">Recibido (bins / kg)</th>
                     <th className="text-left px-3 py-2 font-medium">Vaciados a empaque</th>
                     <th className="text-left px-3 py-2 font-medium">Mermados (no entró)</th>
-                    <th className="text-right px-3 py-2 font-medium">En piso</th>
+                    <th className="text-right px-3 py-2 font-medium">Disponible en piso</th>
                     <th className="text-center px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
@@ -435,8 +435,11 @@ export default function Modulo9() {
                           ) : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-right whitespace-nowrap align-top">
-                          {pisoB > 0
-                            ? <span className="font-semibold text-amber-700">{pisoB} bins<br /><span className="text-[11px] font-normal">{fmt(pisoK)} kg en piso</span></span>
+                          {pisoB > 0 || (recB > 0 && pisoK > 0)
+                            ? <div>
+                                <span className="font-semibold text-amber-700">{pisoB} bins · {fmt(pisoK)} kg</span>
+                                <div className="text-[10px] text-gray-400">rec {recB} − vac {vacB}{merB ? ` − mer ${merB}` : ""} = {pisoB}</div>
+                              </div>
                             : completo
                               ? <span className="font-semibold text-green-700">✓ sin piso</span>
                               : <span className="text-gray-300">—</span>}
@@ -951,7 +954,13 @@ export default function Modulo9() {
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">⬇️ Vaciar a producción — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
-              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsEnPisoDe(vaciarMov)} bins · {fmt(kgEnPisoDe(vaciarMov))} kg</b> · se registra la hora actual.</div>
+              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>Disponible en piso: <b>{binsEnPisoDe(vaciarMov)} bins · {fmt(kgEnPisoDe(vaciarMov))} kg</b></span>
+                {binsEnPisoDe(vaciarMov) > 0 && (
+                  <button type="button" onClick={() => { setVaciarBins(String(binsEnPisoDe(vaciarMov))); setVaciarKg(kgEnPisoDe(vaciarMov) ? String(kgEnPisoDe(vaciarMov)) : ""); }}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 underline">usar todo el piso</button>
+                )}
+              </div>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
@@ -985,7 +994,13 @@ export default function Modulo9() {
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">⚠️ Mermar (no entró a empaque) — {mermarMov.remision || mermarMov.folio || "—"}</div>
-              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsEnPisoDe(mermarMov)} bins · {fmt(kgEnPisoDe(mermarMov))} kg</b> · estos bins se descartan (no se procesan).</div>
+              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>Disponible en piso: <b>{binsEnPisoDe(mermarMov)} bins · {fmt(kgEnPisoDe(mermarMov))} kg</b> · se descartan (no se procesan).</span>
+                {binsEnPisoDe(mermarMov) > 0 && (
+                  <button type="button" onClick={() => { setMermarBins(String(binsEnPisoDe(mermarMov))); setMermarKg(kgEnPisoDe(mermarMov) ? String(kgEnPisoDe(mermarMov)) : ""); }}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 underline">usar todo el piso</button>
+                )}
+              </div>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
