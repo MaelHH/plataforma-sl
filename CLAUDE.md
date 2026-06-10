@@ -161,15 +161,15 @@ se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Aliment
 ### Empaque (id 9) — Empaque
 Antes "Recepción en Empaque". Pestañas: **Por recibir** / **Vaciado a Empaque** /
 **Historial por Recibir** / **Historial Vaciado a Empaque** / **Historial Mermado (No
-entró a Empaque)**. En **Vaciado a Empaque** los recibidos bajan como bins en piso: se
-capturan **bins y kg SIEMPRE reales** (sin conversión automática; el botón **≈240/bin**
-es solo atajo de peso teórico cuando no hay tiempo de pesar). Por manifiesto se puede
-**Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se descarta);
-ambos descuentan del piso. Al quedar **0 bins en piso** sale a su historial (Vaciado o
-Mermado según a dónde se fueron los bins). El ✕ en cada vaciado/merma lo regresa al piso.
-Abajo: resumen del día (recibidos / vaciados / mermados / en piso, bins y kg) y **vaciado
-por hora**. Guardado en `m.vaciado` =
-`{ binsRecibidos, kgRecibidos, eventos:[{bins,kg,hora}], mermas:[{bins,kg,hora,motivo}] }`.
+entró a Empaque)**. El **Vaciado a Empaque se maneja TODO en kg** (la unidad que manda):
+el **kg recibido** se prellena con el peso de la recepción (editable). Por manifiesto se
+puede **Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se
+descarta, con motivo); ambos descuentan del piso. Piso (inventario) = recibido − vaciado
+− merma. Al quedar **0 kg en piso** sale a su historial (Vaciado o Mermado según a dónde
+se fue el producto). El ✕ en cada vaciado/merma lo regresa al piso. Abajo: resumen del
+día (recibidos / vaciados / mermados / en piso, en kg) y **vaciado por hora** (kg + bins
+teóricos = kg/240, solo en esa visual). Guardado en `m.vaciado` =
+`{ kgRecibidos, eventos:[{kg,hora}], mermas:[{kg,hora,motivo}] }`.
 Confirma la **llegada de los fletes** de M8. Por flete: **muestreo de calidad** (QCI por
 gramos, folio autogenerado, arrastra datos del movimiento), **inspección REG-EMP-24**
 (vehículo/producto), **dar recepción** (declarado vs recibido), y **Rechazo** (con
