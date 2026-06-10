@@ -176,7 +176,7 @@ export default function Modulo8() {
       const par = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
       const bul = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
       const flete = parseFloat(m.flete) || 0;
-      const libras = parseFloat(m.pesoBascula) || 0;
+      const pesoKg = parseFloat(m.pesoBascula) || 0;
       return {
         Folio: m.folio || "", Fecha: m.fecha || "", Remisión: m.remision || "",
         Viaje: m.viaje || "", Rancho: m.rancho || "", Lote: m.lote || "",
@@ -185,8 +185,8 @@ export default function Modulo8() {
         Línea: m.linea || "", Chofer: m.chofer || "", "Placa tracto": m.placaTracto || "",
         "No. caja": m.economicoCaja || "",
         Productos: (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", "),
-        Parrillas: par, Bultos: bul, "Peso báscula": libras || "",
-        Flete: flete || "", "$/lb": flete > 0 && libras > 0 ? Number((flete / libras).toFixed(2)) : "",
+        Parrillas: par, Bultos: bul, "Peso báscula (kg)": pesoKg || "",
+        Flete: flete || "", "$/kg": flete > 0 && pesoKg > 0 ? Number((flete / pesoKg).toFixed(2)) : "",
       };
     });
     const ws = XLSX.utils.json_to_sheet(filas);
@@ -274,7 +274,7 @@ export default function Modulo8() {
                   <th className="text-right px-3 py-2 font-medium">Parrillas</th>
                   <th className="text-right px-3 py-2 font-medium">Bultos</th>
                   <th className="text-right px-3 py-2 font-medium">Flete</th>
-                  <th className="text-right px-3 py-2 font-medium">$/lb</th>
+                  <th className="text-right px-3 py-2 font-medium">$/kg</th>
                   <th className="text-center px-3 py-2 font-medium"></th>
                 </tr>
               </thead>
@@ -283,8 +283,8 @@ export default function Modulo8() {
                   const par = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
                   const bul = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
                   const flete = parseFloat(m.flete) || 0;
-                  const libras = parseFloat(m.pesoBascula) || 0;
-                  const costoLb = flete > 0 && libras > 0 ? flete / libras : 0;
+                  const pesoKg = parseFloat(m.pesoBascula) || 0;
+                  const costoKg = flete > 0 && pesoKg > 0 ? flete / pesoKg : 0;
                   return (
                     <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
@@ -295,7 +295,7 @@ export default function Modulo8() {
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
                       <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-gray-700">{costoLb ? "$" + costoLb.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "/lb" : "—"}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-gray-700">{costoKg ? "$" + costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "/kg" : "—"}</td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                         <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
@@ -422,7 +422,7 @@ export default function Modulo8() {
               {/* Remisión + báscula */}
               <div className="grid grid-cols-2 gap-2">
                 <div><label className={LBL}>Remisión</label><input className={INP} value={form.remision} onChange={(e) => setForm((f) => ({ ...f, remision: e.target.value }))} /></div>
-                <div><label className={LBL}>Peso de báscula</label><input className={INP} value={form.pesoBascula} onChange={(e) => setForm((f) => ({ ...f, pesoBascula: e.target.value }))} placeholder="kg / lb" /></div>
+                <div><label className={LBL}>Peso de báscula (kg)</label><input className={INP} value={form.pesoBascula} onChange={(e) => setForm((f) => ({ ...f, pesoBascula: e.target.value }))} placeholder="kg" /></div>
               </div>
 
               {/* Transporte */}
@@ -536,7 +536,7 @@ export default function Modulo8() {
                   ["Lote", verMov.lote], ["Inicio cosecha", verMov.horaInicio], ["Término cosecha", verMov.horaTermino],
                   ["Resp. cosecha", verMov.responsableCosecha], ["Consignado", verMov.consignado], ["Distribuidor", verMov.distribuidor],
                   ["Origen", verMov.origen], ["Destino", verMov.destino], ["Remisión", verMov.remision],
-                  ["Peso báscula", verMov.pesoBascula],
+                  ["Peso báscula (kg)", verMov.pesoBascula],
                 ].map(([l, v]) => (
                   <div key={l}><div className="text-gray-400 mb-0.5">{l}</div><div className="text-gray-800 font-semibold">{v || "—"}</div></div>
                 ))}

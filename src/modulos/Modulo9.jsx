@@ -289,7 +289,7 @@ export default function Modulo9() {
     return [
       { l: "Parrillas", sal: par || 0, lle: parseFloat(f.parrillasRecibidas) || 0 },
       { l: "Bultos", sal: bul || 0, lle: parseFloat(f.bultosRecibidos) || 0 },
-      { l: "Peso (lb)", sal: peso || 0, lle: parseFloat(f.pesoRecibido) || 0 },
+      { l: "Peso (kg)", sal: peso || 0, lle: parseFloat(f.pesoRecibido) || 0 },
     ];
   };
 
