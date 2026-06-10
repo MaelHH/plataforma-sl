@@ -161,9 +161,11 @@ se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Aliment
 ### Empaque (id 9) — Empaque
 Antes "Recepción en Empaque". Tres pestañas: **Por recibir** / **Vaciado a Empaque** /
 **Historial**. La pestaña **Vaciado a Empaque** muestra los recibidos como bins en piso:
-se registra el vaciado a producción (bins + hora, 1 bin = 240 kg) y un resumen del día
-(bins recibidos / procesados / en piso, en bins y kg). Guardado en `m.vaciado` =
-`{ binsRecibidos, eventos:[{bins, kg, hora}] }`.
+se capturan **bins y kg SIEMPRE reales** (recibidos y por cada vaciado — sin conversión
+automática, no se asume 240 kg/bin) y cada vaciado registra su **hora**. Abajo hay dos
+resúmenes: **del día** (recibidos / procesados / en piso, en bins y kg) y **vaciado por
+hora** (franjas horarias). Guardado en `m.vaciado` =
+`{ binsRecibidos, kgRecibidos, eventos:[{bins, kg, hora}] }`.
 Confirma la **llegada de los fletes** de M8. Por flete: **muestreo de calidad** (QCI por
 gramos, folio autogenerado, arrastra datos del movimiento), **inspección REG-EMP-24**
 (vehículo/producto), **dar recepción** (declarado vs recibido), y **Rechazo** (con

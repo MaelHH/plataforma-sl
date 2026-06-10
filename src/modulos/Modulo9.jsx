@@ -21,13 +21,14 @@ function hoyISO() {
 // Suma de un campo numérico en los renglones de carga
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
 
-// ── Vaciado a Empaque (bins en piso) ── 1 bin = 240 kg ──
-const KG_POR_BIN = 240;
-const binsKg = (n) => `${n} bin${n === 1 ? "" : "s"} (${(n * KG_POR_BIN).toLocaleString()} kg)`;
-// bins recibidos: el valor capturado en Vaciado, o por defecto los bultos recibidos.
-const binsRecibidosDe = (m) => m.vaciado?.binsRecibidos ?? (parseInt(m.recepcion?.bultosRecibidos, 10) || 0);
+// ── Vaciado a Empaque ── Bins y kg SIEMPRE reales (capturados a mano, sin conversión).
+const fmt = (n) => (n || 0).toLocaleString();
+const binsRecibidosDe = (m) => parseInt(m.vaciado?.binsRecibidos, 10) || 0;
+const kgRecibidosDe = (m) => parseFloat(m.vaciado?.kgRecibidos) || 0;
 const binsVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
+const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 const binsEnPisoDe = (m) => Math.max(0, binsRecibidosDe(m) - binsVaciadosDe(m));
+const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m));
 
 // ── Inspección de vehículo y producto (REG-EMP-24) ──
 // Texto de los productos del flete para prellenar el campo "Producto".
@@ -165,17 +166,20 @@ export default function Modulo9() {
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined } : m)));
   };
 
-  // ── Vaciado a Empaque ──
-  const setBinsRecibidos = (id, n) =>
-    setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, vaciado: { binsRecibidos: parseInt(n, 10) || 0, eventos: m.vaciado?.eventos || [] } } : m)));
+  // ── Vaciado a Empaque ── (bins y kg SIEMPRE reales, capturados a mano)
+  const setRecibido = (id, campo, val) =>
+    setMovimientos((prev) => prev.map((m) => (m.id === id
+      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? "", kgRecibidos: m.vaciado?.kgRecibidos ?? "", eventos: m.vaciado?.eventos || [], [campo]: val } }
+      : m)));
   const abrirVaciar = (m) => { setVaciarBins(""); setVaciarKg(""); setVaciarMov(m); };
   const confirmarVaciado = () => {
     const b = parseInt(vaciarBins, 10) || 0;
-    if (b <= 0) { setVaciarMov(null); return; }
+    const kg = parseFloat(vaciarKg) || 0;
+    if (b <= 0 && kg <= 0) { setVaciarMov(null); return; }
     const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-    const ev = { bins: b, kg: vaciarKg ? parseFloat(vaciarKg) : b * KG_POR_BIN, hora };
+    const ev = { bins: b, kg, hora };
     setMovimientos((prev) => prev.map((m) => (m.id === vaciarMov.id
-      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? (parseInt(m.recepcion?.bultosRecibidos, 10) || 0), eventos: [...(m.vaciado?.eventos || []), ev] } }
+      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? "", kgRecibidos: m.vaciado?.kgRecibidos ?? "", eventos: [...(m.vaciado?.eventos || []), ev] } }
       : m)));
     setVaciarMov(null); setVaciarBins(""); setVaciarKg("");
   };
@@ -207,8 +211,23 @@ export default function Modulo9() {
 
   // Totales del día para el resumen de Vaciado a Empaque (sobre los recibidos)
   const totBinsRec = recibidos.reduce((a, m) => a + binsRecibidosDe(m), 0);
+  const totKgRec = recibidos.reduce((a, m) => a + kgRecibidosDe(m), 0);
   const totBinsVac = recibidos.reduce((a, m) => a + binsVaciadosDe(m), 0);
+  const totKgVac = recibidos.reduce((a, m) => a + kgVaciadosDe(m), 0);
   const totBinsPiso = recibidos.reduce((a, m) => a + binsEnPisoDe(m), 0);
+  const totKgPiso = recibidos.reduce((a, m) => a + kgEnPisoDe(m), 0);
+
+  // Desglose por hora: agrupa todos los vaciados del día por franja horaria.
+  const porHora = (() => {
+    const acc = {};
+    recibidos.forEach((m) => (m.vaciado?.eventos || []).forEach((e) => {
+      const h = String(e.hora || "").split(":")[0] || "—";
+      if (!acc[h]) acc[h] = { bins: 0, kg: 0 };
+      acc[h].bins += parseInt(e.bins, 10) || 0;
+      acc[h].kg += parseFloat(e.kg) || 0;
+    }));
+    return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
+  })();
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -280,48 +299,57 @@ export default function Modulo9() {
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
             <span className="text-sm font-semibold text-gray-900">En piso para vaciar a producción ({recibidos.length})</span>
-            <span className="text-xs text-gray-400 ml-2">· lo recibido baja a piso y se va vaciando a producción</span>
+            <span className="text-xs text-gray-400 ml-2">· captura bins y kg reales (recibidos y vaciados); el sistema no asume conversión</span>
           </div>
           {recibidos.length === 0 ? (
             <div className="text-xs text-gray-400 text-center py-8 italic">Aún no hay fletes recibidos. Al dar recepción pasan aquí para vaciarlos a producción.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs" style={{ minWidth: "920px" }}>
+              <table className="w-full text-xs" style={{ minWidth: "980px" }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                     <th className="text-left px-3 py-2 font-medium">Folio / Remisión</th>
                     <th className="text-left px-3 py-2 font-medium">Producto</th>
-                    <th className="text-right px-3 py-2 font-medium">Bins recibidos</th>
-                    <th className="text-left px-3 py-2 font-medium">Vaciados (hora · bins)</th>
+                    <th className="text-center px-3 py-2 font-medium">Recibido (bins / kg)</th>
+                    <th className="text-left px-3 py-2 font-medium">Vaciados (hora · bins · kg)</th>
                     <th className="text-right px-3 py-2 font-medium">En piso</th>
                     <th className="text-center px-3 py-2 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {recibidos.map((m) => {
-                    const rec = binsRecibidosDe(m);
-                    const vac = binsVaciadosDe(m);
-                    const piso = binsEnPisoDe(m);
+                    const recB = binsRecibidosDe(m), recK = kgRecibidosDe(m);
+                    const pisoB = binsEnPisoDe(m), pisoK = kgEnPisoDe(m);
+                    const vacB = binsVaciadosDe(m), vacK = kgVaciadosDe(m);
                     const ev = m.vaciado?.eventos || [];
                     const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
+                    const completo = recB > 0 && pisoB === 0;
                     return (
-                      <tr key={m.id} className={`border-b border-gray-100 ${rec > 0 && piso === 0 ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
-                        <td className="px-3 py-2 font-bold text-red-600 whitespace-nowrap">{m.remision || m.folio || "—"}</td>
-                        <td className="px-3 py-2 text-gray-700">{prod}</td>
-                        <td className="px-3 py-2 text-right">
-                          <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={rec || ""} onChange={(e) => setBinsRecibidos(m.id, e.target.value)} placeholder="bins" />
+                      <tr key={m.id} className={`border-b border-gray-100 ${completo ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
+                        <td className="px-3 py-2 font-bold text-red-600 whitespace-nowrap align-top">{m.remision || m.folio || "—"}</td>
+                        <td className="px-3 py-2 text-gray-700 align-top">{prod}</td>
+                        <td className="px-3 py-2 align-top">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <input type="number" className="w-16 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.binsRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "binsRecibidos", e.target.value)} placeholder="bins" />
+                            <span className="text-gray-300">/</span>
+                            <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={m.vaciado?.kgRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-gray-600">
-                          {vac > 0 ? (
+                        <td className="px-3 py-2 text-gray-600 align-top">
+                          {vacB > 0 || vacK > 0 ? (
                             <div>
-                              <span className="font-semibold text-green-700">{vac} bins</span>
-                              <div className="text-[10px] text-gray-400">{ev.map((e) => `${e.hora} (${e.bins})`).join(" · ")}</div>
+                              <span className="font-semibold text-green-700">{vacB} bins · {fmt(vacK)} kg</span>
+                              <div className="text-[10px] text-gray-400">{ev.map((e) => `${e.hora} (${e.bins}b · ${fmt(e.kg)}kg)`).join(" · ")}</div>
                             </div>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{piso > 0 ? <span className="text-amber-700">{binsKg(piso)}</span> : (rec > 0 ? <span className="text-green-700">✓ vaciado</span> : <span className="text-gray-300">—</span>)}</td>
-                        <td className="px-3 py-2 text-center">
-                          {piso > 0 && <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>}
+                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap align-top">
+                          {pisoB > 0 || pisoK > 0
+                            ? <span className="text-amber-700">{pisoB} bins<br /><span className="text-[11px] font-normal">{fmt(pisoK)} kg</span></span>
+                            : (recB > 0 ? <span className="text-green-700">✓ vaciado</span> : <span className="text-gray-300">—</span>)}
+                        </td>
+                        <td className="px-3 py-2 text-center align-top">
+                          {(recB > 0 || recK > 0) && !completo && <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>}
                         </td>
                       </tr>
                     );
@@ -330,20 +358,56 @@ export default function Modulo9() {
               </table>
             </div>
           )}
-          <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
-            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día · 1 bin = {KG_POR_BIN} kg</div>
-            <div className="grid grid-cols-3 gap-2 max-w-2xl">
-              {[
-                ["Bins recibidos", totBinsRec, "text-gray-900"],
-                ["Bins procesados (vaciados)", totBinsVac, "text-green-700"],
-                ["Bins en piso", totBinsPiso, "text-amber-700"],
-              ].map(([l, n, c]) => (
-                <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-gray-500 mb-1">{l}</div>
-                  <div className={`text-xl font-bold ${c}`}>{n}</div>
-                  <div className="text-[11px] text-gray-400">{(n * KG_POR_BIN).toLocaleString()} kg</div>
+          <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 grid md:grid-cols-2 gap-4">
+            {/* Resumen del día */}
+            <div>
+              <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (bins · kg reales)</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  ["Recibidos", totBinsRec, totKgRec, "text-gray-900"],
+                  ["Procesados (vaciados)", totBinsVac, totKgVac, "text-green-700"],
+                  ["En piso", totBinsPiso, totKgPiso, "text-amber-700"],
+                ].map(([l, b, k, c]) => (
+                  <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                    <div className="text-[10px] text-gray-500 mb-1">{l}</div>
+                    <div className={`text-xl font-bold ${c}`}>{b} <span className="text-xs font-medium">bins</span></div>
+                    <div className="text-[11px] text-gray-400">{fmt(k)} kg</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Desglose por hora */}
+            <div>
+              <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora</div>
+              {porHora.length === 0 ? (
+                <div className="text-xs text-gray-400 italic py-2">Aún no se registran vaciados hoy.</div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                        <th className="text-left px-3 py-1.5 font-medium">Hora</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Bins</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Kg</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porHora.map(([h, v]) => (
+                        <tr key={h} className="border-b border-gray-50 last:border-0">
+                          <td className="px-3 py-1.5 font-medium text-gray-700">{h}:00 – {String(Number(h) + 1).padStart(2, "0")}:00</td>
+                          <td className="px-3 py-1.5 text-right text-gray-700">{v.bins}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.kg)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-50 font-semibold text-gray-800">
+                        <td className="px-3 py-1.5">Total</td>
+                        <td className="px-3 py-1.5 text-right">{totBinsVac}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(totKgVac)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -788,16 +852,15 @@ export default function Modulo9() {
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">⬇️ Vaciar a producción — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
-              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsKg(binsEnPisoDe(vaciarMov))}</b> · se registra la hora actual.</div>
+              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsEnPisoDe(vaciarMov)} bins · {fmt(kgEnPisoDe(vaciarMov))} kg</b> · se registra la hora actual.</div>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <label className={LBL}>Bins vaciados</label>
+                <label className={LBL}>Bins vaciados (real)</label>
                 <input type="number" className={INP} value={vaciarBins} onChange={(e) => setVaciarBins(e.target.value)} placeholder="Ej: 5" autoFocus />
-                {vaciarBins && <div className="text-[11px] text-gray-400 mt-1">= {(parseInt(vaciarBins, 10) || 0) * KG_POR_BIN} kg (a 240 kg/bin)</div>}
               </div>
               <div>
-                <label className={LBL}>Kg procesados <span className="text-gray-400">(opcional, si difiere de 240×bins)</span></label>
+                <label className={LBL}>Kg vaciados (real)</label>
                 <input type="number" className={INP} value={vaciarKg} onChange={(e) => setVaciarKg(e.target.value)} placeholder="Ej: 1,180" />
               </div>
             </div>
