@@ -166,9 +166,11 @@ el **kg recibido** se prellena con el peso de la recepción (editable). Por mani
 puede **Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se
 descarta, con motivo); ambos descuentan del piso. Piso (inventario) = recibido − vaciado
 − merma. Al quedar **0 kg en piso** sale a su historial (Vaciado o Mermado según a dónde
-se fue el producto). El ✕ en cada vaciado/merma lo regresa al piso. Abajo: resumen del
-día (recibidos / vaciados / mermados / en piso, en kg) y **vaciado por hora** (kg + bins
-teóricos = kg/240, solo en esa visual). Guardado en `m.vaciado` =
+se fue el producto). El ✕ en cada vaciado/merma lo regresa al piso. Cada manifiesto y los
+reportes se agrupan por **lote** (`lote || rancho || consignado`). Abajo: resumen del día
+(recibidos / vaciados / mermados / en piso, en kg), **Inventario por lote** (recibido /
+vaciado / mermado / % merma / en piso) y **Vaciado por hora y lote** (kg + bins teóricos
+= kg/240, solo en esa visual). Guardado en `m.vaciado` =
 `{ kgRecibidos, eventos:[{kg,hora}], mermas:[{kg,hora,motivo}] }`.
 Confirma la **llegada de los fletes** de M8. Por flete: **muestreo de calidad** (QCI por
 gramos, folio autogenerado, arrastra datos del movimiento), **inspección REG-EMP-24**
