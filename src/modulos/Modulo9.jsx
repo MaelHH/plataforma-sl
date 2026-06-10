@@ -347,21 +347,120 @@ export default function Modulo9() {
       </div>
 
       {(tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado") && (
-        <div className="mb-3">
-          <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {[
-              ["Recibidos", totKgRec, "text-gray-900"],
-              ["Vaciados a empaque", totKgVac, "text-green-700"],
-              ["Mermados (no entró)", totKgMer, "text-red-700"],
-              ["En piso", totKgPiso, "text-amber-700"],
-            ].map(([l, k, c]) => (
-              <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
-                <div className="text-[10px] text-gray-500 mb-1">{l}</div>
-                <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
-                <div className="text-[10px] text-gray-400">≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
+        <div className="mb-3 space-y-4">
+          {/* Resumen del día */}
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                ["Recibidos", totKgRec, "text-gray-900"],
+                ["Vaciados a empaque", totKgVac, "text-green-700"],
+                ["Mermados (no entró)", totKgMer, "text-red-700"],
+                ["En piso", totKgPiso, "text-amber-700"],
+              ].map(([l, k, c]) => (
+                <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-gray-500 mb-1">{l}</div>
+                  <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
+                  <div className="text-[10px] text-gray-400">≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Inventario y merma por lote */}
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Inventario por lote (kg) <span className="text-gray-300 normal-case">· piso = recibido − vaciado − merma</span></div>
+            {porLote.length === 0 ? (
+              <div className="text-xs text-gray-400 italic py-2">Aún no hay recibidos hoy.</div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                <table className="w-full text-xs" style={{ minWidth: "460px" }}>
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                      <th className="text-left px-3 py-1.5 font-medium">Lote</th>
+                      <th className="text-right px-3 py-1.5 font-medium">Recibido</th>
+                      <th className="text-right px-3 py-1.5 font-medium">Vaciado</th>
+                      <th className="text-right px-3 py-1.5 font-medium">Mermado</th>
+                      <th className="text-right px-3 py-1.5 font-medium">% merma</th>
+                      <th className="text-right px-3 py-1.5 font-medium">En piso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {porLote.map(([lote, v]) => {
+                      const disp = v.vac + v.mer;
+                      const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
+                      return (
+                        <tr key={lote} className="border-b border-gray-50 last:border-0">
+                          <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.rec)}</td>
+                          <td className="px-3 py-1.5 text-right text-green-700">{fmt(v.vac)}</td>
+                          <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-600">{pct ? pct.toFixed(0) + "%" : "—"}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold text-amber-700">{fmt(v.piso)}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="bg-gray-50 font-semibold text-gray-800">
+                      <td className="px-3 py-1.5">Total</td>
+                      <td className="px-3 py-1.5 text-right">{fmt(totKgRec)}</td>
+                      <td className="px-3 py-1.5 text-right text-green-700">{fmt(totKgVac)}</td>
+                      <td className="px-3 py-1.5 text-right text-red-700">{fmt(totKgMer)}</td>
+                      <td className="px-3 py-1.5 text-right">{totMermaPct ? totMermaPct.toFixed(0) + "%" : "—"}</td>
+                      <td className="px-3 py-1.5 text-right text-amber-700">{fmt(totKgPiso)}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* Vaciado por hora y lote (kg + bins teóricos de 240 kg) */}
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· bins teóricos = kg / 240</span></div>
+            {porHora.length === 0 ? (
+              <div className="text-xs text-gray-400 italic py-2">Aún no se registran vaciados hoy.</div>
+            ) : (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+                <table className="w-full text-xs" style={{ minWidth: `${260 + lotesHora.length * 90}px` }}>
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                      <th className="text-left px-3 py-1.5 font-medium">Hora</th>
+                      {lotesHora.map((lote) => (
+                        <th key={lote} className="text-right px-3 py-1.5 font-medium whitespace-nowrap">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
+                      ))}
+                      <th className="text-right px-3 py-1.5 font-medium bg-gray-100">Total (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {porHora.map(([h, v]) => (
+                      <tr key={h} className="border-b border-gray-50 last:border-0">
+                        <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">{h}:00 – {String(Number(h) + 1).padStart(2, "0")}:00</td>
+                        {lotesHora.map((lote) => (
+                          <td key={lote} className="px-3 py-1.5 text-right text-gray-700">{v.lotes[lote] ? fmt(v.lotes[lote]) : <span className="text-gray-300">—</span>}</td>
+                        ))}
+                        <td className="px-3 py-1.5 text-right font-semibold text-gray-800 bg-gray-50">{fmt(v.kg)}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-gray-100 font-semibold text-gray-800">
+                      <td className="px-3 py-1.5">Total (kg)</td>
+                      {lotesHora.map((lote) => {
+                        const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
+                        return <td key={lote} className="px-3 py-1.5 text-right">{fmt(t)}</td>;
+                      })}
+                      <td className="px-3 py-1.5 text-right">{fmt(totKgVac)}</td>
+                    </tr>
+                    <tr className="bg-gray-50 text-gray-500 text-[10px]">
+                      <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
+                      {lotesHora.map((lote) => {
+                        const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
+                        return <td key={lote} className="px-3 py-1 text-right">≈{(t / KG_POR_BIN_TEO).toFixed(1)}</td>;
+                      })}
+                      <td className="px-3 py-1 text-right">≈{(totKgVac / KG_POR_BIN_TEO).toFixed(1)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -498,105 +597,6 @@ export default function Modulo9() {
               </table>
             </div>
           )}
-          <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 space-y-4">
-            <div className="space-y-4">
-              {/* Inventario y merma por lote */}
-              <div>
-                <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Inventario por lote (kg) <span className="text-gray-300 normal-case">· piso = recibido − vaciado − merma</span></div>
-                {porLote.length === 0 ? (
-                  <div className="text-xs text-gray-400 italic py-2">Aún no hay recibidos hoy.</div>
-                ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                    <table className="w-full text-xs" style={{ minWidth: "460px" }}>
-                      <thead>
-                        <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
-                          <th className="text-left px-3 py-1.5 font-medium">Lote</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Recibido</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Vaciado</th>
-                          <th className="text-right px-3 py-1.5 font-medium">Mermado</th>
-                          <th className="text-right px-3 py-1.5 font-medium">% merma</th>
-                          <th className="text-right px-3 py-1.5 font-medium">En piso</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {porLote.map(([lote, v]) => {
-                          const disp = v.vac + v.mer;
-                          const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
-                          return (
-                            <tr key={lote} className="border-b border-gray-50 last:border-0">
-                              <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}</td>
-                              <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.rec)}</td>
-                              <td className="px-3 py-1.5 text-right text-green-700">{fmt(v.vac)}</td>
-                              <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
-                              <td className="px-3 py-1.5 text-right text-gray-600">{pct ? pct.toFixed(0) + "%" : "—"}</td>
-                              <td className="px-3 py-1.5 text-right font-semibold text-amber-700">{fmt(v.piso)}</td>
-                            </tr>
-                          );
-                        })}
-                        <tr className="bg-gray-50 font-semibold text-gray-800">
-                          <td className="px-3 py-1.5">Total</td>
-                          <td className="px-3 py-1.5 text-right">{fmt(totKgRec)}</td>
-                          <td className="px-3 py-1.5 text-right text-green-700">{fmt(totKgVac)}</td>
-                          <td className="px-3 py-1.5 text-right text-red-700">{fmt(totKgMer)}</td>
-                          <td className="px-3 py-1.5 text-right">{totMermaPct ? totMermaPct.toFixed(0) + "%" : "—"}</td>
-                          <td className="px-3 py-1.5 text-right text-amber-700">{fmt(totKgPiso)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Vaciado por hora y lote (kg + bins teóricos de 240 kg) */}
-              <div>
-                <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· bins teóricos = kg / 240</span></div>
-                {porHora.length === 0 ? (
-                  <div className="text-xs text-gray-400 italic py-2">Aún no se registran vaciados hoy.</div>
-                ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                    <table className="w-full text-xs" style={{ minWidth: `${260 + lotesHora.length * 90}px` }}>
-                      <thead>
-                        <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
-                          <th className="text-left px-3 py-1.5 font-medium">Hora</th>
-                          {lotesHora.map((lote) => (
-                            <th key={lote} className="text-right px-3 py-1.5 font-medium whitespace-nowrap">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
-                          ))}
-                          <th className="text-right px-3 py-1.5 font-medium bg-gray-100">Total (kg)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {porHora.map(([h, v]) => (
-                          <tr key={h} className="border-b border-gray-50 last:border-0">
-                            <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">{h}:00 – {String(Number(h) + 1).padStart(2, "0")}:00</td>
-                            {lotesHora.map((lote) => (
-                              <td key={lote} className="px-3 py-1.5 text-right text-gray-700">{v.lotes[lote] ? fmt(v.lotes[lote]) : <span className="text-gray-300">—</span>}</td>
-                            ))}
-                            <td className="px-3 py-1.5 text-right font-semibold text-gray-800 bg-gray-50">{fmt(v.kg)}</td>
-                          </tr>
-                        ))}
-                        <tr className="bg-gray-100 font-semibold text-gray-800">
-                          <td className="px-3 py-1.5">Total (kg)</td>
-                          {lotesHora.map((lote) => {
-                            const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
-                            return <td key={lote} className="px-3 py-1.5 text-right">{fmt(t)}</td>;
-                          })}
-                          <td className="px-3 py-1.5 text-right">{fmt(totKgVac)}</td>
-                        </tr>
-                        <tr className="bg-gray-50 text-gray-500 text-[10px]">
-                          <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
-                          {lotesHora.map((lote) => {
-                            const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
-                            return <td key={lote} className="px-3 py-1 text-right">≈{(t / KG_POR_BIN_TEO).toFixed(1)}</td>;
-                          })}
-                          <td className="px-3 py-1 text-right">≈{(totKgVac / KG_POR_BIN_TEO).toFixed(1)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
