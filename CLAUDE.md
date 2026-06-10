@@ -159,13 +159,17 @@ ubicaciones. Filtros (texto + destino + rancho) y **botón Editar** (avisa si el
 se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Alimenta a M9.
 
 ### Empaque (id 9) — Empaque
-Antes "Recepción en Empaque". Tres pestañas: **Por recibir** / **Vaciado a Empaque** /
-**Historial**. La pestaña **Vaciado a Empaque** muestra los recibidos como bins en piso:
-se capturan **bins y kg SIEMPRE reales** (recibidos y por cada vaciado — sin conversión
-automática, no se asume 240 kg/bin) y cada vaciado registra su **hora**. Abajo hay dos
-resúmenes: **del día** (recibidos / procesados / en piso, en bins y kg) y **vaciado por
-hora** (franjas horarias). Guardado en `m.vaciado` =
-`{ binsRecibidos, kgRecibidos, eventos:[{bins, kg, hora}] }`.
+Antes "Recepción en Empaque". Pestañas: **Por recibir** / **Vaciado a Empaque** /
+**Historial por Recibir** / **Historial Vaciado a Empaque** / **Historial Mermado (No
+entró a Empaque)**. En **Vaciado a Empaque** los recibidos bajan como bins en piso: se
+capturan **bins y kg SIEMPRE reales** (sin conversión automática; el botón **≈240/bin**
+es solo atajo de peso teórico cuando no hay tiempo de pesar). Por manifiesto se puede
+**Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se descarta);
+ambos descuentan del piso. Al quedar **0 bins en piso** sale a su historial (Vaciado o
+Mermado según a dónde se fueron los bins). El ✕ en cada vaciado/merma lo regresa al piso.
+Abajo: resumen del día (recibidos / vaciados / mermados / en piso, bins y kg) y **vaciado
+por hora**. Guardado en `m.vaciado` =
+`{ binsRecibidos, kgRecibidos, eventos:[{bins,kg,hora}], mermas:[{bins,kg,hora,motivo}] }`.
 Confirma la **llegada de los fletes** de M8. Por flete: **muestreo de calidad** (QCI por
 gramos, folio autogenerado, arrastra datos del movimiento), **inspección REG-EMP-24**
 (vehículo/producto), **dar recepción** (declarado vs recibido), y **Rechazo** (con

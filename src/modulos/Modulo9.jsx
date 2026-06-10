@@ -29,8 +29,11 @@ const binsRecibidosDe = (m) => parseInt(m.vaciado?.binsRecibidos, 10) || 0;
 const kgRecibidosDe = (m) => parseFloat(m.vaciado?.kgRecibidos) || 0;
 const binsVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
 const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
-const binsEnPisoDe = (m) => Math.max(0, binsRecibidosDe(m) - binsVaciadosDe(m));
-const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m));
+// Mermado = bins que NO entraron a empaque (se descartan); también salen del piso.
+const binsMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
+const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
+const binsEnPisoDe = (m) => Math.max(0, binsRecibidosDe(m) - binsVaciadosDe(m) - binsMermadosDe(m));
+const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
 
 // ── Inspección de vehículo y producto (REG-EMP-24) ──
 // Texto de los productos del flete para prellenar el campo "Producto".
@@ -67,6 +70,10 @@ export default function Modulo9() {
   const [vaciarMov, setVaciarMov] = useState(null); // movimiento al que se le registra un vaciado
   const [vaciarBins, setVaciarBins] = useState("");
   const [vaciarKg, setVaciarKg] = useState("");
+  const [mermarMov, setMermarMov] = useState(null); // movimiento al que se le registra una merma (no entró a empaque)
+  const [mermarBins, setMermarBins] = useState("");
+  const [mermarKg, setMermarKg] = useState("");
+  const [mermarMotivo, setMermarMotivo] = useState("");
   const [q, setQ] = useState("");
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
   const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
@@ -169,9 +176,11 @@ export default function Modulo9() {
   };
 
   // ── Vaciado a Empaque ── (bins y kg SIEMPRE reales, capturados a mano)
+  // base() conserva todo el objeto vaciado (incluye mermas) para no perder datos al editar.
+  const baseVac = (m) => ({ binsRecibidos: "", kgRecibidos: "", eventos: [], mermas: [], ...(m.vaciado || {}) });
   const setRecibido = (id, campo, val) =>
     setMovimientos((prev) => prev.map((m) => (m.id === id
-      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? "", kgRecibidos: m.vaciado?.kgRecibidos ?? "", eventos: m.vaciado?.eventos || [], [campo]: val } }
+      ? { ...m, vaciado: { ...baseVac(m), [campo]: val } }
       : m)));
   const abrirVaciar = (m) => { setVaciarBins(""); setVaciarKg(""); setVaciarMov(m); };
   const confirmarVaciado = () => {
@@ -181,7 +190,7 @@ export default function Modulo9() {
     const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
     const ev = { bins: b, kg, hora };
     setMovimientos((prev) => prev.map((m) => (m.id === vaciarMov.id
-      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? "", kgRecibidos: m.vaciado?.kgRecibidos ?? "", eventos: [...(m.vaciado?.eventos || []), ev] } }
+      ? { ...m, vaciado: { ...baseVac(m), eventos: [...(m.vaciado?.eventos || []), ev] } }
       : m)));
     setVaciarMov(null); setVaciarBins(""); setVaciarKg("");
   };
@@ -189,6 +198,25 @@ export default function Modulo9() {
   const cancelarVaciado = (movId, idx) =>
     setMovimientos((prev) => prev.map((m) => (m.id === movId
       ? { ...m, vaciado: { ...m.vaciado, eventos: (m.vaciado?.eventos || []).filter((_, i) => i !== idx) } }
+      : m)));
+
+  // ── Mermado (no entró a empaque) ── también descuenta del piso.
+  const abrirMermar = (m) => { setMermarBins(""); setMermarKg(""); setMermarMotivo(""); setMermarMov(m); };
+  const confirmarMerma = () => {
+    const b = parseInt(mermarBins, 10) || 0;
+    const kg = parseFloat(mermarKg) || 0;
+    if (b <= 0 && kg <= 0) { setMermarMov(null); return; }
+    const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    const ev = { bins: b, kg, hora, motivo: mermarMotivo.trim() };
+    setMovimientos((prev) => prev.map((m) => (m.id === mermarMov.id
+      ? { ...m, vaciado: { ...baseVac(m), mermas: [...(m.vaciado?.mermas || []), ev] } }
+      : m)));
+    setMermarMov(null); setMermarBins(""); setMermarKg(""); setMermarMotivo("");
+  };
+  // Cancela una merma registrada: vuelve al piso.
+  const cancelarMerma = (movId, idx) =>
+    setMovimientos((prev) => prev.map((m) => (m.id === movId
+      ? { ...m, vaciado: { ...m.vaciado, mermas: (m.vaciado?.mermas || []).filter((_, i) => i !== idx) } }
       : m)));
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
@@ -205,8 +233,10 @@ export default function Modulo9() {
   // Vaciado: "completo" = ya se capturaron bins recibidos y no queda nada en piso.
   const vaciadoCompleto = (m) => binsRecibidosDe(m) > 0 && binsEnPisoDe(m) === 0;
   const enPisoLista = recibidos.filter((m) => !vaciadoCompleto(m));   // pestaña "Vaciado a Empaque"
-  const vaciadosHist = recibidos.filter(vaciadoCompleto);             // pestaña "Historial Vaciado a Empaque"
-  const filasVac = tabRec === "histVaciado" ? vaciadosHist : enPisoLista;
+  // Historiales: manifiestos sin bins en piso, separados por a dónde se fueron los bins.
+  const vaciadosHist = recibidos.filter((m) => vaciadoCompleto(m) && binsVaciadosDe(m) > 0);  // entraron a empaque
+  const mermadosHist = recibidos.filter((m) => vaciadoCompleto(m) && binsMermadosDe(m) > 0);  // NO entraron (merma)
+  const filasVac = tabRec === "histVaciado" ? vaciadosHist : tabRec === "histMermado" ? mermadosHist : enPisoLista;
   const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
   const pendientes = movimientos.filter((m) => !atendido(m));
   const historialArr = movimientos.filter(atendido);
@@ -226,11 +256,11 @@ export default function Modulo9() {
   const totKgRec = recibidos.reduce((a, m) => a + kgRecibidosDe(m), 0);
   const totBinsVac = recibidos.reduce((a, m) => a + binsVaciadosDe(m), 0);
   const totKgVac = recibidos.reduce((a, m) => a + kgVaciadosDe(m), 0);
+  const totBinsMer = recibidos.reduce((a, m) => a + binsMermadosDe(m), 0);
+  const totKgMer = recibidos.reduce((a, m) => a + kgMermadosDe(m), 0);
   const totBinsPiso = recibidos.reduce((a, m) => a + binsEnPisoDe(m), 0);
   // Kg en piso: solo de los que aún tienen bins físicos en piso (los completos ya no cuentan).
   const totKgPiso = recibidos.filter((m) => binsEnPisoDe(m) > 0).reduce((a, m) => a + kgEnPisoDe(m), 0);
-  // Merma del día: en los ya vaciados por completo, kg recibidos − kg vaciados (puede ser + o −).
-  const totMerma = vaciadosHist.reduce((a, m) => a + (kgRecibidosDe(m) - kgVaciadosDe(m)), 0);
 
   // Desglose por hora: agrupa todos los vaciados del día por franja horaria.
   const porHora = (() => {
@@ -309,37 +339,45 @@ export default function Modulo9() {
         { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
         { key: "historial", label: "Historial por Recibir", count: historialArr.length },
         { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
+        { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
       ]} />
 
-      {tabRec === "vaciado" || tabRec === "histVaciado" ? (
+      {tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado" ? (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
             <span className="text-sm font-semibold text-gray-900">
               {tabRec === "histVaciado"
                 ? `Vaciados completos (${vaciadosHist.length})`
-                : `En piso para vaciar a producción (${enPisoLista.length})`}
+                : tabRec === "histMermado"
+                  ? `Mermados — no entraron a empaque (${mermadosHist.length})`
+                  : `En piso para vaciar a producción (${enPisoLista.length})`}
             </span>
             <span className="text-xs text-gray-400 ml-2">
               {tabRec === "histVaciado"
                 ? "· manifiestos ya vaciados por completo (en piso = 0)"
-                : "· captura bins y kg reales (recibidos y vaciados); el sistema no asume conversión"}
+                : tabRec === "histMermado"
+                  ? "· manifiestos terminados con bins que NO entraron a empaque"
+                  : "· captura bins y kg reales; vacía a empaque o marca merma (no entró)"}
             </span>
           </div>
           {filasVac.length === 0 ? (
             <div className="text-xs text-gray-400 text-center py-8 italic">
               {tabRec === "histVaciado"
                 ? "Aún no hay manifiestos vaciados por completo. Cuando un flete llega a 0 en piso aparece aquí."
-                : "No hay fletes en piso por vaciar. Al dar recepción pasan aquí para vaciarlos a producción."}
+                : tabRec === "histMermado"
+                  ? "Aún no hay mermas. Cuando marques bins que no entraron a empaque aparecen aquí."
+                  : "No hay fletes en piso por vaciar. Al dar recepción pasan aquí para vaciarlos a producción."}
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-xs" style={{ minWidth: "980px" }}>
+              <table className="w-full text-xs" style={{ minWidth: "1140px" }}>
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                     <th className="text-left px-3 py-2 font-medium">Folio / Remisión</th>
                     <th className="text-left px-3 py-2 font-medium">Producto</th>
                     <th className="text-center px-3 py-2 font-medium">Recibido (bins / kg)</th>
-                    <th className="text-left px-3 py-2 font-medium">Vaciados (hora · bins · kg)</th>
+                    <th className="text-left px-3 py-2 font-medium">Vaciados a empaque</th>
+                    <th className="text-left px-3 py-2 font-medium">Mermados (no entró)</th>
                     <th className="text-right px-3 py-2 font-medium">En piso</th>
                     <th className="text-center px-3 py-2 font-medium"></th>
                   </tr>
@@ -349,7 +387,9 @@ export default function Modulo9() {
                     const recB = binsRecibidosDe(m), recK = kgRecibidosDe(m);
                     const pisoB = binsEnPisoDe(m), pisoK = kgEnPisoDe(m);
                     const vacB = binsVaciadosDe(m), vacK = kgVaciadosDe(m);
+                    const merB = binsMermadosDe(m), merK = kgMermadosDe(m);
                     const ev = m.vaciado?.eventos || [];
+                    const mer = m.vaciado?.mermas || [];
                     const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
                     const completo = recB > 0 && pisoB === 0;
                     return (
@@ -379,15 +419,35 @@ export default function Modulo9() {
                             </div>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
+                        <td className="px-3 py-2 text-gray-600 align-top">
+                          {merB > 0 || merK > 0 ? (
+                            <div>
+                              <span className="font-semibold text-red-700">{merB} bins · {fmt(merK)} kg</span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {mer.map((e, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={e.motivo || ""}>
+                                    {e.hora} · {e.bins}b · {fmt(e.kg)}kg{e.motivo ? ` · ${e.motivo}` : ""}
+                                    <button onClick={() => cancelarMerma(m.id, i)} title="Cancelar esta merma (regresa al piso)" className="text-red-400 hover:text-red-700 font-bold leading-none text-xs">×</button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
                         <td className="px-3 py-2 text-right whitespace-nowrap align-top">
                           {pisoB > 0
                             ? <span className="font-semibold text-amber-700">{pisoB} bins<br /><span className="text-[11px] font-normal">{fmt(pisoK)} kg en piso</span></span>
                             : completo
-                              ? <div><span className="font-semibold text-green-700">✓ vaciado</span>{Math.round(recK - vacK) !== 0 && <div className="text-[10px] text-gray-400">merma {fmt(recK - vacK)} kg</div>}</div>
+                              ? <span className="font-semibold text-green-700">✓ sin piso</span>
                               : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-center align-top">
-                          {(recB > 0 || recK > 0) && !completo && <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>}
+                          {(recB > 0 || recK > 0) && !completo && (
+                            <div className="flex flex-col gap-1 items-stretch min-w-[96px]">
+                              <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>
+                              <button onClick={() => abrirMermar(m)} className="text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap">⚠️ Mermar</button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -400,10 +460,11 @@ export default function Modulo9() {
             {/* Resumen del día */}
             <div>
               <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (bins · kg reales)</div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   ["Recibidos", totBinsRec, totKgRec, "text-gray-900"],
-                  ["Procesados (vaciados)", totBinsVac, totKgVac, "text-green-700"],
+                  ["Vaciados a empaque", totBinsVac, totKgVac, "text-green-700"],
+                  ["Mermados (no entró)", totBinsMer, totKgMer, "text-red-700"],
                   ["En piso", totBinsPiso, totKgPiso, "text-amber-700"],
                 ].map(([l, b, k, c]) => (
                   <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
@@ -413,12 +474,6 @@ export default function Modulo9() {
                   </div>
                 ))}
               </div>
-              {Math.round(totMerma) !== 0 && (
-                <div className="text-[11px] text-gray-500 mt-2">
-                  Merma acumulada (ya vaciados): <b className={totMerma > 0 ? "text-amber-700" : "text-blue-600"}>{fmt(totMerma)} kg</b>
-                  <span className="text-gray-400"> · recibido − vaciado de los manifiestos completos</span>
-                </div>
-              )}
             </div>
             {/* Desglose por hora */}
             <div>
@@ -919,6 +974,44 @@ export default function Modulo9() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setVaciarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={confirmarVaciado} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">Registrar vaciado</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: registrar merma (no entró a empaque) ── */}
+      {mermarMov && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">⚠️ Mermar (no entró a empaque) — {mermarMov.remision || mermarMov.folio || "—"}</div>
+              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsEnPisoDe(mermarMov)} bins · {fmt(kgEnPisoDe(mermarMov))} kg</b> · estos bins se descartan (no se procesan).</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className={LBL}>Bins mermados (real)</label>
+                <input type="number" className={INP} value={mermarBins} onChange={(e) => setMermarBins(e.target.value)} placeholder="Ej: 2" autoFocus />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-0.5">
+                  <label className="text-xs text-gray-500">Kg mermados (real)</label>
+                  {(parseInt(mermarBins, 10) || 0) > 0 && (
+                    <button type="button" onClick={() => setMermarKg(String((parseInt(mermarBins, 10) || 0) * KG_TEORICO_BIN))}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800">
+                      usar teórico (≈240/bin = {fmt((parseInt(mermarBins, 10) || 0) * KG_TEORICO_BIN)} kg)
+                    </button>
+                  )}
+                </div>
+                <input type="number" className={INP} value={mermarKg} onChange={(e) => setMermarKg(e.target.value)} placeholder="Ej: 480" />
+              </div>
+              <div>
+                <label className={LBL}>Motivo (opcional)</label>
+                <input className={INP} value={mermarMotivo} onChange={(e) => setMermarMotivo(e.target.value)} placeholder="Ej: dañado / podrido / fuera de especificación…" />
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+              <button onClick={() => setMermarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+              <button onClick={confirmarMerma} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Registrar merma</button>
             </div>
           </div>
         </div>
