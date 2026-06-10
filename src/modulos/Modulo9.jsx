@@ -195,6 +195,11 @@ export default function Modulo9() {
 
   const atendido = (m) => m.recepcion?.estado === "recibido" || m.recepcion?.estado === "rechazado";
   const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido");
+  // Vaciado: "completo" = ya se capturaron bins recibidos y no queda nada en piso.
+  const vaciadoCompleto = (m) => binsRecibidosDe(m) > 0 && binsEnPisoDe(m) === 0;
+  const enPisoLista = recibidos.filter((m) => !vaciadoCompleto(m));   // pestaña "Vaciado a Empaque"
+  const vaciadosHist = recibidos.filter(vaciadoCompleto);             // pestaña "Historial Vaciado a Empaque"
+  const filasVac = tabRec === "histVaciado" ? vaciadosHist : enPisoLista;
   const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
   const pendientes = movimientos.filter((m) => !atendido(m));
   const historialArr = movimientos.filter(atendido);
@@ -291,18 +296,31 @@ export default function Modulo9() {
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },
-        { key: "vaciado", label: "Vaciado a Empaque", count: recibidos.length },
-        { key: "historial", label: "Historial", count: historialArr.length },
+        { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
+        { key: "historial", label: "Historial por Recibir", count: historialArr.length },
+        { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
       ]} />
 
-      {tabRec === "vaciado" ? (
+      {tabRec === "vaciado" || tabRec === "histVaciado" ? (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <span className="text-sm font-semibold text-gray-900">En piso para vaciar a producción ({recibidos.length})</span>
-            <span className="text-xs text-gray-400 ml-2">· captura bins y kg reales (recibidos y vaciados); el sistema no asume conversión</span>
+            <span className="text-sm font-semibold text-gray-900">
+              {tabRec === "histVaciado"
+                ? `Vaciados completos (${vaciadosHist.length})`
+                : `En piso para vaciar a producción (${enPisoLista.length})`}
+            </span>
+            <span className="text-xs text-gray-400 ml-2">
+              {tabRec === "histVaciado"
+                ? "· manifiestos ya vaciados por completo (en piso = 0)"
+                : "· captura bins y kg reales (recibidos y vaciados); el sistema no asume conversión"}
+            </span>
           </div>
-          {recibidos.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-8 italic">Aún no hay fletes recibidos. Al dar recepción pasan aquí para vaciarlos a producción.</div>
+          {filasVac.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-8 italic">
+              {tabRec === "histVaciado"
+                ? "Aún no hay manifiestos vaciados por completo. Cuando un flete llega a 0 en piso aparece aquí."
+                : "No hay fletes en piso por vaciar. Al dar recepción pasan aquí para vaciarlos a producción."}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs" style={{ minWidth: "980px" }}>
@@ -317,7 +335,7 @@ export default function Modulo9() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recibidos.map((m) => {
+                  {filasVac.map((m) => {
                     const recB = binsRecibidosDe(m), recK = kgRecibidosDe(m);
                     const pisoB = binsEnPisoDe(m), pisoK = kgEnPisoDe(m);
                     const vacB = binsVaciadosDe(m), vacK = kgVaciadosDe(m);
