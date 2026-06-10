@@ -346,6 +346,26 @@ export default function Modulo9() {
         {stat("Con novedad", conNovedad.length, "text-amber-600")}
       </div>
 
+      {(tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado") && (
+        <div className="mb-3">
+          <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              ["Recibidos", totKgRec, "text-gray-900"],
+              ["Vaciados a empaque", totKgVac, "text-green-700"],
+              ["Mermados (no entró)", totKgMer, "text-red-700"],
+              ["En piso", totKgPiso, "text-amber-700"],
+            ].map(([l, k, c]) => (
+              <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                <div className="text-[10px] text-gray-500 mb-1">{l}</div>
+                <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
+                <div className="text-[10px] text-gray-400">≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <AvisoSAP>Al dar recepción se generará en SAP una <b>orden de producción</b> (materia prima) y una <b>orden de compra</b> (flete).</AvisoSAP>
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
@@ -479,25 +499,6 @@ export default function Modulo9() {
             </div>
           )}
           <div className="border-t border-gray-200 px-4 py-3 bg-gray-50 space-y-4">
-            {/* Resumen del día */}
-            <div>
-              <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {[
-                  ["Recibidos", totKgRec, "text-gray-900"],
-                  ["Vaciados a empaque", totKgVac, "text-green-700"],
-                  ["Mermados (no entró)", totKgMer, "text-red-700"],
-                  ["En piso", totKgPiso, "text-amber-700"],
-                ].map(([l, k, c]) => (
-                  <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
-                    <div className="text-[10px] text-gray-500 mb-1">{l}</div>
-                    <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
-                    <div className="text-[10px] text-gray-400">≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-4">
               {/* Inventario y merma por lote */}
               <div>
