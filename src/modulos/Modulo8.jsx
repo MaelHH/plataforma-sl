@@ -210,7 +210,8 @@ export default function Modulo8() {
       if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
     }
     return true;
-  });
+  // Más reciente arriba (por fecha; desempata con la marca de creación si existe).
+  }).sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")) || String(b.creado || "").localeCompare(String(a.creado || "")));
   const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))];
   const ranchosMov = [...new Set(movimientos.map((m) => m.rancho).filter(Boolean))];
   const hayFiltros = q || fDestino || fRancho;
