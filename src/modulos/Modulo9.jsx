@@ -183,6 +183,11 @@ export default function Modulo9() {
       : m)));
     setVaciarMov(null); setVaciarBins(""); setVaciarKg("");
   };
+  // Cancela un vaciado registrado: lo quita de eventos → sus bins/kg vuelven al piso.
+  const cancelarVaciado = (movId, idx) =>
+    setMovimientos((prev) => prev.map((m) => (m.id === movId
+      ? { ...m, vaciado: { ...m.vaciado, eventos: (m.vaciado?.eventos || []).filter((_, i) => i !== idx) } }
+      : m)));
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
@@ -357,7 +362,14 @@ export default function Modulo9() {
                           {vacB > 0 || vacK > 0 ? (
                             <div>
                               <span className="font-semibold text-green-700">{vacB} bins · {fmt(vacK)} kg</span>
-                              <div className="text-[10px] text-gray-400">{ev.map((e) => `${e.hora} (${e.bins}b · ${fmt(e.kg)}kg)`).join(" · ")}</div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {ev.map((e, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
+                                    {e.hora} · {e.bins}b · {fmt(e.kg)}kg
+                                    <button onClick={() => cancelarVaciado(m.id, i)} title="Cancelar este vaciado (regresa al piso)" className="text-red-400 hover:text-red-600 font-bold leading-none text-xs">×</button>
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
