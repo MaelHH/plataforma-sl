@@ -29,7 +29,7 @@ import Modulo12 from "./modulos/Modulo12";
 const MODULOS = [
   { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈", desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
   { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾", desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
-  { id: 9, nombre: "Recepción en Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes, hace muestreo de calidad (QCI), inspección REG-EMP-24 y puede rechazar." },
+  { id: 9, nombre: "Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
   { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋", desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
   { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛", desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
   { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },

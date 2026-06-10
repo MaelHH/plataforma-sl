@@ -21,6 +21,14 @@ function hoyISO() {
 // Suma de un campo numérico en los renglones de carga
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
 
+// ── Vaciado a Empaque (bins en piso) ── 1 bin = 240 kg ──
+const KG_POR_BIN = 240;
+const binsKg = (n) => `${n} bin${n === 1 ? "" : "s"} (${(n * KG_POR_BIN).toLocaleString()} kg)`;
+// bins recibidos: el valor capturado en Vaciado, o por defecto los bultos recibidos.
+const binsRecibidosDe = (m) => m.vaciado?.binsRecibidos ?? (parseInt(m.recepcion?.bultosRecibidos, 10) || 0);
+const binsVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseInt(e.bins, 10) || 0), 0);
+const binsEnPisoDe = (m) => Math.max(0, binsRecibidosDe(m) - binsVaciadosDe(m));
+
 // ── Inspección de vehículo y producto (REG-EMP-24) ──
 // Texto de los productos del flete para prellenar el campo "Producto".
 const productosDeMov = (m) =>
@@ -52,7 +60,10 @@ export default function Modulo9() {
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
-  const [tabRec, setTabRec] = useState("pendientes"); // pendientes | historial
+  const [tabRec, setTabRec] = useState("pendientes"); // pendientes | vaciado | historial
+  const [vaciarMov, setVaciarMov] = useState(null); // movimiento al que se le registra un vaciado
+  const [vaciarBins, setVaciarBins] = useState("");
+  const [vaciarKg, setVaciarKg] = useState("");
   const [q, setQ] = useState("");
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
   const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
@@ -154,6 +165,21 @@ export default function Modulo9() {
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined } : m)));
   };
 
+  // ── Vaciado a Empaque ──
+  const setBinsRecibidos = (id, n) =>
+    setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, vaciado: { binsRecibidos: parseInt(n, 10) || 0, eventos: m.vaciado?.eventos || [] } } : m)));
+  const abrirVaciar = (m) => { setVaciarBins(""); setVaciarKg(""); setVaciarMov(m); };
+  const confirmarVaciado = () => {
+    const b = parseInt(vaciarBins, 10) || 0;
+    if (b <= 0) { setVaciarMov(null); return; }
+    const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    const ev = { bins: b, kg: vaciarKg ? parseFloat(vaciarKg) : b * KG_POR_BIN, hora };
+    setMovimientos((prev) => prev.map((m) => (m.id === vaciarMov.id
+      ? { ...m, vaciado: { binsRecibidos: m.vaciado?.binsRecibidos ?? (parseInt(m.recepcion?.bultosRecibidos, 10) || 0), eventos: [...(m.vaciado?.eventos || []), ev] } }
+      : m)));
+    setVaciarMov(null); setVaciarBins(""); setVaciarKg("");
+  };
+
   // ── Rechazo del flete (desde muestreo o inspección) ──
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
   const confirmarRechazo = () => {
@@ -178,6 +204,11 @@ export default function Modulo9() {
     }
     return true;
   });
+
+  // Totales del día para el resumen de Vaciado a Empaque (sobre los recibidos)
+  const totBinsRec = recibidos.reduce((a, m) => a + binsRecibidosDe(m), 0);
+  const totBinsVac = recibidos.reduce((a, m) => a + binsVaciadosDe(m), 0);
+  const totBinsPiso = recibidos.reduce((a, m) => a + binsEnPisoDe(m), 0);
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -220,7 +251,7 @@ export default function Modulo9() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-base font-semibold text-gray-900">Recepción en Empaque</h1>
+          <h1 className="text-base font-semibold text-gray-900">Empaque</h1>
           <p className="text-sm text-gray-500 mt-0.5">Confirmación de llegada de los fletes que salieron de campo</p>
         </div>
         <div className="flex items-center gap-2">
@@ -241,9 +272,82 @@ export default function Modulo9() {
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },
+        { key: "vaciado", label: "Vaciado a Empaque", count: recibidos.length },
         { key: "historial", label: "Historial", count: historialArr.length },
       ]} />
 
+      {tabRec === "vaciado" ? (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <span className="text-sm font-semibold text-gray-900">En piso para vaciar a producción ({recibidos.length})</span>
+            <span className="text-xs text-gray-400 ml-2">· lo recibido baja a piso y se va vaciando a producción</span>
+          </div>
+          {recibidos.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-8 italic">Aún no hay fletes recibidos. Al dar recepción pasan aquí para vaciarlos a producción.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: "920px" }}>
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                    <th className="text-left px-3 py-2 font-medium">Folio / Remisión</th>
+                    <th className="text-left px-3 py-2 font-medium">Producto</th>
+                    <th className="text-right px-3 py-2 font-medium">Bins recibidos</th>
+                    <th className="text-left px-3 py-2 font-medium">Vaciados (hora · bins)</th>
+                    <th className="text-right px-3 py-2 font-medium">En piso</th>
+                    <th className="text-center px-3 py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recibidos.map((m) => {
+                    const rec = binsRecibidosDe(m);
+                    const vac = binsVaciadosDe(m);
+                    const piso = binsEnPisoDe(m);
+                    const ev = m.vaciado?.eventos || [];
+                    const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
+                    return (
+                      <tr key={m.id} className={`border-b border-gray-100 ${rec > 0 && piso === 0 ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
+                        <td className="px-3 py-2 font-bold text-red-600 whitespace-nowrap">{m.remision || m.folio || "—"}</td>
+                        <td className="px-3 py-2 text-gray-700">{prod}</td>
+                        <td className="px-3 py-2 text-right">
+                          <input type="number" className="w-20 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={rec || ""} onChange={(e) => setBinsRecibidos(m.id, e.target.value)} placeholder="bins" />
+                        </td>
+                        <td className="px-3 py-2 text-gray-600">
+                          {vac > 0 ? (
+                            <div>
+                              <span className="font-semibold text-green-700">{vac} bins</span>
+                              <div className="text-[10px] text-gray-400">{ev.map((e) => `${e.hora} (${e.bins})`).join(" · ")}</div>
+                            </div>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{piso > 0 ? <span className="text-amber-700">{binsKg(piso)}</span> : (rec > 0 ? <span className="text-green-700">✓ vaciado</span> : <span className="text-gray-300">—</span>)}</td>
+                        <td className="px-3 py-2 text-center">
+                          {piso > 0 && <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día · 1 bin = {KG_POR_BIN} kg</div>
+            <div className="grid grid-cols-3 gap-2 max-w-2xl">
+              {[
+                ["Bins recibidos", totBinsRec, "text-gray-900"],
+                ["Bins procesados (vaciados)", totBinsVac, "text-green-700"],
+                ["Bins en piso", totBinsPiso, "text-amber-700"],
+              ].map(([l, n, c]) => (
+                <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                  <div className="text-[10px] text-gray-500 mb-1">{l}</div>
+                  <div className={`text-xl font-bold ${c}`}>{n}</div>
+                  <div className="text-[11px] text-gray-400">{(n * KG_POR_BIN).toLocaleString()} kg</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
           <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes por recibir" : "Historial (recibidos y rechazados)"} ({lista.length})</span>
@@ -349,6 +453,7 @@ export default function Modulo9() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Modal de recepción ── */}
       {recibir && form && (
@@ -672,6 +777,33 @@ export default function Modulo9() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => { setRechazoMov(null); setRechazoComent(""); }} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={confirmarRechazo} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Confirmar rechazo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: registrar vaciado a producción ── */}
+      {vaciarMov && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">⬇️ Vaciar a producción — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
+              <div className="text-xs text-gray-500 mt-0.5">En piso: <b>{binsKg(binsEnPisoDe(vaciarMov))}</b> · se registra la hora actual.</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className={LBL}>Bins vaciados</label>
+                <input type="number" className={INP} value={vaciarBins} onChange={(e) => setVaciarBins(e.target.value)} placeholder="Ej: 5" autoFocus />
+                {vaciarBins && <div className="text-[11px] text-gray-400 mt-1">= {(parseInt(vaciarBins, 10) || 0) * KG_POR_BIN} kg (a 240 kg/bin)</div>}
+              </div>
+              <div>
+                <label className={LBL}>Kg procesados <span className="text-gray-400">(opcional, si difiere de 240×bins)</span></label>
+                <input type="number" className={INP} value={vaciarKg} onChange={(e) => setVaciarKg(e.target.value)} placeholder="Ej: 1,180" />
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+              <button onClick={() => setVaciarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+              <button onClick={confirmarVaciado} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">Registrar vaciado</button>
             </div>
           </div>
         </div>
