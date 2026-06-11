@@ -507,17 +507,26 @@ export function DatosProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persistencia: localStorage SIEMPRE (caché offline); backend si está conectado (debounced).
+  // Persistencia: la BASE DE DATOS es la fuente de verdad.
+  //  - Conectado al backend → se guarda SOLO en la BD (y se borra el espejo del navegador
+  //    para que nunca compita ni quede data vieja en localStorage).
+  //  - Sin backend → buffer temporal en localStorage para no perder lo capturado; se sube
+  //    a la BD al reconectar.
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(valores)); }
-    catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
+    if (cargando) return;
 
-    if (fuente !== "backend" || cargando) return;
-    clearTimeout(debRef.current);
-    const snap = valores;
-    debRef.current = setTimeout(() => {
-      sincronizarBackend(snap, prevRef).then((s) => { prevRef.current = s; });
-    }, 800);
+    if (fuente === "backend") {
+      try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+      clearTimeout(debRef.current);
+      const snap = valores;
+      debRef.current = setTimeout(() => {
+        sincronizarBackend(snap, prevRef).then((s) => { prevRef.current = s; });
+      }, 800);
+    } else {
+      // Modo local (sin backend): se conserva en el navegador solo como respaldo temporal.
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(valores)); }
+      catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, fuente, cargando]);
 

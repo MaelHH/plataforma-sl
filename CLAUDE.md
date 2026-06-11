@@ -28,10 +28,17 @@ Hoy es un **frontend con datos de demo** que persisten en el navegador
 
 ### Estado global y persistencia
 - Todo el estado vive en `src/store/datos.jsx` (`DatosProvider` + `useDatos()`).
-- Se persiste **todo** en `localStorage` bajo la llave `plataforma_sl_estado_v1`
-  (ver `STORAGE_KEY`). Versionada para migrar cuando llegue el backend.
-- Un `useEffect` guarda el estado completo ante cualquier cambio. Si se excede la
-  cuota (p. ej. fotos base64 grandes) se hace `console.warn` sin romper la app.
+- **La base de datos (backend) es la fuente de verdad.** Carga inicial desde el backend
+  (`api.js`); el front sincroniza cada cambio a la BD (debounced 800 ms) vía el contrato
+  `/api/{coleccion}` + `/api/state/{clave}` (la capa **compat** del backend
+  `plataforma-sl-backend` de Ronaldo sirve ese contrato; los datos viven en su tabla
+  `documents`/`kv` de `plataforma_sl.db`).
+- **`localStorage` (`plataforma_sl_estado_v1`) NO se usa cuando hay backend**: al estar
+  conectado se borra ese espejo para que el navegador no compita ni guarde data vieja
+  (ese split-brain ya causó sobrescrituras). Solo en **modo local (sin backend)** se usa
+  `localStorage` como buffer temporal, que se sube a la BD al reconectar.
+- `fuente` (`"backend"`/`"local"`) y `cargando` se exponen en el store; el indicador en
+  `App.jsx` muestra verde (BD) / ámbar (modo local).
 
 ### Piezas clave del store (estado)
 `trailers`, `cargasEmbarques`, `monitoreo`, `catalogo` (presentaciones), `cultivos`,
