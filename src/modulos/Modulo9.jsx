@@ -17,6 +17,11 @@ const muestreoVacio = (m, folio) => ({
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
+// Hora actual "HH:MM" (24h) para los inputs type=time.
+function ahoraHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 // Suma de un campo numérico en los renglones de carga
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
@@ -70,9 +75,14 @@ export default function Modulo9() {
   const [tabRec, setTabRec] = useState("pendientes"); // pendientes | vaciado | historial
   const [vaciarMov, setVaciarMov] = useState(null); // movimiento al que se le registra un vaciado
   const [vaciarKg, setVaciarKg] = useState("");
+  const [vaciarFecha, setVaciarFecha] = useState("");
+  const [vaciarHora, setVaciarHora] = useState("");
   const [mermarMov, setMermarMov] = useState(null); // movimiento al que se le registra una merma (no entró a empaque)
   const [mermarKg, setMermarKg] = useState("");
+  const [mermarFecha, setMermarFecha] = useState("");
+  const [mermarHora, setMermarHora] = useState("");
   const [mermarMotivo, setMermarMotivo] = useState("");
+  const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [q, setQ] = useState("");
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
   const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
@@ -181,12 +191,11 @@ export default function Modulo9() {
     setMovimientos((prev) => prev.map((m) => (m.id === id
       ? { ...m, vaciado: { ...baseVac(m), [campo]: val } }
       : m)));
-  const abrirVaciar = (m) => { setVaciarKg(""); setVaciarMov(m); };
+  const abrirVaciar = (m) => { setVaciarKg(""); setVaciarFecha(hoyISO()); setVaciarHora(ahoraHM()); setVaciarMov(m); };
   const confirmarVaciado = () => {
     const kg = parseFloat(vaciarKg) || 0;
     if (kg <= 0) { setVaciarMov(null); return; }
-    const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-    const ev = { kg, hora };
+    const ev = { kg, fecha: vaciarFecha || hoyISO(), hora: vaciarHora || ahoraHM() };
     setMovimientos((prev) => prev.map((m) => (m.id === vaciarMov.id
       ? { ...m, vaciado: { ...baseVac(m), eventos: [...(m.vaciado?.eventos || []), ev] } }
       : m)));
@@ -199,12 +208,11 @@ export default function Modulo9() {
       : m)));
 
   // ── Mermado (no entró a empaque) ── también descuenta del piso.
-  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarMov(m); };
+  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarMov(m); };
   const confirmarMerma = () => {
     const kg = parseFloat(mermarKg) || 0;
     if (kg <= 0) { setMermarMov(null); return; }
-    const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
-    const ev = { kg, hora, motivo: mermarMotivo.trim() };
+    const ev = { kg, fecha: mermarFecha || hoyISO(), hora: mermarHora || ahoraHM(), motivo: mermarMotivo.trim() };
     setMovimientos((prev) => prev.map((m) => (m.id === mermarMov.id
       ? { ...m, vaciado: { ...baseVac(m), mermas: [...(m.vaciado?.mermas || []), ev] } }
       : m)));
@@ -215,6 +223,14 @@ export default function Modulo9() {
     setMovimientos((prev) => prev.map((m) => (m.id === movId
       ? { ...m, vaciado: { ...m.vaciado, mermas: (m.vaciado?.mermas || []).filter((_, i) => i !== idx) } }
       : m)));
+
+  // Devolver un manifiesto a "Vaciado a Empaque" (deshace vaciados y mermas; el piso vuelve completo).
+  const devolverManifiesto = (id) => {
+    if (!window.confirm("¿Devolver este manifiesto a 'Vaciado a Empaque'? Se quitarán los vaciados y mermas registrados y el piso volverá completo.")) return;
+    setMovimientos((prev) => prev.map((m) => (m.id === id
+      ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [] } }
+      : m)));
+  };
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
@@ -248,21 +264,28 @@ export default function Modulo9() {
     return true;
   });
 
-  // Totales del día para el resumen de Vaciado a Empaque (sobre los recibidos), todo en kg.
+  // Inventario (acumulado, no por día): recibido / vaciado / mermado / en piso, todo en kg.
   const totKgRec = recibidos.reduce((a, m) => a + kgRecibidosDe(m), 0);
   const totKgVac = recibidos.reduce((a, m) => a + kgVaciadosDe(m), 0);
   const totKgMer = recibidos.reduce((a, m) => a + kgMermadosDe(m), 0);
   const totKgPiso = recibidos.reduce((a, m) => a + kgEnPisoDe(m), 0);
 
+  // Eventos/mermas del DÍA seleccionado (los viejos sin fecha cuentan como hoy).
+  const evDia = (m) => (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+  const merDia = (m) => (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+  const sumaKg = (arr) => arr.reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
+  const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)), 0);
+  const totKgMerDia = recibidos.reduce((a, m) => a + sumaKg(merDia(m)), 0);
+
   // Lote/proveedor de un manifiesto (lo que se vacía y se inventaría).
   const loteDe = (m) => m.lote || m.rancho || m.consignado || "—";
 
-  // Desglose por hora: por franja horaria y lote (kg; bins teóricos = kg/240).
+  // Desglose por hora del DÍA seleccionado: por franja horaria y lote (kg; bins teóricos = kg/240).
   const porHora = (() => {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      (m.vaciado?.eventos || []).forEach((e) => {
+      evDia(m).forEach((e) => {
         const h = String(e.hora || "").split(":")[0] || "—";
         if (!acc[h]) acc[h] = { kg: 0, lotes: {} };
         const kg = parseFloat(e.kg) || 0;
@@ -350,15 +373,24 @@ export default function Modulo9() {
 
       {(tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado") && (
         <div className="mb-3 space-y-4">
+          {/* Selector de día del reporte */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-semibold text-gray-500">📅 Reporte del día:</span>
+            <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)}
+              className="text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" />
+            {diaReporte !== hoyISO() && <button onClick={() => setDiaReporte(hoyISO())} className="text-[11px] text-indigo-600 hover:text-indigo-800 underline">hoy</button>}
+            <span className="text-[10px] text-gray-400">· Vaciado/Mermado son del día elegido; En piso es inventario actual.</span>
+          </div>
+
           {/* Resumen del día */}
           <div>
             <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
-                ["Recibidos", totKgRec, "text-gray-900"],
-                ["Vaciados a empaque", totKgVac, "text-green-700"],
-                ["Mermados (no entró)", totKgMer, "text-red-700"],
-                ["En piso", totKgPiso, "text-amber-700"],
+                ["Vaciado a empaque (día)", totKgVacDia, "text-green-700"],
+                ["Mermado (día)", totKgMerDia, "text-red-700"],
+                ["En piso (inventario actual)", totKgPiso, "text-amber-700"],
+                ["Recibido (total)", totKgRec, "text-gray-900"],
               ].map(([l, k, c]) => (
                 <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
                   <div className="text-[10px] text-gray-500 mb-1">{l}</div>
@@ -418,9 +450,9 @@ export default function Modulo9() {
 
           {/* Vaciado por hora y lote (kg + bins teóricos de 240 kg) */}
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· bins teóricos = kg / 240</span></div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · bins teóricos = kg / 240</span></div>
             {porHora.length === 0 ? (
-              <div className="text-xs text-gray-400 italic py-2">Aún no se registran vaciados hoy.</div>
+              <div className="text-xs text-gray-400 italic py-2">No hay vaciados registrados el día seleccionado.</div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
                 <table className="w-full text-xs" style={{ minWidth: `${260 + lotesHora.length * 90}px` }}>
@@ -449,7 +481,7 @@ export default function Modulo9() {
                         const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
                         return <td key={lote} className="px-3 py-1.5 text-right">{fmt(t)}</td>;
                       })}
-                      <td className="px-3 py-1.5 text-right">{fmt(totKgVac)}</td>
+                      <td className="px-3 py-1.5 text-right">{fmt(totKgVacDia)}</td>
                     </tr>
                     <tr className="bg-gray-50 text-gray-500 text-[10px]">
                       <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
@@ -457,7 +489,7 @@ export default function Modulo9() {
                         const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
                         return <td key={lote} className="px-3 py-1 text-right">≈{(t / KG_POR_BIN_TEO).toFixed(1)}</td>;
                       })}
-                      <td className="px-3 py-1 text-right">≈{(totKgVac / KG_POR_BIN_TEO).toFixed(1)}</td>
+                      <td className="px-3 py-1 text-right">≈{(totKgVacDia / KG_POR_BIN_TEO).toFixed(1)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -551,7 +583,7 @@ export default function Modulo9() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {ev.map((e, i) => (
                                   <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">
-                                    {e.hora} · {fmt(e.kg)} kg
+                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg
                                     <button onClick={() => cancelarVaciado(m.id, i)} title="Cancelar este vaciado (regresa al piso)" className="text-red-400 hover:text-red-600 font-bold leading-none text-xs">×</button>
                                   </span>
                                 ))}
@@ -566,7 +598,7 @@ export default function Modulo9() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {mer.map((e, i) => (
                                   <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={e.motivo || ""}>
-                                    {e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}
+                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}
                                     <button onClick={() => cancelarMerma(m.id, i)} title="Cancelar esta merma (regresa al piso)" className="text-red-400 hover:text-red-700 font-bold leading-none text-xs">×</button>
                                   </span>
                                 ))}
@@ -590,6 +622,9 @@ export default function Modulo9() {
                               <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>
                               <button onClick={() => abrirMermar(m)} className="text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap">⚠️ Mermar</button>
                             </div>
+                          )}
+                          {completo && (
+                            <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap">↩️ Devolver</button>
                           )}
                         </td>
                       </tr>
@@ -1054,6 +1089,17 @@ export default function Modulo9() {
                 <label className={LBL}>Kg vaciados</label>
                 <input type="number" className={INP} value={vaciarKg} onChange={(e) => setVaciarKg(e.target.value)} placeholder="Ej: 1,180" autoFocus />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={LBL}>Fecha de vaciado</label>
+                  <input type="date" className={INP} value={vaciarFecha} onChange={(e) => setVaciarFecha(e.target.value)} />
+                </div>
+                <div>
+                  <label className={LBL}>Hora</label>
+                  <input type="time" className={INP} value={vaciarHora} onChange={(e) => setVaciarHora(e.target.value)} />
+                </div>
+              </div>
+              {vaciarFecha && vaciarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: este vaciado contará en el día {vaciarFecha}.</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setVaciarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
@@ -1082,10 +1128,21 @@ export default function Modulo9() {
                 <label className={LBL}>Kg mermados</label>
                 <input type="number" className={INP} value={mermarKg} onChange={(e) => setMermarKg(e.target.value)} placeholder="Ej: 480" autoFocus />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={LBL}>Fecha de merma</label>
+                  <input type="date" className={INP} value={mermarFecha} onChange={(e) => setMermarFecha(e.target.value)} />
+                </div>
+                <div>
+                  <label className={LBL}>Hora</label>
+                  <input type="time" className={INP} value={mermarHora} onChange={(e) => setMermarHora(e.target.value)} />
+                </div>
+              </div>
               <div>
                 <label className={LBL}>Motivo (opcional)</label>
                 <input className={INP} value={mermarMotivo} onChange={(e) => setMermarMotivo(e.target.value)} placeholder="Ej: dañado / podrido / fuera de especificación…" />
               </div>
+              {mermarFecha && mermarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setMermarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
