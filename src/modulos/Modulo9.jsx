@@ -43,8 +43,9 @@ const destareDe = (m) => {
   const cajas = parseFloat(r.bultosRecibidos) || 0;
   // parrillas: las capturadas; si no hay, se estiman por la razón cajas/parrilla.
   const parrillas = (parseFloat(r.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
-  const pK = r.destareParrillaKg != null && r.destareParrillaKg !== "" ? parseFloat(r.destareParrillaKg) : TARA_PARRILLA;
-  const cK = r.destareCajaKg != null && r.destareCajaKg !== "" ? parseFloat(r.destareCajaKg) : TARA_CAJA;
+  // Pesos: lo capturado; vacío o 0 = sin tara de ese elemento (el form los prellena con los defaults).
+  const pK = parseFloat(r.destareParrillaKg) || 0;
+  const cK = parseFloat(r.destareCajaKg) || 0;
   const taraParrillas = parrillas * pK;
   const taraCajas = cajas * cK;
   const taraTotal = taraParrillas + taraCajas;
@@ -187,8 +188,8 @@ export default function Modulo9() {
       condicion: r.condicion || "ok",
       observaciones: r.observaciones || "",
       clienteDirecto: r.clienteDirecto || false, // no entra a empaque, se va con el cliente
-      // Destare de empaque (ejote): se sugiere automático si el producto es ejote.
-      destareAplicar: r.destareAplicar ?? (m.cargaItems || []).some((it) => /ejote/i.test(it.prod || "")),
+      // Destare de empaque (ejote): siempre activo; para anularlo se pone 0 en los pesos.
+      destareAplicar: r.destareAplicar ?? true,
       destareParrillaKg: r.destareParrillaKg ?? String(TARA_PARRILLA),
       destareCajaKg: r.destareCajaKg ?? String(TARA_CAJA),
     });
@@ -897,41 +898,33 @@ export default function Modulo9() {
                 </div>
               </div>
 
-              {/* Destare de empaque (ejote): resta cajas y parrillas → ejote neto */}
+              {/* Destare de empaque (ejote): siempre activo; para no usarlo, pon 0 en los pesos. */}
               {(() => {
                 const cajas = parseFloat(form.bultosRecibidos) || 0;
                 const parrillas = (parseFloat(form.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
                 const bruto = parseFloat(form.pesoRecibido) || 0;
-                const pK = parseFloat(form.destareParrillaKg) || TARA_PARRILLA;
-                const cK = parseFloat(form.destareCajaKg) || TARA_CAJA;
+                const pK = parseFloat(form.destareParrillaKg) || 0;
+                const cK = parseFloat(form.destareCajaKg) || 0;
                 const taraP = parrillas * pK, taraC = cajas * cK, taraT = taraP + taraC;
                 const neto = Math.max(0, bruto - taraT);
                 return (
                   <div>
-                    <label className="flex items-start gap-2 mb-2 cursor-pointer">
-                      <input type="checkbox" className="mt-0.5" checked={!!form.destareAplicar} onChange={(e) => upd("destareAplicar", e.target.checked)} />
-                      <span>
-                        <span className="text-xs font-semibold text-gray-700 uppercase">Destarar empaque (ejote)</span>
-                        <span className="block text-[11px] text-gray-500">Resta el peso de cajas y parrillas para obtener el <b>ejote neto</b> (lo que pasa a vaciar).</span>
-                      </span>
-                    </label>
-                    {form.destareAplicar && (
-                      <div className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><label className={LBL}>Peso por parrilla (kg)</label><input type="number" step="0.01" className={INP} value={form.destareParrillaKg} onChange={(e) => upd("destareParrillaKg", e.target.value)} /></div>
-                          <div><label className={LBL}>Peso por caja (kg)</label><input type="number" step="0.01" className={INP} value={form.destareCajaKg} onChange={(e) => upd("destareCajaKg", e.target.value)} /></div>
-                        </div>
-                        <div className="text-xs bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
-                          <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso bruto (recibido)</span><b className="text-gray-800">{fmt(bruto)} kg</b></div>
-                          <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Parrillas: {parrillas} × {pK} kg</span><span className="text-red-600">− {fmt(taraP)} kg</span></div>
-                          <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Cajas: {fmt(cajas)} × {cK} kg</span><span className="text-red-600">− {fmt(taraC)} kg</span></div>
-                          <div className="flex justify-between px-3 py-1.5"><span className="text-gray-700 font-semibold">Material de empaque (tara)</span><b className="text-red-700">− {fmt(taraT)} kg</b></div>
-                          <div className="flex justify-between px-3 py-1.5 bg-green-50"><span className="text-green-800 font-semibold">Ejote neto (a vaciar)</span><b className="text-green-700">{fmt(neto)} kg</b></div>
-                        </div>
-                        {bruto === 0 && <div className="text-[11px] text-amber-700">Captura el <b>peso recibido</b> arriba para calcular el neto.</div>}
-                        <div className="text-[10px] text-gray-400">≈ 1 parrilla por cada {CAJAS_POR_PARRILLA} cajas; si no capturas parrillas, se estiman con esa razón.</div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Destare de empaque (ejote) <span className="text-gray-300 normal-case">· para no usarlo, pon 0 en los pesos</span></div>
+                    <div className="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><label className={LBL}>Peso por parrilla (kg)</label><input type="number" step="0.01" className={INP} value={form.destareParrillaKg} onChange={(e) => upd("destareParrillaKg", e.target.value)} /></div>
+                        <div><label className={LBL}>Peso por caja (kg)</label><input type="number" step="0.01" className={INP} value={form.destareCajaKg} onChange={(e) => upd("destareCajaKg", e.target.value)} /></div>
                       </div>
-                    )}
+                      <div className="text-xs bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso bruto (recibido)</span><b className="text-gray-800">{fmt(bruto)} kg</b></div>
+                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Parrillas: {parrillas} × {pK} kg</span><span className="text-red-600">− {fmt(taraP)} kg</span></div>
+                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Cajas: {fmt(cajas)} × {cK} kg</span><span className="text-red-600">− {fmt(taraC)} kg</span></div>
+                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-700 font-semibold">Material de empaque (tara)</span><b className="text-red-700">− {fmt(taraT)} kg</b></div>
+                        <div className="flex justify-between px-3 py-1.5 bg-green-50"><span className="text-green-800 font-semibold">Ejote neto (a vaciar)</span><b className="text-green-700">{fmt(neto)} kg</b></div>
+                      </div>
+                      {bruto === 0 && <div className="text-[11px] text-amber-700">Captura el <b>peso recibido</b> arriba para calcular el neto.</div>}
+                      <div className="text-[10px] text-gray-400">≈ 1 parrilla por cada {CAJAS_POR_PARRILLA} cajas; si no capturas parrillas, se estiman con esa razón.</div>
+                    </div>
                   </div>
                 );
               })()}
