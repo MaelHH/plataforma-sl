@@ -1277,8 +1277,12 @@ export default function Modulo9() {
                 </div>
               </div>
               <div>
-                <label className={LBL}>Motivo (opcional)</label>
-                <input className={INP} value={mermarMotivo} onChange={(e) => setMermarMotivo(e.target.value)} placeholder="Ej: dañado / podrido / fuera de especificación…" />
+                <label className={LBL}>Motivo de la merma</label>
+                <SearchSelect className={INP} value={mermarMotivo} onChange={setMermarMotivo} placeholder="— Motivo —" searchThreshold={99}
+                  options={[
+                    { value: "Merma por Calidad", label: "Merma por Calidad" },
+                    { value: "Merma por Inexistencia", label: "Merma por Inexistencia" },
+                  ]} />
               </div>
               {mermarFecha && mermarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
             </div>
