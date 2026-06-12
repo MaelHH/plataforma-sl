@@ -164,6 +164,7 @@ export default function Modulo9() {
       pesoRecibido: r.pesoRecibido ?? (m.pesoBascula || ""),
       condicion: r.condicion || "ok",
       observaciones: r.observaciones || "",
+      clienteDirecto: r.clienteDirecto || false, // no entra a empaque, se va con el cliente
     });
     setRecibir(m);
   };
@@ -242,7 +243,11 @@ export default function Modulo9() {
   };
 
   const atendido = (m) => m.recepcion?.estado === "recibido" || m.recepcion?.estado === "rechazado";
-  const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido");
+  // "Cliente Directo": recibido pero NO entra a empaque (se va con el cliente) → su propia pestaña.
+  const esClienteDirecto = (m) => m.recepcion?.estado === "recibido" && m.recepcion?.clienteDirecto;
+  const clienteDirectoList = movimientos.filter(esClienteDirecto);
+  // Los recibidos que SÍ van a empaque (excluye los de cliente directo).
+  const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido" && !m.recepcion?.clienteDirecto);
   // El kg es lo que manda (los bins son guía a grosso modo): "completo" = sin kg en piso.
   const vaciadoCompleto = (m) => kgRecibidosDe(m) > 0 && kgEnPisoDe(m) === 0;
   const enPisoLista = recibidos.filter((m) => !vaciadoCompleto(m));   // pestaña "Vaciado a Empaque"
@@ -504,6 +509,7 @@ export default function Modulo9() {
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },
         { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
+        { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
         { key: "historial", label: "Historial por Recibir", count: historialArr.length },
         { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
         { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
@@ -635,6 +641,58 @@ export default function Modulo9() {
             </div>
           )}
         </div>
+      ) : tabRec === "clienteDirecto" ? (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+            <span className="text-sm font-semibold text-gray-900">🚚 Cliente Directo ({clienteDirectoList.length})</span>
+            <span className="text-xs text-gray-400 ml-2">· fletes que NO entran a empaque; se van directo con el cliente</span>
+          </div>
+          {clienteDirectoList.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-8 italic">Sin fletes a cliente directo. Al dar recepción marca “🚚 Flete a Cliente Directo”.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs" style={{ minWidth: "880px" }}>
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                    <th className="text-left px-3 py-2 font-medium">Folio / Remisión</th>
+                    <th className="text-left px-3 py-2 font-medium">Recepción</th>
+                    <th className="text-left px-3 py-2 font-medium">Lote</th>
+                    <th className="text-left px-3 py-2 font-medium">Producto</th>
+                    <th className="text-right px-3 py-2 font-medium">Kg recibido</th>
+                    <th className="text-left px-3 py-2 font-medium">Cliente / Destino</th>
+                    <th className="text-center px-3 py-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clienteDirectoList.map((m) => {
+                    const r = m.recepcion || {};
+                    const kg = parseFloat(r.pesoRecibido) || parseFloat(m.pesoBascula) || 0;
+                    const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
+                    return (
+                      <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-3 py-2 font-bold text-red-600 whitespace-nowrap align-top">{m.remision || m.folio || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap align-top">{r.fechaLlegada || "—"}{r.horaLlegada ? ` ${r.horaLlegada}` : ""}</td>
+                        <td className="px-3 py-2 text-gray-700 align-top">{loteDe(m)}</td>
+                        <td className="px-3 py-2 text-gray-700 align-top">{prod}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-800 align-top">{fmt(kg)} kg</td>
+                        <td className="px-3 py-2 text-gray-600 align-top">{m.consignado || m.distribuidor || m.destino || "—"}</td>
+                        <td className="px-3 py-2 text-center whitespace-nowrap align-top">
+                          <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
+                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {clienteDirectoList.length > 0 && (
+            <div className="border-t border-gray-200 px-4 py-2.5 bg-gray-50 text-xs text-gray-600">
+              Total a cliente directo: <b>{fmt(clienteDirectoList.reduce((a, m) => a + (parseFloat(m.recepcion?.pesoRecibido) || parseFloat(m.pesoBascula) || 0), 0))} kg</b> · {clienteDirectoList.length} flete(s)
+            </div>
+          )}
+        </div>
       ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
@@ -698,6 +756,7 @@ export default function Modulo9() {
                           <div className="flex flex-col items-center gap-0.5">
                             <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>{novedad ? "⚠️" : "✓"}</span>
                             <span className="text-[10px] text-green-700 font-semibold">Recepción</span>
+                            {r?.clienteDirecto && <span className="text-[9px] text-blue-700 font-semibold bg-blue-50 border border-blue-200 rounded px-1">🚚 Cliente directo</span>}
                           </div>
                         ) : rechazado ? (
                           <div className="flex flex-col items-center gap-0.5">
@@ -820,6 +879,17 @@ export default function Modulo9() {
                   </div>
                   <div><label className={LBL}>Observaciones</label><input className={INP} value={form.observaciones} onChange={(e) => upd("observaciones", e.target.value)} placeholder="Notas de la recepción" /></div>
                 </div>
+              </div>
+
+              {/* Flete a Cliente Directo: no entra a empaque, se va con el cliente */}
+              <div>
+                <label className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer ${form.clienteDirecto ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"}`}>
+                  <input type="checkbox" className="mt-0.5" checked={!!form.clienteDirecto} onChange={(e) => upd("clienteDirecto", e.target.checked)} />
+                  <span>
+                    <span className="text-sm font-semibold text-gray-900">🚚 Flete a Cliente Directo</span>
+                    <span className="block text-xs text-gray-500">No entra a empaque ni a Vaciado a Empaque: se va directo con el cliente. Aparecerá en la pestaña <b>Cliente Directo</b>.</span>
+                  </span>
+                </label>
               </div>
             </div>
 

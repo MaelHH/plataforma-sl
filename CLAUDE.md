@@ -167,8 +167,10 @@ se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Aliment
 
 ### Empaque (id 9) — Empaque
 Antes "Recepción en Empaque". Pestañas: **Por recibir** / **Vaciado a Empaque** /
-**Historial por Recibir** / **Historial Vaciado a Empaque** / **Historial Mermado (No
-entró a Empaque)**. El **Vaciado a Empaque se maneja TODO en kg** (la unidad que manda):
+**Cliente Directo** / **Historial por Recibir** / **Historial Vaciado a Empaque** /
+**Historial Mermado (No entró a Empaque)**. En la recepción hay un toggle **🚚 Flete a
+Cliente Directo** (`recepcion.clienteDirecto`): ese flete **no entra a empaque** (no va a
+Vaciado a Empaque), aparece en la pestaña **Cliente Directo** (se va con el cliente). El **Vaciado a Empaque se maneja TODO en kg** (la unidad que manda):
 el **kg recibido** se prellena con el peso de la recepción (editable). Por manifiesto se
 puede **Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se
 descarta, con motivo); cada vaciado/merma captura **fecha + hora** (default ahora, **fecha
