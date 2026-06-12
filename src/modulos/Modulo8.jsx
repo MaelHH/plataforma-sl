@@ -215,6 +215,20 @@ export default function Modulo8() {
   const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))];
   const ranchosMov = [...new Set(movimientos.map((m) => m.rancho).filter(Boolean))];
   const hayFiltros = q || fDestino || fRancho;
+
+  // Semáforo $/kg: promedio (sobre todos los movimientos con flete y peso válidos) y
+  // desviación de cada fila. ≤5% verde · ≤10% amarillo · >10% rojo.
+  const costosKg = movimientos
+    .map((m) => { const f = parseFloat(m.flete) || 0; const p = parseFloat(m.pesoBascula) || 0; return f > 0 && p > 0 ? f / p : 0; })
+    .filter((x) => x > 0);
+  const promedioKg = costosKg.length ? costosKg.reduce((a, x) => a + x, 0) / costosKg.length : 0;
+  const semaforoKg = (costo) => {
+    if (!costo || !promedioKg) return null;
+    const desv = Math.abs(costo - promedioKg) / promedioKg * 100;
+    if (desv <= 5) return { cls: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500", desv };
+    if (desv <= 10) return { cls: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500", desv };
+    return { cls: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500", desv };
+  };
   const limpiarFiltros = () => { setQ(""); setFDestino(""); setFRancho(""); };
 
   const lineaActualId = lineaNueva ? "__nueva__" : (lineaSel?.id || "");
@@ -241,8 +255,18 @@ export default function Modulo8() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movimientos.length}` : ""})</span>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movimientos.length}` : ""})</span>
+            {promedioKg > 0 && (
+              <span className="text-[11px] text-gray-500 flex items-center gap-2">
+                <span>$/kg prom: <b className="text-gray-700">${promedioKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>≤5%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>≤10%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>&gt;10%</span>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 flex items-center gap-1">📊 Excel{hayFiltros ? " (filtrado)" : ""}</button>
             <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
@@ -295,7 +319,18 @@ export default function Modulo8() {
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
                       <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-gray-700">{costoKg ? "$" + costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "/kg" : "—"}</td>
+                      <td className="px-3 py-2 text-right">
+                        {(() => {
+                          const s = semaforoKg(costoKg);
+                          if (!s) return <span className="text-gray-300">—</span>;
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-semibold ${s.cls}`} title={`${s.desv.toFixed(1)}% vs promedio ($${promedioKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg)`}>
+                              <span className={`w-2 h-2 rounded-full ${s.dot}`}></span>
+                              ${costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                         <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
