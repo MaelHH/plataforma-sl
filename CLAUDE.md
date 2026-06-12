@@ -170,7 +170,12 @@ Antes "Recepción en Empaque". Pestañas: **Por recibir** / **Vaciado a Empaque*
 **Cliente Directo** / **Historial por Recibir** / **Historial Vaciado a Empaque** /
 **Historial Mermado (No entró a Empaque)**. En la recepción hay un toggle **🚚 Flete a
 Cliente Directo** (`recepcion.clienteDirecto`): ese flete **no entra a empaque** (no va a
-Vaciado a Empaque), aparece en la pestaña **Cliente Directo** (se va con el cliente). El **Vaciado a Empaque se maneja TODO en kg** (la unidad que manda):
+Vaciado a Empaque), aparece en la pestaña **Cliente Directo** (se va con el cliente). Para
+**ejote** (caja + parrilla) la recepción tiene un **destare** (`recepcion.destareAplicar`,
+sugerido auto si el producto es ejote): resta el peso de empaque (parrilla 14.8 kg, caja
+0.85 kg; ~1 parrilla/64 cajas, constantes editables) del **bruto** y deja el **ejote neto**,
+que es el kg que pasa a vaciar. El desglose (bruto − material = neto) se ve en la recepción
+y en la fila de Vaciado a Empaque. El **Vaciado a Empaque se maneja TODO en kg** (la unidad que manda):
 el **kg recibido** se prellena con el peso de la recepción (editable). Por manifiesto se
 puede **Vaciar** (entra a empaque, con hora) o **Mermar** (NO entra a empaque, se
 descarta, con motivo); cada vaciado/merma captura **fecha + hora** (default ahora, **fecha
