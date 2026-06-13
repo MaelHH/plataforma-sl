@@ -105,6 +105,7 @@ export default function Modulo9() {
   const [mermarFecha, setMermarFecha] = useState("");
   const [mermarHora, setMermarHora] = useState("");
   const [mermarMotivo, setMermarMotivo] = useState("");
+  const [mermarComentario, setMermarComentario] = useState("");
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [q, setQ] = useState("");
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
@@ -236,15 +237,15 @@ export default function Modulo9() {
       : m)));
 
   // ── Mermado (no entró a empaque) ── también descuenta del piso.
-  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarMov(m); };
+  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarComentario(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarMov(m); };
   const confirmarMerma = () => {
     const kg = parseFloat(mermarKg) || 0;
     if (kg <= 0) { setMermarMov(null); return; }
-    const ev = { kg, fecha: mermarFecha || hoyISO(), hora: mermarHora || ahoraHM(), motivo: mermarMotivo.trim() };
+    const ev = { kg, fecha: mermarFecha || hoyISO(), hora: mermarHora || ahoraHM(), motivo: mermarMotivo.trim(), comentario: mermarComentario.trim() };
     setMovimientos((prev) => prev.map((m) => (m.id === mermarMov.id
       ? { ...m, vaciado: { ...baseVac(m), mermas: [...(m.vaciado?.mermas || []), ev] } }
       : m)));
-    setMermarMov(null); setMermarKg(""); setMermarMotivo("");
+    setMermarMov(null); setMermarKg(""); setMermarMotivo(""); setMermarComentario("");
   };
   // Cancela una merma registrada: vuelve al piso.
   const cancelarMerma = (movId, idx) =>
@@ -640,8 +641,8 @@ export default function Modulo9() {
                               <span className="font-semibold text-red-700">{fmt(merK)} kg</span>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {mer.map((e, i) => (
-                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={e.motivo || ""}>
-                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}
+                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={[e.motivo, e.comentario].filter(Boolean).join(" — ")}>
+                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}{e.comentario ? " 💬" : ""}
                                     <button onClick={() => cancelarMerma(m.id, i)} title="Cancelar esta merma (regresa al piso)" className="text-red-400 hover:text-red-700 font-bold leading-none text-xs">×</button>
                                   </span>
                                 ))}
@@ -1284,6 +1285,12 @@ export default function Modulo9() {
                     { value: "Merma por Inexistencia", label: "Merma por Inexistencia" },
                   ]} />
               </div>
+              {mermarMotivo && (
+                <div>
+                  <label className={LBL}>Comentario (opcional)</label>
+                  <input className={INP} value={mermarComentario} onChange={(e) => setMermarComentario(e.target.value)} placeholder="Detalle de la merma…" />
+                </div>
+              )}
               {mermarFecha && mermarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
