@@ -47,7 +47,8 @@ Hoy es un **frontend con datos de demo** que persisten en el navegador
 `cargaCampo`, `ubicaciones` (`origenes` = ranchos con subcatálogo `lotes` y
 `responsables`; `destinos` = empaques), `bitacora`, `materiales`, `importaciones`,
 `defectosCalidad` (defectos por producto), `inspectoresCalidad`, `lugaresCalidad`,
-`zonas` (campo Viaje), `consignados` (catálogo compartido Consignado/Distribuidor).
+`zonas` (campo Viaje), `consignados` (catálogo compartido Consignado/Distribuidor),
+`rezagas` (rezagas sueltas de empaque, no vienen de manifiesto — Historial Mermado de M9).
 
 ### IDs únicos (importante)
 Usar **`nuevoId(prefix)`** del store para todo ID nuevo (usa `crypto.randomUUID`).
@@ -183,7 +184,10 @@ editable** para registrar al día siguiente sin descuadrar el día correcto). Am
 descuentan del piso. Piso (inventario) = recibido − vaciado − merma. Al quedar **0 kg en
 piso** sale a su historial (Vaciado o Mermado según a dónde se fue el producto); desde los
 historiales el botón **↩️ Devolver** deshace vaciados/mermas y regresa el manifiesto a
-Vaciado a Empaque (por si fue error). El ✕ en cada vaciado/merma lo regresa al piso. Cada
+Vaciado a Empaque (por si fue error). En **Historial Mermado** se pueden registrar
+**rezagas sueltas** (botón ➕, no vienen de manifiesto): fecha/hora, tipo (Rezaga / Rezaga
+muerta), de dónde viene (Cuarto frío / Bandas), kg y comentario; se guardan en la colección
+`rezagas`. El ✕ en cada vaciado/merma lo regresa al piso. Cada
 manifiesto y los reportes se agrupan por **lote** (`lote || rancho || consignado`). Arriba
 hay un **selector de día**: el resumen (vaciado/mermado **del día**, en piso actual) y el
 pivote **Vaciado por hora y lote** (kg + bins teóricos = kg/240) se filtran por ese día; el

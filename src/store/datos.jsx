@@ -388,6 +388,7 @@ const CONFIG = {
   lugaresCalidad: { tipo: "kv", seed: LUGARES_QC_INICIAL },
   zonas: { tipo: "kv", seed: ZONAS_INICIAL },
   consignados: { tipo: "kv", seed: CONSIGNADOS_INICIAL },
+  rezagas: { tipo: "col", seed: null }, // rezagas sueltas (no vienen de manifiesto) — Historial Mermado
 };
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
@@ -450,6 +451,7 @@ export function DatosProvider({ children }) {
   const [lugaresCalidad, setLugaresCalidad] = useState(guardado.lugaresCalidad ?? LUGARES_QC_INICIAL); // lugares de inspección
   const [zonas, setZonas] = useState(guardado.zonas ?? ZONAS_INICIAL); // catálogo de zonas (campo Viaje)
   const [consignados, setConsignados] = useState(guardado.consignados ?? CONSIGNADOS_INICIAL); // catálogo compartido consignado/distribuidor
+  const [rezagas, setRezagas] = useState(guardado.rezagas ?? []); // rezagas sueltas (Historial Mermado)
 
   const [fuente, setFuente] = useState("local"); // "local" | "backend"
   const [cargando, setCargando] = useState(true);
@@ -462,9 +464,9 @@ export function DatosProvider({ children }) {
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
     materiales: setMateriales, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
     inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
-    zonas: setZonas, consignados: setConsignados,
+    zonas: setZonas, consignados: setConsignados, rezagas: setRezagas,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -528,7 +530,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -543,7 +545,7 @@ export function DatosProvider({ children }) {
     requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
-    zonas, setZonas, consignados, setConsignados,
+    zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,

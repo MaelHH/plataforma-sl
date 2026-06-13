@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDatos, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
+import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
@@ -91,7 +91,7 @@ const inspeccionConHallazgo = (insp) =>
     INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
-  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad } = useDatos();
+  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas } = useDatos();
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
@@ -106,6 +106,7 @@ export default function Modulo9() {
   const [mermarHora, setMermarHora] = useState("");
   const [mermarMotivo, setMermarMotivo] = useState("");
   const [mermarComentario, setMermarComentario] = useState("");
+  const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [q, setQ] = useState("");
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
@@ -260,6 +261,23 @@ export default function Modulo9() {
       ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [] } }
       : m)));
   };
+
+  // ── Rezaga suelta (no viene de manifiesto) → Historial Mermado ──
+  const abrirRezaga = () => setRezagaForm({ fecha: hoyISO(), hora: ahoraHM(), tipo: "Rezaga", origen: "Cuarto frío", kg: "", comentario: "" });
+  const updRezaga = (campo, val) => setRezagaForm((f) => ({ ...f, [campo]: val }));
+  const confirmarRezaga = () => {
+    const f = rezagaForm;
+    const item = {
+      id: nuevoId("REZAGA"),
+      fecha: f.fecha || hoyISO(), hora: f.hora || "",
+      tipo: f.tipo || "", origen: f.origen || "",
+      kg: parseFloat(f.kg) || 0, comentario: (f.comentario || "").trim(),
+      creado: new Date().toLocaleString("es-MX"),
+    };
+    setRezagas((prev) => [item, ...prev]);
+    setRezagaForm(null);
+  };
+  const eliminarRezaga = (id) => { if (window.confirm("¿Eliminar esta rezaga?")) setRezagas((prev) => prev.filter((r) => r.id !== id)); };
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
@@ -545,21 +563,26 @@ export default function Modulo9() {
 
       {tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado" ? (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <span className="text-sm font-semibold text-gray-900">
-              {tabRec === "histVaciado"
-                ? `Vaciados completos (${vaciadosHist.length})`
-                : tabRec === "histMermado"
-                  ? `Mermados — no entraron a empaque (${mermadosHist.length})`
-                  : `En piso para vaciar a producción (${enPisoLista.length})`}
-            </span>
-            <span className="text-xs text-gray-400 ml-2">
-              {tabRec === "histVaciado"
-                ? "· manifiestos ya vaciados por completo (en piso = 0)"
-                : tabRec === "histMermado"
-                  ? "· manifiestos terminados con kg que NO entraron a empaque"
-                  : "· captura los kg recibidos; vacía a empaque o marca merma (no entró)"}
-            </span>
+          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <span className="text-sm font-semibold text-gray-900">
+                {tabRec === "histVaciado"
+                  ? `Vaciados completos (${vaciadosHist.length})`
+                  : tabRec === "histMermado"
+                    ? `Mermados — no entraron a empaque (${mermadosHist.length})`
+                    : `En piso para vaciar a producción (${enPisoLista.length})`}
+              </span>
+              <span className="text-xs text-gray-400 ml-2">
+                {tabRec === "histVaciado"
+                  ? "· manifiestos ya vaciados por completo (en piso = 0)"
+                  : tabRec === "histMermado"
+                    ? "· manifiestos terminados con kg que NO entraron a empaque"
+                    : "· captura los kg recibidos; vacía a empaque o marca merma (no entró)"}
+              </span>
+            </div>
+            {tabRec === "histMermado" && (
+              <button onClick={abrirRezaga} className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap">➕ Registrar rezaga</button>
+            )}
           </div>
           {filasVac.length === 0 ? (
             <div className="text-xs text-gray-400 text-center py-8 italic">
@@ -676,6 +699,47 @@ export default function Modulo9() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {/* Rezagas sueltas (no vienen de manifiesto) — solo en Historial Mermado */}
+          {tabRec === "histMermado" && (
+            <div className="border-t border-gray-200">
+              <div className="px-4 py-2.5 bg-gray-50 text-xs font-semibold text-gray-700">Rezagas registradas (sin manifiesto) ({rezagas.length})</div>
+              {rezagas.length === 0 ? (
+                <div className="text-xs text-gray-400 text-center py-6 italic">Sin rezagas. Usa “➕ Registrar rezaga”.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs" style={{ minWidth: "720px" }}>
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                        <th className="text-left px-3 py-2 font-medium">Fecha</th>
+                        <th className="text-left px-3 py-2 font-medium">Tipo</th>
+                        <th className="text-left px-3 py-2 font-medium">De dónde viene</th>
+                        <th className="text-right px-3 py-2 font-medium">Kg</th>
+                        <th className="text-left px-3 py-2 font-medium">Comentario</th>
+                        <th className="text-center px-3 py-2 font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rezagas.map((rz) => (
+                        <tr key={rz.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2 whitespace-nowrap text-gray-700">{rz.fecha}{rz.hora ? ` ${rz.hora}` : ""}</td>
+                          <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${rz.tipo === "Rezaga muerta" ? "bg-gray-800 text-white" : "bg-amber-100 text-amber-700"}`}>{rz.tipo || "—"}</span></td>
+                          <td className="px-3 py-2 text-gray-700">{rz.origen || "—"}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-red-700">{rz.kg ? fmt(rz.kg) + " kg" : "—"}</td>
+                          <td className="px-3 py-2 text-gray-600">{rz.comentario || "—"}</td>
+                          <td className="px-3 py-2 text-center"><button onClick={() => eliminarRezaga(rz.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button></td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-50 font-semibold text-gray-800">
+                        <td className="px-3 py-2" colSpan={3}>Total rezaga</td>
+                        <td className="px-3 py-2 text-right text-red-700">{fmt(rezagas.reduce((a, r) => a + (parseFloat(r.kg) || 0), 0))} kg</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1296,6 +1360,40 @@ export default function Modulo9() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setMermarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={confirmarMerma} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Registrar merma</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: registrar rezaga suelta (Historial Mermado) ── */}
+      {rezagaForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <div className="text-sm font-semibold text-gray-900">➕ Registrar rezaga</div>
+              <div className="text-xs text-gray-500 mt-0.5">Rezaga suelta (no viene de un manifiesto). Se guarda en Historial Mermado.</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={rezagaForm.fecha} onChange={(e) => updRezaga("fecha", e.target.value)} /></div>
+                <div><label className={LBL}>Hora</label><input type="time" className={INP} value={rezagaForm.hora} onChange={(e) => updRezaga("hora", e.target.value)} /></div>
+              </div>
+              <div>
+                <label className={LBL}>Tipo</label>
+                <SearchSelect className={INP} value={rezagaForm.tipo} onChange={(v) => updRezaga("tipo", v)} placeholder="— Tipo —" searchThreshold={99}
+                  options={[{ value: "Rezaga", label: "Rezaga" }, { value: "Rezaga muerta", label: "Rezaga muerta" }]} />
+              </div>
+              <div>
+                <label className={LBL}>De dónde viene</label>
+                <SearchSelect className={INP} value={rezagaForm.origen} onChange={(v) => updRezaga("origen", v)} placeholder="— Origen —" searchThreshold={99}
+                  options={[{ value: "Cuarto frío", label: "Cuarto frío" }, { value: "Bandas", label: "Bandas" }]} />
+              </div>
+              <div><label className={LBL}>Kg (opcional)</label><input type="number" className={INP} value={rezagaForm.kg} onChange={(e) => updRezaga("kg", e.target.value)} placeholder="kg" /></div>
+              <div><label className={LBL}>Comentario (opcional)</label><input className={INP} value={rezagaForm.comentario} onChange={(e) => updRezaga("comentario", e.target.value)} placeholder="Detalle…" /></div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+              <button onClick={() => setRezagaForm(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+              <button onClick={confirmarRezaga} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Guardar rezaga</button>
             </div>
           </div>
         </div>
