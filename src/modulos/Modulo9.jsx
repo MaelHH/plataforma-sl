@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
+import { reciboProduccionSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
@@ -91,7 +92,7 @@ const inspeccionConHallazgo = (insp) =>
     INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
-  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas } = useDatos();
+  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, registrarEvento } = useDatos();
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
@@ -112,6 +113,49 @@ export default function Modulo9() {
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
   const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
   const [rechazoComent, setRechazoComent] = useState("");
+
+  // ── Envío a SAP (Recibo de producción) ──
+  const [sapMov, setSapMov] = useState(null);       // movimiento que se manda a SAP
+  const [sapKgCubeta, setSapKgCubeta] = useState(6); // factor kg→cubeta (editable)
+  const [sapCargando, setSapCargando] = useState(false);
+  const [sapError, setSapError] = useState("");
+  // Resuelve la orden de fabricación (SAP) del movimiento desde el catálogo de Temporadas.
+  const ordenSAPde = (m) => {
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    const o0 = r?.sap?.ordenes?.[0];
+    if (o0 == null) return null;
+    // Compat: `ordenes` puede ser [number] (formato viejo) o [{absoluteEntry, docNum}].
+    const absoluteEntry = (typeof o0 === "object") ? o0.absoluteEntry : o0;
+    const docNum = (typeof o0 === "object") ? o0.docNum : null;
+    if (absoluteEntry == null) return null;
+    return { absoluteEntry, docNum, totalOrdenes: (r.sap.ordenes || []).length, item: r.sap.item, plannedQty: r.sap.plannedQty, completedQty: r.sap.completedQty, temporada: proj.nombre, rancho: r.nombre };
+  };
+  const abrirEnvioSAP = (m) => { setSapError(""); setSapKgCubeta(6); setSapMov(m); };
+  const confirmarEnvioSAP = async () => {
+    const m = sapMov;
+    const ord = ordenSAPde(m);
+    const neto = kgRecibidosDe(m);
+    const kgc = parseFloat(sapKgCubeta) || 6;
+    const cubetas = Math.round(neto / kgc);
+    if (!ord) { setSapError("Este movimiento no tiene orden de fabricación en SAP."); return; }
+    if (!(cubetas > 0)) { setSapError("La cantidad calculada es 0."); return; }
+    setSapCargando(true); setSapError("");
+    try {
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas });
+      setMovimientos((prev) => prev.map((x) => x.id === m.id
+        ? { ...x, recepcion: { ...x.recepcion, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } } }
+        : x));
+      registrarEvento?.({ evento: "recibo_produccion_sap", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+        detalle: `${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden ${ord.absoluteEntry} · SAP #${res.docNum}`,
+        meta: { cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
+      setSapMov(null);
+    } catch (e) {
+      setSapError(String(e?.message || e));
+    } finally {
+      setSapCargando(false);
+    }
+  };
 
   // ── Muestreo de calidad ──
   const [muestreoMov, setMuestreoMov] = useState(null); // movimiento al que se le hace muestreo
@@ -885,6 +929,11 @@ export default function Modulo9() {
                           {recibido ? (
                             <>
                               <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">👁️ Ver</button>
+                              {m.recepcion?.sapEnvio ? (
+                                <span title="Recibo de producción enviado a SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium">✓ SAP #{m.recepcion.sapEnvio.docNum}</span>
+                              ) : ordenSAPde(m) ? (
+                                <button onClick={() => abrirEnvioSAP(m)} className="text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">📤 Mandar a SAP</button>
+                              ) : null}
                               <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
                             </>
                           ) : rechazado ? (
@@ -1398,6 +1447,48 @@ export default function Modulo9() {
           </div>
         </div>
       )}
+
+      {/* ── Modal: mandar cantidad a SAP (Recibo de producción) ── */}
+      {sapMov && (() => {
+        const ord = ordenSAPde(sapMov);
+        const neto = kgRecibidosDe(sapMov);
+        const kgc = parseFloat(sapKgCubeta) || 6;
+        const cubetas = Math.round(neto / kgc);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">📤 Mandar cantidad a SAP — Folio {sapMov.folio || "—"}</div>
+                <button onClick={() => setSapMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-gray-400">Temporada</span><div className="font-medium text-gray-800">{ord?.temporada || "—"}</div></div>
+                  <div><span className="text-gray-400">Rancho</span><div className="font-medium text-gray-800">{ord?.rancho || sapMov.rancho || "—"}</div></div>
+                  <div><span className="text-gray-400">Orden de fabricación</span><div className="font-medium text-gray-800">{ord ? `#${ord.docNum ?? ord.absoluteEntry}` : "—"}</div></div>
+                  <div><span className="text-gray-400">Completada actual</span><div className="font-medium text-gray-800">{ord ? `${ord.completedQty} / ${ord.plannedQty}` : "—"}</div></div>
+                </div>
+                {ord && ord.totalOrdenes > 1 && <div className="text-[11px] text-amber-600">⚠️ Este rancho tiene {ord.totalOrdenes} órdenes liberadas en SAP; se usará la #{ord.docNum ?? ord.absoluteEntry}.</div>}
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between"><span className="text-xs text-gray-500">Ejote neto recibido</span><span className="font-semibold text-gray-800">{Math.round(neto)} kg</span></div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500">kg por cubeta</span>
+                    <input type="number" step="0.1" value={sapKgCubeta} onChange={(e) => setSapKgCubeta(e.target.value)} className="w-24 text-sm px-2 py-1 border border-gray-200 rounded-md text-right focus:outline-none focus:border-indigo-400" />
+                  </div>
+                  <div className="flex items-center justify-between border-t border-indigo-100 pt-2"><span className="text-xs font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-lg font-bold text-indigo-700">{cubetas}</span></div>
+                  <div className="text-[10px] text-gray-400">{Math.round(neto)} kg ÷ {kgc} kg/cubeta = {cubetas} cubetas → suma a "Cantidad completada".</div>
+                </div>
+                {!ord && <div className="text-[11px] text-red-600">⚠️ Este movimiento no tiene orden de fabricación en SAP (su rancho no está en el catálogo).</div>}
+                {sapError && <div className="text-[11px] text-red-600">No se pudo enviar: {sapError}</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setSapMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={confirmarEnvioSAP} disabled={sapCargando || !ord || !(cubetas > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{sapCargando ? "Enviando…" : "Confirmar envío a SAP"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

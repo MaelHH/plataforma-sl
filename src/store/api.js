@@ -76,3 +76,20 @@ export async function login(username, password) {
 export async function disponible() {
   try { await health(); return true; } catch { return false; }
 }
+
+// ── SAP (solo lectura · Paso 1) ──
+// Órdenes de fabricación de SAP anidadas como ranchos(=Lote) → lotes(=Departamento).
+const qs = (params = {}) => {
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") p.set(k, v); });
+  const s = p.toString();
+  return s ? `?${s}` : "";
+};
+export const getRanchosSAP = (project) => req("GET", `/api/sap/ranchos${qs({ project })}`);
+export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
+export const getOrdenesFabricacionSAP = (project) => req("GET", `/api/sap/ordenes-fabricacion${qs({ project })}`);
+// Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
+export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalogo${qs({ project })}`);
+// ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
+// body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
+export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body);
