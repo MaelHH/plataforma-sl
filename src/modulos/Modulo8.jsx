@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, nuevoId } from "../store/datos";
-import { getCatalogoProyectosSAP, getProyectosSAP } from "../store/api";
+import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, crearOrdenCompraSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 
 function hoyISO() {
@@ -9,7 +9,7 @@ function hoyISO() {
 }
 
 export default function Modulo8() {
-  const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos } = useDatos();
+  const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se está editando (null = nuevo)
@@ -40,8 +40,8 @@ export default function Modulo8() {
         // compat con datos viejos (tienen `sap` y nombre igual, sin sapKey aún).
         const ex = proj.ranchos.find((r) => r.sapKey === sr.nombre)
           || proj.ranchos.find((r) => !r.sapKey && r.sap && r.nombre === sr.nombre);
-        if (!ex) proj.ranchos.push({ nombre: sr.nombre, departamento: sr.departamento || "", responsables: [], sap, sapKey: sr.nombre });
-        else { ex.sapKey = sr.nombre; ex.departamento = ex.departamento || sr.departamento || ""; ex.sap = sap; } // nombre/responsables editados se conservan
+        if (!ex) proj.ranchos.push({ nombre: sr.nombre, departamento: sr.departamento || "", cultivo: sr.cultivo || "", responsables: [], sap, sapKey: sr.nombre });
+        else { ex.sapKey = sr.nombre; ex.departamento = ex.departamento || sr.departamento || ""; ex.cultivo = sr.cultivo || ex.cultivo || ""; ex.sap = sap; } // nombre/responsables editados se conservan
       }
     }
     return next;
@@ -85,6 +85,83 @@ export default function Modulo8() {
     })();
     return () => { cancel = true; };
   }, [catUbic]);
+
+  // ── SAP · Fleteros (proveedores) + Orden de compra de flete (Paso 4) ──
+  const [catFleteros, setCatFleteros] = useState(false);
+  const [flCargando, setFlCargando] = useState(false);
+  const [flError, setFlError] = useState("");
+  const [flInfo, setFlInfo] = useState("");
+  const [flBuscar, setFlBuscar] = useState("");
+  const [ocMov, setOcMov] = useState(null);       // movimiento para la OC
+  const [ocCardCode, setOcCardCode] = useState("");
+  const [ocItem, setOcItem] = useState("");
+  const [ocTax, setOcTax] = useState("");
+  const [ocComentario, setOcComentario] = useState("");
+  const [ocCargando, setOcCargando] = useState(false);
+  const [ocError, setOcError] = useState("");
+  const [itemsFlete, setItemsFlete] = useState([]);
+  const [taxCodes, setTaxCodes] = useState([]);
+
+  // Traer fleteros de SAP → upsert al catálogo `proveedores` (por cardCode).
+  const cargarProveedoresSAP = async () => {
+    setFlCargando(true); setFlError(""); setFlInfo("");
+    try {
+      const d = await getProveedoresFleteSAP(flBuscar);
+      const lista = (d.value || []).map((b) => ({ cardCode: b.CardCode, nombre: b.CardName || b.CardCode, rfc: b.FederalTaxID || "", telefono: b.Phone1 || "", email: b.EmailAddress || "" }));
+      setProveedores((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const byCode = new Map(base.map((p) => [p.cardCode, p]));
+        for (const p of lista) byCode.set(p.cardCode, { ...byCode.get(p.cardCode), ...p });
+        return Array.from(byCode.values()).sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      });
+      setFlInfo(`${lista.length} fletero(s) traídos de SAP`);
+    } catch (e) { setFlError(String(e?.message || e)); }
+    finally { setFlCargando(false); }
+  };
+  const cargarCatalogosOC = async () => {
+    try { const d = await getItemsFleteSAP(); setItemsFlete(d.value || []); } catch { /* noop */ }
+    try { const d = await getTaxCodesSAP(); setTaxCodes(d.value || []); } catch { /* noop */ }
+  };
+  const abrirOC = (m) => {
+    setOcError(""); setOcCardCode(""); setOcItem(""); setOcTax("");
+    setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
+    setOcMov(m);
+    cargarCatalogosOC();
+  };
+  // Defaults cuando llegan los catálogos y hay modal de OC abierto.
+  useEffect(() => {
+    if (!ocMov) return;
+    if (!ocItem && itemsFlete.length) {
+      const it = itemsFlete.find((x) => /acarreo de fruta/i.test(x.ItemName || "")) || itemsFlete[0];
+      setOcItem(it?.ItemCode || "");
+    }
+    if (!ocTax && taxCodes.length) {
+      const t = taxCodes.find((x) => /16/.test(`${x.Code} ${x.Name}`)) || taxCodes[0];
+      setOcTax(t?.Code || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocMov, itemsFlete, taxCodes]);
+  const confirmarOC = async () => {
+    const m = ocMov;
+    const precio = parseFloat(m.flete) || 0;
+    if (!ocCardCode) { setOcError("Elige el fletero."); return; }
+    if (!ocItem) { setOcError("Elige el item de flete."); return; }
+    if (!(precio > 0)) { setOcError("El movimiento no tiene 'Flete $' (precio)."); return; }
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    setOcCargando(true); setOcError("");
+    try {
+      const res = await crearOrdenCompraSAP({
+        cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
+        proyecto: m.proyecto || null, cultivo: r?.cultivo || null, lote: m.rancho || null,
+        departamento: r?.departamento || m.departamento || null, comentario: ocComentario,
+      });
+      setMovimientos((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: new Date().toISOString() } } : x));
+      setOcMov(null);
+    } catch (e) { setOcError(String(e?.message || e)); }
+    finally { setOcCargando(false); }
+  };
+
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
   const upTemp = (fn) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).map(fn));
   const addTemporada = () => setProyectos((prev) => [...(Array.isArray(prev) ? prev : []), { code: nuevoId("TMP_"), nombre: "Nueva temporada", ranchos: [] }]);
@@ -335,6 +412,7 @@ export default function Modulo8() {
           <button onClick={() => setCatUbic(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📍 Ranchos / Empaques</button>
           <button onClick={() => setCatZonas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🗺️ Zonas</button>
           <button onClick={() => setCatConsig(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🏢 Consignados</button>
+          <button onClick={() => setCatFleteros(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🚚 Fleteros</button>
           <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold">OS</div>
           <span className="text-sm font-medium text-gray-700">Oscar</span>
         </div>
@@ -420,6 +498,11 @@ export default function Modulo8() {
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                         <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
+                        {m.ocSAP ? (
+                          <span title="Orden de compra creada en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 mr-1">✓ OC #{m.ocSAP.pedido?.docNum ?? m.ocSAP.solicitud?.docNum}</span>
+                        ) : (
+                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">📄 OC</button>
+                        )}
                         <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
                       </td>
                     </tr>
@@ -868,6 +951,100 @@ export default function Modulo8() {
           </div>
         </div>
       )}
+
+      {/* ── Modal: Fleteros (proveedores SAP) ── */}
+      {catFleteros && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">🚚 Fleteros (proveedores SAP)</div>
+                <div className="text-xs text-gray-500 mt-0.5">Para la orden de compra de flete</div>
+              </div>
+              <button onClick={() => setCatFleteros(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input value={flBuscar} onChange={(e) => setFlBuscar(e.target.value)} placeholder="Buscar por nombre/código…" className={INP + " flex-1 min-w-[180px]"} />
+                <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">
+                  {flCargando ? "Cargando…" : "🔄 Traer de SAP"}
+                </button>
+              </div>
+              {flError && <div className="text-[11px] text-red-600">No se pudo traer de SAP: {flError}</div>}
+              {flInfo && <div className="text-[11px] text-green-700">{flInfo}.</div>}
+              <div className="text-[11px] text-gray-500">{proveedores.length} fletero(s) en tu catálogo.</div>
+              <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                {proveedores.length === 0 ? (
+                  <div className="text-[11px] text-gray-400 italic px-3 py-3">Aún no hay fleteros. Da clic en "Traer de SAP".</div>
+                ) : proveedores.map((p) => (
+                  <div key={p.cardCode} className="px-3 py-2 text-xs">
+                    <span className="font-semibold text-gray-800">{p.nombre}</span>
+                    <span className="text-gray-400"> · {p.cardCode}{p.rfc ? " · " + p.rfc : ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setCatFleteros(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Orden de compra de flete (Solicitud + Pedido) ── */}
+      {ocMov && (() => {
+        const m = ocMov;
+        const precio = parseFloat(m.flete) || 0;
+        const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+        const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">📄 Orden de compra de flete — Folio {m.folio || "—"}</div>
+                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-gray-400">Temporada</span><div className="font-medium text-gray-800">{m.proyecto || "—"}</div></div>
+                  <div><span className="text-gray-400">Rancho</span><div className="font-medium text-gray-800">{m.rancho || "—"}</div></div>
+                  <div><span className="text-gray-400">Cultivo</span><div className="font-medium text-gray-800">{r?.cultivo || "—"}</div></div>
+                  <div><span className="text-gray-400">Departamento</span><div className="font-medium text-gray-800">{r?.departamento || m.departamento || "—"}</div></div>
+                </div>
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 text-xs flex items-center justify-between">
+                  <span className="text-gray-500">Precio (Flete $ del movimiento)</span>
+                  <span className="text-lg font-bold text-indigo-700">${precio.toLocaleString()}</span>
+                </div>
+                {!(precio > 0) && <div className="text-[11px] text-amber-600">⚠️ Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
+                <div>
+                  <label className={LBL}>Fletero (proveedor)</label>
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros en 🚚 Fleteros"}
+                    options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Item de flete</label>
+                  <SearchSelect className={INP} value={ocItem} onChange={setOcItem} placeholder="— Item —"
+                    options={itemsFlete.map((it) => ({ value: it.ItemCode, label: `${it.ItemCode} · ${it.ItemName}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>IVA</label>
+                  <SearchSelect className={INP} value={ocTax} onChange={setOcTax} placeholder="— IVA —"
+                    options={taxCodes.map((t) => ({ value: t.Code, label: `${t.Code}${t.Name ? " · " + t.Name : ""}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Comentario</label>
+                  <textarea value={ocComentario} onChange={(e) => setOcComentario(e.target.value)} rows={2} className={INP} />
+                </div>
+                {ocError && <div className="text-[11px] text-red-600">No se pudo crear la OC: {ocError}</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setOcMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Crear OC en SAP"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

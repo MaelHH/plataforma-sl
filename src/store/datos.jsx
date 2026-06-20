@@ -390,6 +390,7 @@ const CONFIG = {
   consignados: { tipo: "kv", seed: CONSIGNADOS_INICIAL },
   rezagas: { tipo: "col", seed: null }, // rezagas sueltas (no vienen de manifiesto) — Historial Mermado
   proyectos: { tipo: "kv", seed: [] }, // catálogo SAP: proyecto → ranchos + responsables. seed [] → SIEMPRE array (no {})
+  proveedores: { tipo: "kv", seed: [] }, // catálogo SAP: fleteros (BusinessPartners cSupplier) para la OC de flete
 };
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
@@ -454,6 +455,7 @@ export function DatosProvider({ children }) {
   const [consignados, setConsignados] = useState(guardado.consignados ?? CONSIGNADOS_INICIAL); // catálogo compartido consignado/distribuidor
   const [rezagas, setRezagas] = useState(guardado.rezagas ?? []); // rezagas sueltas (Historial Mermado)
   const [proyectos, setProyectos] = useState(guardado.proyectos ?? []); // catálogo SAP: proyecto → ranchos + responsables
+  const [proveedores, setProveedores] = useState(guardado.proveedores ?? []); // catálogo SAP: fleteros
 
   const [fuente, setFuente] = useState("local"); // "local" | "backend"
   const [cargando, setCargando] = useState(true);
@@ -466,9 +468,9 @@ export function DatosProvider({ children }) {
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
     materiales: setMateriales, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
     inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
-    zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos,
+    zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -532,7 +534,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -549,6 +551,7 @@ export function DatosProvider({ children }) {
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,
     proyectos: Array.isArray(proyectos) ? proyectos : [], setProyectos, // coerción defensiva a array
+    proveedores: Array.isArray(proveedores) ? proveedores : [], setProveedores,
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
