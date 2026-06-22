@@ -44,6 +44,8 @@ Hoy es un **frontend con datos de demo** que persisten en el navegador
 `trailers`, `cargasEmbarques`, `monitoreo`, `catalogo` (presentaciones), `cultivos`,
 `programa`, `requerimientoGen`, `requerimientoMeta`, `responsables`, `lineas`
 (catálogo de transporte con subcatálogos choferes/tractos/cajas), `movimientos`,
+`movMateriales` (movimientos de materiales de M13: fletero + materiales arriba del
+trailer; el catálogo de materiales reutiliza el master `materiales`),
 `cargaCampo`, `ubicaciones` (`origenes` = ranchos con subcatálogo `lotes` y
 `responsables`; `destinos` = empaques), `bitacora`, `materiales`, `importaciones`,
 `defectosCalidad` (defectos por producto), `inspectoresCalidad`, `lugaresCalidad`,
@@ -165,6 +167,10 @@ Registra cada **flete que sale del campo** hacia el empaque: folio, **remisión*
 lotes y responsables), **consignados** (compartido consignado/distribuidor), carga,
 ubicaciones. Filtros (texto + destino + rancho) y **botón Editar** (avisa si el flete ya
 se recibió/rechazó en M9: la BD ya se afectó, hay que avisar manual). Alimenta a M9.
+Muestra dos fechas por flete: **Salida campo** (`m.fecha`, capturada aquí) y **Recibo
+empaque** (`recepcion.fechaLlegada`, la estampa M9 al dar recepción) — esta última sale
+*Pendiente* hasta que el empaque recibe y entonces se llena sola, con el **plazo** (días
+en tránsito = recibo − salida). Visible en la tabla, en Ver y en el export a Excel.
 
 ### Empaque (id 9) — Empaque
 Antes "Recepción en Empaque". Pestañas: **Por recibir** / **Vaciado a Empaque** /
@@ -224,6 +230,17 @@ genera un PDF estilo dashboard (Power BI): filtros, GROWER/PRODUCT, tabla, KPIs,
 desglose de defectos y barra apilada. Botones **Mandar Correo** (mailto) y **Mandar
 WhatsApp** (wa.me) con el resumen prellenado. Catálogos: defectos por producto,
 inspectores, lugares.
+
+### Movimiento Materiales (id 13) — Materiales
+En el menú va **debajo de Dashboard**. Registra el movimiento de materiales con los
+**mismos datos del fletero** que M8/M3 (línea/chofer/tracto/caja del catálogo `lineas`,
+con el mismo flujo de "➕ Nuevo…" que guarda al catálogo al guardar), más folio/fecha/
+origen/destino, flete y observaciones. El **"cuadrito"** `materialesArriba` marca si los
+materiales iban **encima del trailer**, y una tabla lista **qué materiales** (del catálogo)
+con cantidad/unidad. El **catálogo de materiales reutiliza el master `materiales`** (el
+mismo de M10 Importaciones) — un solo maestro, **a futuro se leerá de SAP**; se edita
+in-app (código/descripción/unidad). Registros en la colección `movMateriales`. Tabla con
+búsqueda + Ver/Editar/Borrar y badge "🔝 Sí" en *Arriba del trailer*.
 
 ## Restricciones del negocio (importantes)
 
