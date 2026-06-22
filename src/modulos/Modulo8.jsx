@@ -8,6 +8,21 @@ function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Fecha en que el empaque recibió el flete. La estampa M9 (Recepción) al dar
+// recepción (`recepcion.fechaLlegada`). Queda vacía mientras el flete no se reciba.
+function fechaReciboEmpaque(m) {
+  return m.recepcion?.estado === "recibido" ? (m.recepcion.fechaLlegada || "") : "";
+}
+
+// Días entre la salida de campo y el recibo en empaque (el "plazo" en que llegó).
+function diasPlazo(salidaISO, reciboISO) {
+  if (!salidaISO || !reciboISO) return null;
+  const a = new Date(salidaISO + "T00:00:00");
+  const b = new Date(reciboISO + "T00:00:00");
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
+
 export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
 
@@ -349,7 +364,9 @@ export default function Modulo8() {
       const flete = parseFloat(m.flete) || 0;
       const pesoKg = parseFloat(m.pesoBascula) || 0;
       return {
-        Folio: m.folio || "", Fecha: m.fecha || "", Remisión: m.remision || "",
+        Folio: m.folio || "", "Salida campo": m.fecha || "", "Recibo empaque": fechaReciboEmpaque(m) || "",
+        "Días en tránsito": (() => { const d = diasPlazo(m.fecha, fechaReciboEmpaque(m)); return d != null ? d : ""; })(),
+        Remisión: m.remision || "",
         Viaje: m.viaje || "", Temporada: ranchoDe(m), Lote: loteDe(m),
         "Resp. cosecha": m.responsableCosecha || "", Consignado: m.consignado || "",
         Distribuidor: m.distribuidor || "", Origen: m.origen || "", Destino: m.destino || "",
@@ -459,11 +476,12 @@ export default function Modulo8() {
           <div className="text-xs text-gray-400 text-center py-8 italic">Ningún movimiento coincide con la búsqueda.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "900px" }}>
+            <table className="w-full text-xs" style={{ minWidth: "1000px" }}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                   <th className="text-left px-3 py-2 font-medium">Folio</th>
-                  <th className="text-left px-3 py-2 font-medium">Fecha</th>
+                  <th className="text-left px-3 py-2 font-medium">Salida campo</th>
+                  <th className="text-left px-3 py-2 font-medium">Recibo empaque</th>
                   <th className="text-left px-3 py-2 font-medium">Temporada</th>
                   <th className="text-left px-3 py-2 font-medium">Origen → Destino</th>
                   <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
@@ -485,6 +503,14 @@ export default function Modulo8() {
                     <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
                       <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {(() => {
+                          const rec = fechaReciboEmpaque(m);
+                          if (!rec) return <span className="text-gray-300 italic">Pendiente</span>;
+                          const d = diasPlazo(m.fecha, rec);
+                          return (<><div className="font-semibold text-green-700">{rec}</div>{d != null && <div className="text-[10px] text-gray-400">{d} {d === 1 ? "día" : "días"} en tránsito</div>}</>);
+                        })()}
+                      </td>
                       <td className="px-3 py-2 text-gray-700">{ranchoDe(m) || "—"}{loteDe(m) ? ` · ${loteDe(m)}` : ""}</td>
                       <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
                       <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
@@ -746,8 +772,10 @@ export default function Modulo8() {
             <div className="px-5 py-4 space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  ["Fecha", verMov.fecha], ["Viaje", verMov.viaje], ["Temporada", ranchoDe(verMov)],
-                  ["Lote", loteDe(verMov)], ["Departamento", verMov.departamento], ["Inicio cosecha", verMov.horaInicio], ["Término cosecha", verMov.horaTermino],
+                  ["Salida campo", verMov.fecha], ["Recibo empaque", fechaReciboEmpaque(verMov)],
+                  ["Plazo (días)", (() => { const d = diasPlazo(verMov.fecha, fechaReciboEmpaque(verMov)); return d != null ? `${d} ${d === 1 ? "día" : "días"}` : ""; })()],
+                  ["Viaje", verMov.viaje], ["Temporada", ranchoDe(verMov)], ["Lote", loteDe(verMov)],
+                  ["Departamento", verMov.departamento], ["Inicio cosecha", verMov.horaInicio], ["Término cosecha", verMov.horaTermino],
                   ["Resp. cosecha", verMov.responsableCosecha], ["Consignado", verMov.consignado], ["Distribuidor", verMov.distribuidor],
                   ["Origen", verMov.origen], ["Destino", verMov.destino], ["Remisión", verMov.remision],
                   ["Peso báscula (kg)", verMov.pesoBascula],
