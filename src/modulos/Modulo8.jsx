@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, nuevoId } from "../store/datos";
-import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, crearOrdenCompraSAP } from "../store/api";
+import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 
 function hoyISO() {
@@ -96,11 +96,14 @@ export default function Modulo8() {
   const [ocCardCode, setOcCardCode] = useState("");
   const [ocItem, setOcItem] = useState("");
   const [ocTax, setOcTax] = useState("");
+  const [ocCultivo, setOcCultivo] = useState("");
   const [ocComentario, setOcComentario] = useState("");
   const [ocCargando, setOcCargando] = useState(false);
   const [ocError, setOcError] = useState("");
+  const [ocConfirm, setOcConfirm] = useState(false); // 2do paso: confirmar antes de escribir en SAP
   const [itemsFlete, setItemsFlete] = useState([]);
   const [taxCodes, setTaxCodes] = useState([]);
+  const [cultivos, setCultivos] = useState([]);
 
   // Traer fleteros de SAP → upsert al catálogo `proveedores` (por cardCode).
   const cargarProveedoresSAP = async () => {
@@ -121,9 +124,14 @@ export default function Modulo8() {
   const cargarCatalogosOC = async () => {
     try { const d = await getItemsFleteSAP(); setItemsFlete(d.value || []); } catch { /* noop */ }
     try { const d = await getTaxCodesSAP(); setTaxCodes(d.value || []); } catch { /* noop */ }
+    try { const d = await getCultivosSAP(); setCultivos(d.value || []); } catch { /* noop */ }
   };
   const abrirOC = (m) => {
-    setOcError(""); setOcCardCode(""); setOcItem(""); setOcTax("");
+    setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax("");
+    // Default del cultivo: el que viene anidado al proyecto/rancho (editable abajo).
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    setOcCultivo(r?.cultivo || "");
     setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
     setOcMov(m);
     cargarCatalogosOC();
@@ -153,7 +161,7 @@ export default function Modulo8() {
     try {
       const res = await crearOrdenCompraSAP({
         cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
-        proyecto: m.proyecto || null, cultivo: r?.cultivo || null, lote: m.rancho || null,
+        proyecto: m.proyecto || null, cultivo: ocCultivo || r?.cultivo || null, lote: m.rancho || null,
         departamento: r?.departamento || m.departamento || null, comentario: ocComentario,
       });
       setMovimientos((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: new Date().toISOString() } } : x));
@@ -1008,7 +1016,6 @@ export default function Modulo8() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-gray-400">Temporada</span><div className="font-medium text-gray-800">{m.proyecto || "—"}</div></div>
                   <div><span className="text-gray-400">Rancho</span><div className="font-medium text-gray-800">{m.rancho || "—"}</div></div>
-                  <div><span className="text-gray-400">Cultivo</span><div className="font-medium text-gray-800">{r?.cultivo || "—"}</div></div>
                   <div><span className="text-gray-400">Departamento</span><div className="font-medium text-gray-800">{r?.departamento || m.departamento || "—"}</div></div>
                 </div>
                 <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 text-xs flex items-center justify-between">
@@ -1017,18 +1024,27 @@ export default function Modulo8() {
                 </div>
                 {!(precio > 0) && <div className="text-[11px] text-amber-600">⚠️ Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
                 <div>
+                  <label className={LBL}>Cultivo {r?.cultivo ? <span className="text-gray-400 font-normal">· del proyecto: {r.cultivo}</span> : null}</label>
+                  <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo (norma de reparto) —"
+                    options={(() => {
+                      const opts = cultivos.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }));
+                      if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo });
+                      return opts;
+                    })()} />
+                </div>
+                <div>
                   <label className={LBL}>Fletero (proveedor)</label>
-                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros en 🚚 Fleteros"}
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros en 🚚 Fleteros"}
                     options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
                 </div>
                 <div>
                   <label className={LBL}>Item de flete</label>
-                  <SearchSelect className={INP} value={ocItem} onChange={setOcItem} placeholder="— Item —"
+                  <SearchSelect className={INP} value={ocItem} onChange={setOcItem} searchThreshold={0} placeholder="— Item —"
                     options={itemsFlete.map((it) => ({ value: it.ItemCode, label: `${it.ItemCode} · ${it.ItemName}` }))} />
                 </div>
                 <div>
                   <label className={LBL}>IVA</label>
-                  <SearchSelect className={INP} value={ocTax} onChange={setOcTax} placeholder="— IVA —"
+                  <SearchSelect className={INP} value={ocTax} onChange={setOcTax} searchThreshold={0} placeholder="— IVA —"
                     options={taxCodes.map((t) => ({ value: t.Code, label: `${t.Code}${t.Name ? " · " + t.Name : ""}` }))} />
                 </div>
                 <div>
@@ -1037,10 +1053,20 @@ export default function Modulo8() {
                 </div>
                 {ocError && <div className="text-[11px] text-red-600">No se pudo crear la OC: {ocError}</div>}
               </div>
-              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
-                <button onClick={() => setOcMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Crear OC en SAP"}</button>
-              </div>
+              {!ocConfirm ? (
+                <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                  <button onClick={() => setOcMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                  <button onClick={() => { setOcError(""); setOcConfirm(true); }} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">Crear OC en SAP</button>
+                </div>
+              ) : (
+                <div className="px-5 py-3 border-t border-amber-200 bg-amber-50/60">
+                  <div className="text-[12px] text-amber-800 font-medium mb-2">⚠️ ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud de Pedido + Pedido). Esta acción no se puede deshacer desde aquí.</div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setOcConfirm(false)} disabled={ocCargando} className="text-xs px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white disabled:opacity-50">No, volver</button>
+                    <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Sí, crear en SAP"}</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

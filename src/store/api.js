@@ -99,5 +99,6 @@ export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produc
 export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-flete${qs({ q })}`);
 export const getItemsFleteSAP = () => req("GET", "/api/sap/items-flete");
 export const getTaxCodesSAP = () => req("GET", "/api/sap/tax-codes");
+export const getCultivosSAP = () => req("GET", "/api/sap/cultivos");
 // ESCRITURA: crea Solicitud de Pedido + Pedido de flete. body: { cardCode, item, precio, taxCode, proyecto, cultivo, lote, departamento, comentario }.
 export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body);
