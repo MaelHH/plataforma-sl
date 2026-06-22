@@ -4,9 +4,10 @@
 //  - Auth:                          /api/auth/...
 //
 // La URL base se toma de VITE_API_URL (en .env). Si no, usa el MISMO host desde el
-// que se abrió la app, en el puerto 8000. Así funciona tanto en tu compu (localhost)
-// como cuando un colega entra por tu IP local (http://192.168.x.x:5173 → :8000).
-const hostBackend = typeof window !== "undefined" ? `http://${window.location.hostname}:8000` : "http://localhost:8000";
+// que se abrió la app, en el puerto 4104 (puerto del backend FastAPI / servicio NSSM
+// PlataformaSL-Backend). Así funciona tanto en tu compu (localhost) como cuando un
+// colega entra por tu IP local (http://192.168.x.x:7890 → :4104).
+const hostBackend = typeof window !== "undefined" ? `http://${window.location.hostname}:4104` : "http://localhost:4104";
 export const API_URL = (import.meta.env.VITE_API_URL || hostBackend).replace(/\/$/, "");
 
 // Colecciones (arrays de objetos con `id`) y singletons (objetos / arrays simples).
@@ -76,3 +77,28 @@ export async function login(username, password) {
 export async function disponible() {
   try { await health(); return true; } catch { return false; }
 }
+
+// ── SAP (solo lectura · Paso 1) ──
+// Órdenes de fabricación de SAP anidadas como ranchos(=Lote) → lotes(=Departamento).
+const qs = (params = {}) => {
+  const p = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v != null && v !== "") p.set(k, v); });
+  const s = p.toString();
+  return s ? `?${s}` : "";
+};
+export const getRanchosSAP = (project) => req("GET", `/api/sap/ranchos${qs({ project })}`);
+export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
+export const getOrdenesFabricacionSAP = (project) => req("GET", `/api/sap/ordenes-fabricacion${qs({ project })}`);
+// Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
+export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalogo${qs({ project })}`);
+// ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
+// body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
+export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body);
+
+// ── SAP · Orden de compra de flete (Paso 4) ──
+export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-flete${qs({ q })}`);
+export const getItemsFleteSAP = () => req("GET", "/api/sap/items-flete");
+export const getTaxCodesSAP = () => req("GET", "/api/sap/tax-codes");
+export const getCultivosSAP = () => req("GET", "/api/sap/cultivos");
+// ESCRITURA: crea Solicitud de Pedido + Pedido de flete. body: { cardCode, item, precio, taxCode, proyecto, cultivo, lote, departamento, comentario }.
+export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body);
