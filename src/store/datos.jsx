@@ -378,6 +378,7 @@ const CONFIG = {
   responsables: { tipo: "kv", seed: ["Francisco Flores", "Kiko"] },
   lineas: { tipo: "col", seed: LINEAS_INICIAL },
   movimientos: { tipo: "col", seed: null },
+  movMateriales: { tipo: "col", seed: null }, // movimientos de materiales (Movimiento Materiales) — fletero + materiales arriba del trailer
   cargaCampo: { tipo: "col", seed: CARGA_CAMPO_INICIAL },
   ubicaciones: { tipo: "kv", seed: UBICACIONES_INICIAL },
   bitacora: { tipo: "col", seed: null },
@@ -443,6 +444,7 @@ export function DatosProvider({ children }) {
   const [responsables, setResponsables] = useState(guardado.responsables ?? ["Francisco Flores", "Kiko"]); // nombres usados en monitoreo
   const [lineas, setLineas] = useState(guardado.lineas ?? LINEAS_INICIAL); // catálogo de líneas de transporte
   const [movimientos, setMovimientos] = useState(guardado.movimientos ?? []); // movimientos internos campo→empaque
+  const [movMateriales, setMovMateriales] = useState(guardado.movMateriales ?? []); // movimientos de materiales (fletero + materiales arriba del trailer)
   const [cargaCampo, setCargaCampo] = useState(guardado.cargaCampo ?? CARGA_CAMPO_INICIAL); // catálogo de qué se carga
   const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
   const [bitacora, setBitacora] = useState(guardado.bitacora ?? []); // registro de eventos con timestamp (backend-ready)
@@ -465,12 +467,13 @@ export function DatosProvider({ children }) {
     catalogo: setCatalogo, cultivos: setCultivos, programa: setPrograma,
     requerimientoGen: setRequerimientoGen, requerimientoMeta: setRequerimientoMeta,
     responsables: setResponsables, lineas: setLineas, movimientos: setMovimientos,
+    movMateriales: setMovMateriales,
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
     materiales: setMateriales, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
     inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
     zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -534,7 +537,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -548,6 +551,7 @@ export function DatosProvider({ children }) {
     catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma,
     requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
+    movMateriales, setMovMateriales,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,
     proyectos: Array.isArray(proyectos) ? proyectos : [], setProyectos, // coerción defensiva a array

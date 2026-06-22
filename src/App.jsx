@@ -23,11 +23,13 @@ import Modulo9 from "./modulos/Modulo9";
 import Modulo10 from "./modulos/Modulo10";
 import Modulo11 from "./modulos/Modulo11";
 import Modulo12 from "./modulos/Modulo12";
+import Modulo13 from "./modulos/Modulo13";
 
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
 const MODULOS = [
   { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈", desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
+  { id: 13, nombre: "Movimiento Materiales", sub: "Materiales", icono: "🧱", desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
   { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾", desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
   { id: 9, nombre: "Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
   { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋", desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
@@ -125,6 +127,7 @@ export default function App() {
               {moduloActivo === 10 && <Modulo10 />}
               {moduloActivo === 11 && <Modulo11 />}
               {moduloActivo === 12 && <Modulo12 />}
+              {moduloActivo === 13 && <Modulo13 />}
             </ErrorBoundary>
           </div>
         </div>
