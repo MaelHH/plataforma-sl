@@ -137,8 +137,22 @@ export default function Modulo8() {
     finally { setFlCargando(false); }
   };
   const cargarCatalogosOC = async () => {
-    try { const d = await getItemsFleteSAP(); setItemsFlete(d.value || []); } catch { /* noop */ }
-    try { const d = await getTaxCodesSAP(); setTaxCodes(d.value || []); } catch { /* noop */ }
+    // Carga catálogos y fija los defaults al vuelo (en el cargador, no en un useEffect,
+    // para no disparar renders en cascada — regla react-hooks/set-state-in-effect).
+    try {
+      const d = await getItemsFleteSAP();
+      const items = d.value || [];
+      setItemsFlete(items);
+      const it = items.find((x) => /acarreo de fruta/i.test(x.ItemName || "")) || items[0];
+      if (it) setOcItem(it.ItemCode || "");
+    } catch { /* noop */ }
+    try {
+      const d = await getTaxCodesSAP();
+      const txs = d.value || [];
+      setTaxCodes(txs);
+      const t = txs.find((x) => /16/.test(`${x.Code} ${x.Name}`)) || txs[0];
+      if (t) setOcTax(t.Code || "");
+    } catch { /* noop */ }
     try { const d = await getCultivosSAP(); setCultivos(d.value || []); } catch { /* noop */ }
   };
   const abrirOC = (m) => {
@@ -151,19 +165,6 @@ export default function Modulo8() {
     setOcMov(m);
     cargarCatalogosOC();
   };
-  // Defaults cuando llegan los catálogos y hay modal de OC abierto.
-  useEffect(() => {
-    if (!ocMov) return;
-    if (!ocItem && itemsFlete.length) {
-      const it = itemsFlete.find((x) => /acarreo de fruta/i.test(x.ItemName || "")) || itemsFlete[0];
-      setOcItem(it?.ItemCode || "");
-    }
-    if (!ocTax && taxCodes.length) {
-      const t = taxCodes.find((x) => /16/.test(`${x.Code} ${x.Name}`)) || taxCodes[0];
-      setOcTax(t?.Code || "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ocMov, itemsFlete, taxCodes]);
   const confirmarOC = async () => {
     const m = ocMov;
     const precio = parseFloat(m.flete) || 0;
@@ -339,11 +340,6 @@ export default function Modulo8() {
   const updUbic = (tipo, id, val) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].map((u) => u.id === id ? { ...u, nombre: val } : u) }));
   const addUbic = (tipo) => setUbicaciones((prev) => ({ ...prev, [tipo]: [...prev[tipo], tipo === "origenes" ? { id: nuevoId("U_"), nombre: "Nuevo rancho", lotes: [], responsables: [] } : { id: nuevoId("U_"), nombre: "Nuevo empaque" }] }));
   const delUbic = (tipo, id) => setUbicaciones((prev) => ({ ...prev, [tipo]: prev[tipo].filter((u) => u.id !== id) }));
-
-  // Subcatálogos del rancho (lotes / responsables de cosecha) — arreglos de texto
-  const addRanchoSub = (ranchoId, sub) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: [...(o[sub] || []), sub === "lotes" ? "Nuevo lote" : "Nuevo responsable"] } : o) }));
-  const updRanchoSub = (ranchoId, sub, idx, val) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: (o[sub] || []).map((x, j) => j === idx ? val : x) } : o) }));
-  const delRanchoSub = (ranchoId, sub, idx) => setUbicaciones((prev) => ({ ...prev, origenes: prev.origenes.map((o) => o.id === ranchoId ? { ...o, [sub]: (o[sub] || []).filter((_, j) => j !== idx) } : o) }));
 
   // Catálogo de zonas (Viaje) — arreglo de texto
   const addZona = () => setZonas((p) => [...p, "Nueva zona"]);
