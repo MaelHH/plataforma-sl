@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useDatos, nuevoId } from "../store/datos";
-import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP } from "../store/api";
+import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 
 function hoyISO() {
@@ -112,6 +112,7 @@ export default function Modulo8() {
   const [ocItem, setOcItem] = useState("");
   const [ocTax, setOcTax] = useState("");
   const [ocCultivo, setOcCultivo] = useState("");
+  const [ocFecha, setOcFecha] = useState("");   // "Fecha necesaria" (RequiredDate) del flete
   const [ocComentario, setOcComentario] = useState("");
   const [ocCargando, setOcCargando] = useState(false);
   const [ocError, setOcError] = useState("");
@@ -161,6 +162,7 @@ export default function Modulo8() {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
     const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
     setOcCultivo(r?.cultivo || "");
+    setOcFecha(new Date().toISOString().slice(0, 10)); // Fecha necesaria default = hoy (editable)
     setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
     setOcMov(m);
     cargarCatalogosOC();
@@ -179,11 +181,27 @@ export default function Modulo8() {
         cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
         proyecto: m.proyecto || null, cultivo: ocCultivo || r?.cultivo || null, lote: m.rancho || null,
         departamento: r?.departamento || m.departamento || null, comentario: ocComentario,
+        requiredDate: ocFecha || null,
       });
       setMovimientos((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: new Date().toISOString() } } : x));
       setOcMov(null);
     } catch (e) { setOcError(String(e?.message || e)); }
     finally { setOcCargando(false); }
+  };
+
+  // ── Estado de la OC en SAP (SOLO LECTURA): ¿ya tiene factura de proveedor? ──
+  const [ocChkId, setOcChkId] = useState(null);
+  const verificarFacturaOC = async (m) => {
+    const entry = m.ocSAP?.pedido?.docEntry;
+    if (!entry) return;
+    setOcChkId(m.id);
+    try {
+      const est = await getEstadoOCSAP(entry);
+      setMovimientos((prev) => prev.map((x) => x.id === m.id
+        ? { ...x, ocSAP: { ...x.ocSAP, estado: est.pedido, factura: est.factura, chkTs: new Date().toISOString() } }
+        : x));
+    } catch { /* noop: deja el chip como estaba */ }
+    finally { setOcChkId(null); }
   };
 
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
@@ -529,7 +547,15 @@ export default function Modulo8() {
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                         <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
                         {m.ocSAP ? (
-                          <span title="Orden de compra creada en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 mr-1">✓ OC #{m.ocSAP.pedido?.docNum ?? m.ocSAP.solicitud?.docNum}</span>
+                          <span className="inline-flex items-center gap-1 mr-1 align-middle">
+                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700">✓ Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            {m.ocSAP.factura?.existe ? (
+                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200">🧾 Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
+                            ) : m.ocSAP.factura ? (
+                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">🧾 Sin factura</span>
+                            ) : null}
+                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50">{ocChkId === m.id ? "…" : "🔄"}</button>
+                          </span>
                         ) : (
                           <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">📄 OC</button>
                         )}
@@ -1057,8 +1083,11 @@ export default function Modulo8() {
                     })()} />
                 </div>
                 <div>
-                  <label className={LBL}>Fletero (proveedor)</label>
-                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros en 🚚 Fleteros"}
+                  <div className="flex items-center justify-between">
+                    <label className={LBL}>Fletero (proveedor)</label>
+                    <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : "↻ Traer de SAP"}{flInfo ? ` · ${flInfo}` : ""}</button>
+                  </div>
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros con ↻"}
                     options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
                 </div>
                 <div>
@@ -1070,6 +1099,10 @@ export default function Modulo8() {
                   <label className={LBL}>IVA</label>
                   <SearchSelect className={INP} value={ocTax} onChange={setOcTax} searchThreshold={0} placeholder="— IVA —"
                     options={taxCodes.map((t) => ({ value: t.Code, label: `${t.Code}${t.Name ? " · " + t.Name : ""}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Fecha necesaria</label>
+                  <input type="date" value={ocFecha} onChange={(e) => setOcFecha(e.target.value)} className={INP} />
                 </div>
                 <div>
                   <label className={LBL}>Comentario</label>

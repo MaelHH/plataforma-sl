@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
+import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+
+// FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
+const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -13,7 +17,7 @@ function hoyISO() {
 // ARRIBA del trailer. El catálogo de materiales se comparte con el master `materiales`
 // (a futuro se leerá de SAP).
 export default function Modulo13() {
-  const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones } = useDatos();
+  const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores } = useDatos();
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se edita (null = nuevo)
@@ -134,6 +138,136 @@ export default function Modulo13() {
 
   const borrarMov = (id) => { if (window.confirm("¿Eliminar este movimiento de materiales?")) setMovMateriales((prev) => prev.filter((m) => m.id !== id)); };
 
+  // ── Orden de compra de FLETE de materiales (SAP) ──
+  // Igual que la OC de campo→empaque (Modulo8) pero SIMPLE: item FLETE-0003,
+  // solo Departamento (default "Empaque"), sin cultivo/lote/proyecto. El resto del
+  // movimiento ya vive en la BD; aquí solo se genera la Solicitud + Pedido en SAP.
+  const DEPTO_DEFAULT = "Empaque";
+  const ALMACEN_MATERIALES = "06"; // almacén de la línea de flete de materiales (ver ejemplo SAP)
+  const [ocMov, setOcMov] = useState(null);
+  const [ocCardCode, setOcCardCode] = useState("");
+  const [ocItem, setOcItem] = useState("");
+  const [ocTax, setOcTax] = useState("");
+  const [ocCultivo, setOcCultivo] = useState("");     // SAP exige cultivo (N/A si no aplica)
+  const [ocLote, setOcLote] = useState("");           // SAP exige lote (N/A si no aplica)
+  const [ocDepto, setOcDepto] = useState("");
+  const [ocProyecto, setOcProyecto] = useState("");   // SAP exige proyecto en cada línea
+  const [ocFecha, setOcFecha] = useState("");
+  const [ocComentario, setOcComentario] = useState("");
+  const [ocConfirm, setOcConfirm] = useState(false);
+  const [ocCargando, setOcCargando] = useState(false);
+  const [ocError, setOcError] = useState("");
+  const [itemsFlete, setItemsFlete] = useState([]);
+  const [taxCodes, setTaxCodes] = useState([]);
+  const [cultivos, setCultivos] = useState([]);
+  const [lotes, setLotes] = useState([]);
+  const [departamentos, setDepartamentos] = useState([]);
+  const [proyectosSAP, setProyectosSAP] = useState([]);
+  const [flCargando, setFlCargando] = useState(false);
+  const [flInfo, setFlInfo] = useState("");
+
+  // Traer fleteros de SAP → upsert al catálogo `proveedores` (compartido con M8).
+  const cargarProveedoresOC = async () => {
+    setFlCargando(true); setFlInfo("");
+    try {
+      const d = await getProveedoresFleteSAP("");
+      const lista = (d.value || []).map((b) => ({ cardCode: b.CardCode, nombre: b.CardName || b.CardCode, rfc: b.FederalTaxID || "", telefono: b.Phone1 || "", email: b.EmailAddress || "" }));
+      setProveedores((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const byCode = new Map(base.map((p) => [p.cardCode, p]));
+        for (const p of lista) byCode.set(p.cardCode, { ...byCode.get(p.cardCode), ...p });
+        return Array.from(byCode.values()).sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      });
+      setFlInfo(`${lista.length} fletero(s) de SAP`);
+    } catch (e) { setOcError(String(e?.message || e)); }
+    finally { setFlCargando(false); }
+  };
+  const cargarCatalogosOC = async () => {
+    try {
+      const d = await getItemsFleteSAP();
+      const items = d.value || [];
+      setItemsFlete(items);
+      // Default: FLETE-0003 (acarreo de materiales); si no, el que mencione "material".
+      const it = items.find((x) => /flete-?0003/i.test(x.ItemCode || "")) || items.find((x) => /material/i.test(`${x.ItemCode} ${x.ItemName}`)) || items[0];
+      if (it) setOcItem(it.ItemCode || "");
+    } catch { /* noop */ }
+    try {
+      const d = await getTaxCodesSAP();
+      const txs = d.value || [];
+      setTaxCodes(txs);
+      const t = txs.find((x) => /16/.test(`${x.Code} ${x.Name}`)) || txs[0];
+      if (t) setOcTax(t.Code || "");
+    } catch { /* noop */ }
+    try {
+      const d = await getDepartamentosSAP();
+      const deps = d.value || [];
+      setDepartamentos(deps);
+      // Default: "Empaque" si existe en la lista (si no, se deja el texto por defecto).
+      const dep = deps.find((x) => /empaque/i.test(`${x.FactorCode} ${x.FactorDescription}`));
+      if (dep) setOcDepto(dep.FactorCode);
+    } catch { /* noop */ }
+    try {
+      const d = await getCultivosSAP();
+      const cs = d.value || [];
+      setCultivos(cs);
+      const na = cs.find((x) => esNA(x.FactorCode)); // default N/A (no aplica a materiales)
+      if (na) setOcCultivo(na.FactorCode);
+    } catch { /* noop */ }
+    try {
+      const d = await getLotesSAP();
+      const ls = d.value || [];
+      setLotes(ls);
+      const na = ls.find((x) => esNA(x.FactorCode));
+      if (na) setOcLote(na.FactorCode);
+    } catch { /* noop */ }
+    try { const d = await getProyectosSAPlist(); setProyectosSAP(d.value || []); } catch { /* noop */ }
+  };
+  const abrirOC = (m) => {
+    setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax(""); setOcProyecto("");
+    setOcDepto(DEPTO_DEFAULT);
+    setOcCultivo("N/A"); setOcLote("N/A"); // fallback; el cargador fija el código N/A exacto de SAP
+    setOcFecha(hoyISO());
+    setOcComentario(`Acarreo materiales · Folio ${m.folio || ""} · ${m.origen || ""}→${m.destino || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
+    setOcMov(m);
+    cargarCatalogosOC();
+  };
+  const confirmarOC = async () => {
+    const m = ocMov;
+    const precio = parseFloat(m.flete) || 0;
+    if (!ocCardCode) { setOcError("Elige el fletero."); return; }
+    if (!ocItem) { setOcError("Elige el item de flete."); return; }
+    if (!ocProyecto) { setOcError("Elige el proyecto (SAP lo exige en cada línea)."); return; }
+    if (!ocCultivo || !ocLote) { setOcError("Cultivo y Lote no pueden ir vacíos (usa N/A si no aplica)."); return; }
+    if (!(precio > 0)) { setOcError("El movimiento no tiene 'Flete $' (precio)."); return; }
+    setOcCargando(true); setOcError("");
+    try {
+      const res = await crearOrdenCompraSAP({
+        cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
+        proyecto: ocProyecto, cultivo: ocCultivo, lote: ocLote,
+        departamento: ocDepto || DEPTO_DEFAULT, comentario: ocComentario,
+        requiredDate: ocFecha || null, warehouse: ALMACEN_MATERIALES,
+      });
+      setMovMateriales((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, departamento: ocDepto || DEPTO_DEFAULT, ts: new Date().toISOString() } } : x));
+      setOcMov(null);
+    } catch (e) { setOcError(String(e?.message || e)); }
+    finally { setOcCargando(false); }
+  };
+
+  // ── Estado de la OC en SAP (SOLO LECTURA): ¿ya tiene factura de proveedor? ──
+  const [ocChkId, setOcChkId] = useState(null);
+  const verificarFacturaOC = async (m) => {
+    const entry = m.ocSAP?.pedido?.docEntry;
+    if (!entry) return;
+    setOcChkId(m.id);
+    try {
+      const est = await getEstadoOCSAP(entry);
+      setMovMateriales((prev) => prev.map((x) => x.id === m.id
+        ? { ...x, ocSAP: { ...x.ocSAP, estado: est.pedido, factura: est.factura, chkTs: new Date().toISOString() } }
+        : x));
+    } catch { /* noop */ }
+    finally { setOcChkId(null); }
+  };
+
   // ── Catálogo de materiales (master compartido `materiales`) ──
   const addMaterial = () => setMateriales((prev) => [...prev, { id: nuevoId("mat_"), codigo: "", descripcion: "", unidad: "Pieza" }]);
   const updMaterial = (id, campo, val) => setMateriales((prev) => prev.map((m) => (m.id === id ? { ...m, [campo]: val } : m)));
@@ -226,6 +360,19 @@ export default function Modulo13() {
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {m.ocSAP ? (
+                          <span className="inline-flex items-center gap-1 mr-1 align-middle">
+                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200">✓ Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            {m.ocSAP.factura?.existe ? (
+                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200">🧾 Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
+                            ) : m.ocSAP.factura ? (
+                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">🧾 Sin factura</span>
+                            ) : null}
+                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50">{ocChkId === m.id ? "…" : "🔄"}</button>
+                          </span>
+                        ) : (
+                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">📄 OC</button>
+                        )}
                         <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
                         <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
                         <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
@@ -466,6 +613,108 @@ export default function Modulo13() {
           </div>
         </div>
       )}
+
+      {/* ── Modal: OC de flete de materiales (Solicitud + Pedido) ── */}
+      {ocMov && (() => {
+        const m = ocMov;
+        const precio = parseFloat(m.flete) || 0;
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">📄 OC de flete (materiales) — Folio {m.folio || "—"}</div>
+                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-gray-400">Origen → Destino</span><div className="font-medium text-gray-800">{m.origen || "—"} → {m.destino || "—"}</div></div>
+                  <div><span className="text-gray-400">Fecha</span><div className="font-medium text-gray-800">{m.fecha || "—"}</div></div>
+                </div>
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 text-xs flex items-center justify-between">
+                  <span className="text-gray-500">Precio (Flete $ del movimiento)</span>
+                  <span className="text-lg font-bold text-indigo-700">${precio.toLocaleString()}</span>
+                </div>
+                {!(precio > 0) && <div className="text-[11px] text-amber-600">⚠️ Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className={LBL}>Fletero (proveedor)</label>
+                    <button onClick={cargarProveedoresOC} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : "↻ Traer de SAP"}{flInfo ? ` · ${flInfo}` : ""}</button>
+                  </div>
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={(proveedores || []).length ? "— Elige fletero —" : "Trae fleteros con ↻"}
+                    options={(proveedores || []).map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Item de flete</label>
+                  <SearchSelect className={INP} value={ocItem} onChange={setOcItem} searchThreshold={0} placeholder="— Item —"
+                    options={itemsFlete.map((it) => ({ value: it.ItemCode, label: `${it.ItemCode} · ${it.ItemName}` }))} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className={LBL}>Cultivo <span className="text-gray-400 font-normal">· N/A si no aplica</span></label>
+                    <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo —"
+                      options={(() => {
+                        const opts = cultivos.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }));
+                        if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo });
+                        return opts;
+                      })()} />
+                  </div>
+                  <div>
+                    <label className={LBL}>Lote <span className="text-gray-400 font-normal">· N/A si no aplica</span></label>
+                    <SearchSelect className={INP} value={ocLote} onChange={setOcLote} searchThreshold={0} placeholder="— Lote —"
+                      options={(() => {
+                        const opts = lotes.map((l) => ({ value: l.FactorCode, label: `${l.FactorCode}${l.FactorDescription ? " · " + l.FactorDescription : ""}` }));
+                        if (ocLote && !opts.some((o) => o.value === ocLote)) opts.unshift({ value: ocLote, label: ocLote });
+                        return opts;
+                      })()} />
+                  </div>
+                </div>
+                <div>
+                  <label className={LBL}>Proyecto <span className="text-gray-400 font-normal">· SAP lo exige</span></label>
+                  <SearchSelect className={INP} value={ocProyecto} onChange={setOcProyecto} searchThreshold={0} placeholder="— Elige proyecto —"
+                    options={proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Departamento</label>
+                  <SearchSelect className={INP} value={ocDepto} onChange={setOcDepto} searchThreshold={0} placeholder="— Departamento —"
+                    options={(() => {
+                      const opts = departamentos.map((d) => ({ value: d.FactorCode, label: `${d.FactorCode}${d.FactorDescription ? " · " + d.FactorDescription : ""}` }));
+                      if (ocDepto && !opts.some((o) => o.value === ocDepto)) opts.unshift({ value: ocDepto, label: ocDepto });
+                      return opts;
+                    })()} />
+                </div>
+                <div>
+                  <label className={LBL}>IVA</label>
+                  <SearchSelect className={INP} value={ocTax} onChange={setOcTax} searchThreshold={0} placeholder="— IVA —"
+                    options={taxCodes.map((t) => ({ value: t.Code, label: `${t.Code}${t.Name ? " · " + t.Name : ""}` }))} />
+                </div>
+                <div>
+                  <label className={LBL}>Fecha necesaria</label>
+                  <input type="date" value={ocFecha} onChange={(e) => setOcFecha(e.target.value)} className={INP} />
+                </div>
+                <div>
+                  <label className={LBL}>Comentario</label>
+                  <textarea value={ocComentario} onChange={(e) => setOcComentario(e.target.value)} rows={2} className={INP} />
+                </div>
+                {ocError && <div className="text-[11px] text-red-600">No se pudo crear la OC: {ocError}</div>}
+              </div>
+              {!ocConfirm ? (
+                <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                  <button onClick={() => setOcMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                  <button onClick={() => { setOcError(""); setOcConfirm(true); }} disabled={ocCargando || !ocCardCode || !ocItem || !ocProyecto || !ocCultivo || !ocLote || !(precio > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">Crear OC en SAP</button>
+                </div>
+              ) : (
+                <div className="px-5 py-3 border-t border-amber-200 bg-amber-50/60">
+                  <div className="text-[12px] text-amber-800 font-medium mb-2">⚠️ ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud + Pedido). No se puede deshacer desde aquí.</div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setOcConfirm(false)} disabled={ocCargando} className="text-xs px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white disabled:opacity-50">No, volver</button>
+                    <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !ocProyecto || !ocCultivo || !ocLote || !(precio > 0)} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Sí, crear en SAP"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Modal catálogo de materiales (master compartido) ── */}
       {catMat && (

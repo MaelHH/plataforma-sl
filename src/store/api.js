@@ -100,5 +100,9 @@ export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-fl
 export const getItemsFleteSAP = () => req("GET", "/api/sap/items-flete");
 export const getTaxCodesSAP = () => req("GET", "/api/sap/tax-codes");
 export const getCultivosSAP = () => req("GET", "/api/sap/cultivos");
+export const getDepartamentosSAP = () => req("GET", "/api/sap/departamentos");
+export const getLotesSAP = () => req("GET", "/api/sap/lotes");
+export const getProyectosSAPlist = () => req("GET", "/api/sap/proyectos-sap");
+export const getEstadoOCSAP = (pedidoEntry) => req("GET", `/api/sap/oc-estado${qs({ pedido_entry: pedidoEntry })}`);
 // ESCRITURA: crea Solicitud de Pedido + Pedido de flete. body: { cardCode, item, precio, taxCode, proyecto, cultivo, lote, departamento, comentario }.
 export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body);
