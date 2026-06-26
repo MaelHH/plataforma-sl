@@ -33,9 +33,7 @@ export default function Modulo13() {
   const [cajaNueva, setCajaNueva] = useState(false);
 
   const formVacio = {
-    folio: "", fecha: hoyISO(), origen: "", destino: "",
-    // el "cuadrito": indica que los materiales iban arriba del trailer
-    materialesArriba: false,
+    folio: "", fecha: hoyISO(), proyecto: "", origen: "", destino: "",
     materialItems: [{ materialId: "", cantidad: "" }],
     // transporte (mismos datos del fletero)
     linea: "", contacto: "", numero: "", chofer: "", telefono: "", licencia: "",
@@ -47,11 +45,14 @@ export default function Modulo13() {
   const [form, setForm] = useState(formVacio);
 
   const resetModos = () => { setLineaNueva(false); setChoferNuevo(false); setTractoNuevo(false); setCajaNueva(false); };
-  const abrirNuevo = () => { setForm(formVacio); setEditId(null); resetModos(); setModal(true); };
+  // Carga la lista de proyectos SAP (con reintento en el backend si la SL corta).
+  const cargarProyectosForm = () => { getProyectosSAPlist().then((d) => setProyectosSAP(d.value || [])).catch(() => {}); };
+  const abrirNuevo = () => { setForm(formVacio); setEditId(null); resetModos(); cargarProyectosForm(); setModal(true); };
   const abrirEditar = (m) => {
     setForm({ ...formVacio, ...m, materialItems: m.materialItems?.length ? m.materialItems : [{ materialId: "", cantidad: "" }] });
     setEditId(m.id);
     resetModos();
+    cargarProyectosForm();
     setModal(true);
   };
   const cerrarModal = () => { setModal(false); setEditId(null); resetModos(); };
@@ -223,7 +224,7 @@ export default function Modulo13() {
     try { const d = await getProyectosSAPlist(); setProyectosSAP(d.value || []); } catch { /* noop */ }
   };
   const abrirOC = (m) => {
-    setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax(""); setOcProyecto("");
+    setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax(""); setOcProyecto(m.proyecto || "");
     setOcDepto(DEPTO_DEFAULT);
     setOcCultivo("N/A"); setOcLote("N/A"); // fallback; el cargador fija el código N/A exacto de SAP
     setOcFecha(hoyISO());
@@ -330,7 +331,6 @@ export default function Modulo13() {
                   <th className="text-left px-3 py-2 font-medium">Origen → Destino</th>
                   <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
                   <th className="text-left px-3 py-2 font-medium">Materiales</th>
-                  <th className="text-center px-3 py-2 font-medium">Arriba del trailer</th>
                   <th className="text-right px-3 py-2 font-medium">Flete</th>
                   <th className="text-center px-3 py-2 font-medium"></th>
                 </tr>
@@ -352,11 +352,6 @@ export default function Modulo13() {
                             <div className="text-gray-400 truncate max-w-[180px]">{matDe(items[0].materialId)?.descripcion || "—"}{items.length > 1 ? ` +${items.length - 1}` : ""}</div>
                           </span>
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {m.materialesArriba
-                          ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold">🔝 Sí</span>
-                          : <span className="text-gray-300">No</span>}
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
@@ -402,6 +397,16 @@ export default function Modulo13() {
                 <div className="grid grid-cols-2 gap-2">
                   <div><label className={LBL}>Folio</label><input className={INP} value={form.folio} onChange={(e) => setForm((f) => ({ ...f, folio: e.target.value }))} placeholder="No. 0001" /></div>
                   <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} /></div>
+                  <div className="col-span-2">
+                    <label className={LBL}>Proyecto <span className="text-gray-400 font-normal">· SAP (lo usa la OC)</span></label>
+                    <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v }))} searchThreshold={0}
+                      placeholder={proyectosSAP.length ? "— Elige proyecto —" : "Cargando proyectos de SAP…"}
+                      options={(() => {
+                        const opts = proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
+                        if (form.proyecto && !opts.some((o) => o.value === form.proyecto)) opts.unshift({ value: form.proyecto, label: form.proyecto });
+                        return opts;
+                      })()} />
+                  </div>
                   <div>
                     <label className={LBL}>Origen</label>
                     <input className={INP} list="dl-mmt-origen" value={form.origen} onChange={(e) => setForm((f) => ({ ...f, origen: e.target.value }))} placeholder="Origen" />
@@ -415,17 +420,9 @@ export default function Modulo13() {
                 </div>
               </div>
 
-              {/* El "cuadrito" + materiales */}
+              {/* Materiales */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Materiales</div>
-                <label className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer select-none mb-3 ${form.materialesArriba ? "bg-amber-50 border-amber-300" : "bg-gray-50 border-gray-200"}`}>
-                  <input type="checkbox" className="w-4 h-4 accent-amber-500" checked={form.materialesArriba} onChange={(e) => setForm((f) => ({ ...f, materialesArriba: e.target.checked }))} />
-                  <span>
-                    <span className="text-sm font-semibold text-gray-800">🔝 Materiales arriba del trailer</span>
-                    <span className="block text-xs text-gray-500">Marca esta casilla si los materiales iban encima del trailer.</span>
-                  </span>
-                </label>
-
                 <div className="border border-gray-200 rounded-lg">
                   <table className="w-full text-xs">
                     <thead>
@@ -565,10 +562,9 @@ export default function Modulo13() {
               <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
             </div>
             <div className="px-5 py-4 space-y-4 text-xs">
-              {verMov.materialesArriba && <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-semibold">🔝 Materiales arriba del trailer</div>}
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  ["Fecha", verMov.fecha], ["Origen", verMov.origen], ["Destino", verMov.destino],
+                  ["Proyecto", verMov.proyecto], ["Fecha", verMov.fecha], ["Origen", verMov.origen], ["Destino", verMov.destino],
                   ["Flete", verMov.flete ? "$" + verMov.flete : ""],
                 ].map(([l, v]) => (
                   <div key={l}><div className="text-gray-400 mb-0.5">{l}</div><div className="text-gray-800 font-semibold">{v || "—"}</div></div>
@@ -669,9 +665,13 @@ export default function Modulo13() {
                   </div>
                 </div>
                 <div>
-                  <label className={LBL}>Proyecto <span className="text-gray-400 font-normal">· SAP lo exige</span></label>
+                  <label className={LBL}>Proyecto <span className="text-gray-400 font-normal">· del movimiento</span></label>
                   <SearchSelect className={INP} value={ocProyecto} onChange={setOcProyecto} searchThreshold={0} placeholder="— Elige proyecto —"
-                    options={proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }))} />
+                    options={(() => {
+                      const opts = proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
+                      if (ocProyecto && !opts.some((o) => o.value === ocProyecto)) opts.unshift({ value: ocProyecto, label: ocProyecto });
+                      return opts;
+                    })()} />
                 </div>
                 <div>
                   <label className={LBL}>Departamento</label>
