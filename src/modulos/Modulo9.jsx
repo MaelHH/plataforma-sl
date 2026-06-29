@@ -424,7 +424,7 @@ export default function Modulo9() {
         }
         onSet(v);
       }}
-      options={[...inspectoresCalidad.map((i) => ({ value: i, label: i })), { value: "__nuevo__", label: "➕ Agregar inspector…" }]} />
+      options={[...inspectoresCalidad.map((i) => ({ value: i, label: i })), { value: "__nuevo__", label: "+ Agregar inspector…" }]} />
   );
 
   // Compara declarado vs recibido para resaltar diferencias en la ficha
@@ -751,7 +751,7 @@ export default function Modulo9() {
             <div className="border-t border-gray-200">
               <div className="px-4 py-2.5 bg-gray-50 text-xs font-semibold text-gray-700">Rezagas registradas (sin manifiesto) ({rezagas.length})</div>
               {rezagas.length === 0 ? (
-                <div className="text-xs text-gray-400 text-center py-6 italic">Sin rezagas. Usa “➕ Registrar rezaga”.</div>
+                <div className="text-xs text-gray-400 text-center py-6 italic">Sin rezagas. Usa “+ Registrar rezaga”.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs" style={{ minWidth: "720px" }}>
@@ -795,7 +795,7 @@ export default function Modulo9() {
             <span className="text-xs text-gray-400 ml-2">· fletes que NO entran a empaque; se van directo con el cliente</span>
           </div>
           {clienteDirectoList.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-8 italic">Sin fletes a cliente directo. Al dar recepción marca “🚚 Flete a Cliente Directo”.</div>
+            <div className="text-xs text-gray-400 text-center py-8 italic">Sin fletes a cliente directo. Al dar recepción marca “Flete a Cliente Directo”.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs" style={{ minWidth: "880px" }}>
@@ -1056,8 +1056,8 @@ export default function Modulo9() {
                   <div>
                     <label className={LBL}>Condición de la carga</label>
                     <SearchSelect className={INP} value={form.condicion} onChange={(v) => upd("condicion", v)} options={[
-                      { value: "ok", label: "✓ Llegó completo y en buen estado" },
-                      { value: "con_novedad", label: "⚠️ Con novedad (faltante / daño)" },
+                      { value: "ok", label: "Llegó completo y en buen estado" },
+                      { value: "con_novedad", label: "Con novedad (faltante / daño)" },
                     ]} />
                   </div>
                   <div><label className={LBL}>Observaciones</label><input className={INP} value={form.observaciones} onChange={(e) => upd("observaciones", e.target.value)} placeholder="Notas de la recepción" /></div>

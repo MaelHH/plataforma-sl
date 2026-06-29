@@ -37,12 +37,18 @@ function lunesActual() {
 
 // Semáforo vs promedio
 function semaforo(valor, promedio) {
-  if (!promedio || promedio === 0) return { color: "gray", label: "—" };
+  if (!promedio || promedio === 0) return { color: "gray" };
   const ratio = valor / promedio;
-  if (ratio <= 1.0) return { color: "green", label: "🟢" };
-  if (ratio <= 1.15) return { color: "amber", label: "🟡" };
-  return { color: "red", label: "🔴" };
+  if (ratio <= 1.0) return { color: "green" };
+  if (ratio <= 1.15) return { color: "amber" };
+  return { color: "red" };
 }
+const SEMAFORO_DOT = {
+  green: "bg-green-500",
+  amber: "bg-amber-500",
+  red: "bg-red-500",
+  gray: "bg-gray-300",
+};
 const SEMAFORO_BG = {
   green: "bg-green-50",
   amber: "bg-amber-50",
@@ -163,13 +169,13 @@ export default function Dashboard() {
   const pendientesSap = cargasPendientesSap.length;
   if (pendientesSap > 0) alertas.push({ tipo: "sap", txt: `${pendientesSap} carga(s) pendiente(s) de registrar en SAP`, color: "blue" });
   porLinea.forEach((l) => {
-    if (promedioGlobal > 0 && l.costoLb / promedioGlobal > 1.15) alertas.push({ tipo: "costo", txt: `💲 ${l.key}: costo/lb ${Math.round((l.costoLb / promedioGlobal - 1) * 100)}% sobre el promedio`, color: "red" });
+    if (promedioGlobal > 0 && l.costoLb / promedioGlobal > 1.15) alertas.push({ tipo: "costo", txt: `${l.key}: costo/lb ${Math.round((l.costoLb / promedioGlobal - 1) * 100)}% sobre el promedio`, color: "red" });
   });
   Object.entries(monitoreo).forEach(([tId, eventos]) => {
     const t = trailers.find((x) => String(x.id) === String(tId));
     if (!t) return;
-    if (eventos.accidente?.hubo === true) alertas.push({ tipo: "acc", txt: `⚠️ Accidente reportado — ${t.linea || t.dest}`, color: "red" });
-    if (eventos.retenes?.hubo === true) alertas.push({ tipo: "ret", txt: `🚧 Retén reportado — ${t.linea || t.dest}`, color: "amber" });
+    if (eventos.accidente?.hubo === true) alertas.push({ tipo: "acc", txt: `Accidente reportado — ${t.linea || t.dest}`, color: "red" });
+    if (eventos.retenes?.hubo === true) alertas.push({ tipo: "ret", txt: `Retén reportado — ${t.linea || t.dest}`, color: "amber" });
   });
 
   const ALERT_COLORS = {
@@ -377,7 +383,7 @@ export default function Dashboard() {
                         <td className="px-4 py-2.5 text-right text-gray-600">{Math.round(d.libras).toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-right text-gray-600">${Math.round(d.flete).toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-right font-bold text-gray-900">${d.costoLb.toFixed(3)}</td>
-                        <td className="px-4 py-2.5 text-center text-lg">{sem.label}</td>
+                        <td className="px-4 py-2.5 text-center"><span className={`inline-block w-2.5 h-2.5 rounded-full ${SEMAFORO_DOT[sem.color]}`} /></td>
                       </tr>
                     );
                   })}

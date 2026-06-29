@@ -4,11 +4,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const dash = (v) => (v === 0 || v ? esc(v) : "—");
 
 const EVENTOS = [
-  { id: "preenfriado", label: "Preenfriado ❄️" },
-  { id: "tive", label: "Evidencia de TIVE 🛰️" },
-  { id: "retenes", label: "Evidencia de Retenes 🚧" },
-  { id: "aduanas", label: "Aduanas y Descargas 🛃" },
-  { id: "accidente", label: "Evidencia de Accidente ⚠️" },
+  { id: "preenfriado", label: "Preenfriado" },
+  { id: "tive", label: "Evidencia de TIVE" },
+  { id: "retenes", label: "Evidencia de Retenes" },
+  { id: "aduanas", label: "Aduanas y Descargas" },
+  { id: "accidente", label: "Evidencia de Accidente" },
 ];
 
 const infoGrid = (pares, cols = 4) =>

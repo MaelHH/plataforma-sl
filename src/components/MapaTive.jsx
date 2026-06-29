@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Satellite } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -72,12 +73,12 @@ export default function MapaTive({ trailers = [] }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50">
-        <span className="text-sm font-semibold text-gray-900">🛰️ Mapa en vivo — México</span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Satellite size={15} className="text-gray-700" /> Mapa en vivo — México</span>
         <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">TIVE · tiempo real (se conectará el API)</span>
       </div>
       <div ref={containerRef} style={{ height: "360px", width: "100%", zIndex: 0 }} />
       <div className="px-4 py-2 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-        <span>🟢 {trailers.length} trailer{trailers.length === 1 ? "" : "s"} en ruta</span>
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500" /> {trailers.length} trailer{trailers.length === 1 ? "" : "s"} en ruta</span>
         {sinUbic.length > 0 && <span className="text-amber-600">Sin coordenadas: {sinUbic.join(", ")}</span>}
       </div>
     </div>

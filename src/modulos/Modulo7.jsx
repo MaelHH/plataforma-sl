@@ -2,14 +2,14 @@ import { useState } from "react";
 import { useDatos, DC, EMPRESAS } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import MapaTive from "../components/MapaTive";
-import { FileText, Check, Camera, Search, Route, Package } from "lucide-react";
+import { FileText, Check, Camera, Search, Route, Package, Snowflake, Satellite, TriangleAlert, ShieldCheck, AlertTriangle, Truck, RotateCcw } from "lucide-react";
 
 const EVENTOS = [
-  { id: "preenfriado", label: "Preenfriado", icon: "❄️", color: "blue" },
-  { id: "tive", label: "Evidencia de TIVE", icon: "🛰️", color: "blue" },
-  { id: "retenes", label: "Evidencia de Retenes", icon: "🚧", color: "amber" },
-  { id: "aduanas", label: "Aduanas y Descargas", icon: "🛃", color: "purple" },
-  { id: "accidente", label: "Evidencia de Accidente", icon: "⚠️", color: "red" },
+  { id: "preenfriado", label: "Preenfriado", Icon: Snowflake, color: "blue" },
+  { id: "tive", label: "Evidencia de TIVE", Icon: Satellite, color: "blue" },
+  { id: "retenes", label: "Evidencia de Retenes", Icon: TriangleAlert, color: "amber" },
+  { id: "aduanas", label: "Aduanas y Descargas", Icon: ShieldCheck, color: "purple" },
+  { id: "accidente", label: "Evidencia de Accidente", Icon: AlertTriangle, color: "red" },
 ];
 
 const COLOR_MAP = {
@@ -148,7 +148,7 @@ export default function Modulo7() {
         <div className="p-2 overflow-x-auto">
           <div style={{ minWidth: "640px" }}>
             <div className="grid gap-1 mb-0.5" style={{ gridTemplateColumns: "repeat(15,minmax(0,1fr))" }}>
-              {Array.from({ length: 15 }, (_, i) => <div key={i} className={`text-center text-xs font-medium ${i === 0 ? "text-blue-600" : "text-gray-400"}`}>{i * 2 + 1}{i === 0 ? "🚛" : ""}</div>)}
+              {Array.from({ length: 15 }, (_, i) => <div key={i} className={`text-center text-xs font-medium ${i === 0 ? "text-blue-600" : "text-gray-400"}`}>{i * 2 + 1}{i === 0 ? <Truck size={12} className="inline" /> : ""}</div>)}
             </div>
             <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: "repeat(15,minmax(0,1fr))" }}>
               {Array.from({ length: 15 }, (_, i) => (
@@ -163,7 +163,7 @@ export default function Modulo7() {
               ))}
             </div>
             <div className="grid gap-1 mt-0.5" style={{ gridTemplateColumns: "repeat(15,minmax(0,1fr))" }}>
-              {Array.from({ length: 15 }, (_, i) => <div key={i} className={`text-center text-xs font-medium ${i === 0 ? "text-blue-600" : "text-gray-400"}`}>{i * 2 + 2}{i === 0 ? "🚛" : ""}</div>)}
+              {Array.from({ length: 15 }, (_, i) => <div key={i} className={`text-center text-xs font-medium ${i === 0 ? "text-blue-600" : "text-gray-400"}`}>{i * 2 + 2}{i === 0 ? <Truck size={12} className="inline" /> : ""}</div>)}
             </div>
           </div>
         </div>
@@ -202,7 +202,7 @@ export default function Modulo7() {
               {!esHistorial ? (
                 <button onClick={() => marcarEntregado(t.id)} className="inline-flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700"><Check size={14} /> Llegó a destino</button>
               ) : (
-                <button onClick={() => reactivar(t.id)} className="text-xs bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-100">↩ Regresar a ruta</button>
+                <button onClick={() => reactivar(t.id)} className="text-xs bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-100"><span className="inline-flex items-center gap-1"><RotateCcw size={13} /> Regresar a ruta</span></button>
               )}
             </div>
           </div>
@@ -233,7 +233,7 @@ export default function Modulo7() {
                 <div key={ev.id} className={`border-2 rounded-xl p-3 ${estado.hubo === true ? c.border + " " + c.bg : "border-gray-200 bg-white"}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{ev.icon}</span>
+                      <span className={`text-lg ${c.text}`}><ev.Icon size={14} /></span>
                       <span className="text-sm font-medium text-gray-700">{ev.label}</span>
                     </div>
                     <div className="flex items-center gap-1">

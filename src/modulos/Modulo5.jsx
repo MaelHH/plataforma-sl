@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardList, FileText, Check, RefreshCw } from "lucide-react";
+import { ClipboardList, FileText, Check, RefreshCw, Link2 } from "lucide-react";
 import { useDatos, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
 
@@ -161,7 +161,7 @@ export default function Modulo5() {
                     </div>
 
                     <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl px-4 py-3 flex items-center gap-3">
-                      <span className="text-lg">🔗</span>
+                      <Link2 size={16} className="text-gray-500" />
                       <div><div className="text-xs font-semibold text-gray-500">Consulta SAP — próximamente</div><div className="text-xs text-gray-400">OC fletero · Orden de venta · Factura cliente · Inventario</div></div>
                     </div>
                   </div>

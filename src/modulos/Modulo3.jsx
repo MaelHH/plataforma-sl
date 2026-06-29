@@ -311,7 +311,7 @@ export default function Modulo3() {
           ) : (
             <SearchSelect value={t.status} onChange={(v) => setStatus(t.id, v)}
               className={`w-44 text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
-              options={[{ value: "esperando", label: "⏳ Esperando" }, { value: "en_instalaciones", label: "📍 En instalaciones" }]} />
+              options={[{ value: "esperando", label: "Esperando" }, { value: "en_instalaciones", label: "En instalaciones" }]} />
           )}
         </div>
       </div>
@@ -540,7 +540,7 @@ export default function Modulo3() {
                   <label className="text-xs text-gray-500 block mb-0.5">Elegir del catálogo</label>
                   <SearchSelect className={INP} value={lineaActualId} onChange={(v) => elegirLinea(v)}
                     placeholder="— Selecciona una línea —"
-                    options={[...lineas.map((l) => ({ value: l.id, label: l.linea })), { value: "__nueva__", label: "➕ Nueva línea de transporte" }]} />
+                    options={[...lineas.map((l) => ({ value: l.id, label: l.linea })), { value: "__nueva__", label: "+ Nueva línea de transporte" }]} />
                 </div>
                 {lineaNueva && (
                   <div className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">
@@ -577,7 +577,7 @@ export default function Modulo3() {
                       <label className="text-xs text-gray-500 block mb-0.5">Chofer</label>
                       <SearchSelect className={INP} value={choferActualId} onChange={(v) => elegirChofer(v)}
                         placeholder="— Selecciona chofer —"
-                        options={[...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })), { value: "__nuevo__", label: "➕ Nuevo chofer" }]} />
+                        options={[...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })), { value: "__nuevo__", label: "+ Nuevo chofer" }]} />
                       <div className="grid grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer || ""} readOnly={!choferNuevo} placeholder="Nombre"
                           onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
@@ -593,7 +593,7 @@ export default function Modulo3() {
                       <label className="text-xs text-gray-500 block mb-0.5">Tracto</label>
                       <SearchSelect className={INP} value={tractoActualId} onChange={(v) => elegirTracto(v)}
                         placeholder="— Selecciona tracto —"
-                        options={[...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })), { value: "__nuevo__", label: "➕ Nuevo tracto" }]} />
+                        options={[...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })), { value: "__nuevo__", label: "+ Nuevo tracto" }]} />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (tractoNuevo ? "" : " bg-gray-50")} value={form.marcaModelo || ""} readOnly={!tractoNuevo} placeholder="Marca y modelo"
                           onChange={(e) => setForm((f) => ({ ...f, marcaModelo: e.target.value }))} />
@@ -607,7 +607,7 @@ export default function Modulo3() {
                       <label className="text-xs text-gray-500 block mb-0.5">Caja</label>
                       <SearchSelect className={INP} value={cajaActualId} onChange={(v) => elegirCaja(v)}
                         placeholder="— Selecciona caja —"
-                        options={[...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })), { value: "__nueva__", label: "➕ Nueva caja" }]} />
+                        options={[...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })), { value: "__nueva__", label: "+ Nueva caja" }]} />
                       <div className="grid grid-cols-2 gap-2 mt-1">
                         <input className={INP + (cajaNueva ? "" : " bg-gray-50")} value={form.economicoCaja || ""} readOnly={!cajaNueva} placeholder="Económico"
                           onChange={(e) => setForm((f) => ({ ...f, economicoCaja: e.target.value }))} />

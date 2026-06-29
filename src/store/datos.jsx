@@ -89,7 +89,7 @@ export const DC = {
 export const STATUS_CFG = {
   esperando: { label: "Esperando", dot: "bg-gray-400", card: "border-gray-200 bg-white" },
   en_instalaciones: { label: "En instalaciones", dot: "bg-blue-500", card: "border-blue-300 bg-blue-50" },
-  en_ruta: { label: "En ruta 🚛", dot: "bg-green-500", card: "border-green-300 bg-green-50" },
+  en_ruta: { label: "En ruta", dot: "bg-green-500", card: "border-green-300 bg-green-50" },
 };
 
 export function idxToParr(idx) { return idx < 15 ? idx * 2 + 1 : (idx - 15) * 2 + 2; }
@@ -229,10 +229,10 @@ export const MATERIALES_INICIAL = [
 
 // Estados del trámite de importación
 export const IMPORT_ESTADOS = {
-  borrador: { label: "Borrador", icono: "📝", color: "bg-gray-100 text-gray-600 border-gray-200" },
-  documentada: { label: "Documentada", icono: "📋", color: "bg-blue-100 text-blue-700 border-blue-200" },
-  en_proceso: { label: "En proceso", icono: "⏳", color: "bg-amber-100 text-amber-700 border-amber-200" },
-  retornada: { label: "Retornada / Exportada", icono: "✓", color: "bg-green-100 text-green-700 border-green-200" },
+  borrador: { label: "Borrador", color: "bg-gray-100 text-gray-600 border-gray-200" },
+  documentada: { label: "Documentada", color: "bg-blue-100 text-blue-700 border-blue-200" },
+  en_proceso: { label: "En proceso", color: "bg-amber-100 text-amber-700 border-amber-200" },
+  retornada: { label: "Retornada / Exportada", color: "bg-green-100 text-green-700 border-green-200" },
 };
 
 // Umbral (días) para marcar una fecha límite como "por vencer"

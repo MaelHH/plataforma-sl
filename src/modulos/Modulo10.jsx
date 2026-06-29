@@ -6,7 +6,10 @@ import {
   IMPORT_ESTADOS, DIAS_ALERTA_SALIDA,
   fechaLimiteSalida, diasRestantesSalida, estadoVencimiento,
 } from "../store/datos";
-import { Boxes, Container, Pencil, FileText, Trash2, X, Save } from "lucide-react";
+import { Boxes, Container, Pencil, FileText, Trash2, X, Save, FileEdit, ClipboardList, Clock, CircleCheck } from "lucide-react";
+
+// Icono lucide por estado de importación (reemplaza los emojis del catálogo).
+const EST_ICONO = { borrador: FileEdit, documentada: ClipboardList, en_proceso: Clock, retornada: CircleCheck };
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -323,7 +326,9 @@ export default function Modulo10() {
                         ) : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <span title={estCfg.label} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm ${estCfg.color}`}>{estCfg.icono}</span>
+                        {(() => { const Ico = EST_ICONO[imp.estado] || FileEdit; return (
+                        <span title={estCfg.label} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border ${estCfg.color}`}><Ico size={14} /></span>
+                        ); })()}
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <button onClick={() => abrir(imp)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Pencil size={14} /> Editar</button>

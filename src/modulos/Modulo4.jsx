@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { Camera, Truck, Check, CheckCircle2, ArrowUp, Send } from "lucide-react";
+import { Camera, Truck, Check, CheckCircle2, ArrowUp, Send, Thermometer, Lock, Package, Hash, Satellite, ArrowLeft, ArrowRight } from "lucide-react";
 import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 
 const FRONTAL_FIELDS = [
-  { id: "temp_antes", label: "Temp. antes de carga", icon: "🌡️" },
-  { id: "temp_despues", label: "Temp. después de carga", icon: "🌡️" },
-  { id: "sello", label: "Sello de carga", icon: "🔒" },
-  { id: "placa_trailer", label: "Placas del trailer", icon: "🚛" },
-  { id: "placa_caja", label: "Placas de la caja", icon: "📦" },
-  { id: "economico", label: "Económico de la caja", icon: "🔢" },
-  { id: "tive", label: "TIVE", icon: "🛰️" },
+  { id: "temp_antes", label: "Temp. antes de carga", Icon: Thermometer },
+  { id: "temp_despues", label: "Temp. después de carga", Icon: Thermometer },
+  { id: "sello", label: "Sello de carga", Icon: Lock },
+  { id: "placa_trailer", label: "Placas del trailer", Icon: Truck },
+  { id: "placa_caja", label: "Placas de la caja", Icon: Package },
+  { id: "economico", label: "Económico de la caja", Icon: Hash },
+  { id: "tive", label: "TIVE", Icon: Satellite },
 ];
 
 export default function Modulo4() {
@@ -144,8 +144,8 @@ export default function Modulo4() {
         </div>
         <div className="p-3">
           <div className="flex items-center gap-2 mb-2 text-xs text-gray-400">
-            <span className="font-medium text-blue-500">← Frente (parrillas 1 y 2)</span>
-            <span className="ml-auto">Trasera →</span>
+            <span className="font-medium text-blue-500"><ArrowLeft size={12} className="inline" /> Frente (parrillas 1 y 2)</span>
+            <span className="ml-auto">Trasera <ArrowRight size={12} className="inline" /></span>
           </div>
           <div className="grid grid-cols-2 gap-x-4">
             <div><div className="text-xs text-gray-400 mb-1 text-center font-medium">Impares</div>{renderCol(0, (i) => i * 2 + 1)}</div>
@@ -344,7 +344,7 @@ export default function Modulo4() {
               {FRONTAL_FIELDS.map((f) => (
                 <div key={f.id} onClick={() => setActivePhoto({ type: "frontal", index: f.id })}
                   className={`border-2 rounded-xl p-3 cursor-pointer flex flex-col items-center justify-center gap-1 ${frontalPhotos[f.id] ? "border-green-400 bg-green-50" : "border-dashed border-gray-300 bg-gray-50 hover:border-purple-400"}`} style={{ minHeight: "72px" }}>
-                  <span className="text-2xl">{frontalPhotos[f.id] ? <Camera size={20} className="text-green-600" /> : f.icon}</span>
+                  <span className="text-2xl">{frontalPhotos[f.id] ? <Camera size={20} className="text-green-600" /> : <f.Icon size={14} />}</span>
                   <span className="text-xs font-medium text-center text-gray-700">{f.label}</span>
                   {frontalPhotos[f.id] ? <span className="text-xs text-green-600 font-semibold inline-flex items-center gap-1"><Check size={14} /> Con foto</span> : <span className="text-xs text-gray-400">Toca para subir</span>}
                 </div>

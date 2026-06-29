@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { Check } from "lucide-react";
 
 // Dropdown con búsqueda. Reemplaza a <select> en toda la app para soportar
 // listas gigantes. El buscador aparece solo cuando hay más de `searchThreshold`
@@ -145,7 +146,7 @@ export default function SearchSelect({
                     } ${activo ? "font-semibold" : ""}`}
                   >
                     <span className="flex-1 truncate">{o.label}</span>
-                    {activo && <span className="text-blue-500">✓</span>}
+                    {activo && <Check size={14} className="text-blue-500 shrink-0" />}
                   </button>
                 );
               })

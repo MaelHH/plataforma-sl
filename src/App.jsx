@@ -4,6 +4,7 @@ import { DatosProvider, useDatos } from "./store/datos";
 import {
   Users, LogOut, LayoutDashboard, Boxes, Sprout, PackageOpen, ClipboardList, Truck,
   LayoutGrid, Camera, PackageCheck, DollarSign, Radar, FlaskConical, Container, FileText,
+  AlertTriangle, MapPin,
 } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
@@ -60,7 +61,7 @@ class ErrorBoundary extends Component {
     if (this.state.error) {
       return (
         <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <div className="text-sm font-semibold text-red-700 mb-1">⚠️ Este módulo tuvo un error</div>
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-red-700 mb-1"><AlertTriangle size={15} /> Este módulo tuvo un error</div>
           <div className="text-xs text-red-600 mb-3 font-mono break-words">{String(this.state.error?.message || this.state.error)}</div>
           <div className="text-xs text-gray-500">Cambia de módulo en el menú o recarga la página. Si pasa seguido, dime qué dice el mensaje de arriba.</div>
         </div>
@@ -108,7 +109,7 @@ function AppAutenticada({ onLogout }) {
           </nav>
           <div className="p-4 border-t border-gray-100 text-xs text-gray-400 space-y-1">
             <EstadoConexion />
-            <div>📍 Los Mochis, Sinaloa</div>
+            <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
               <button onClick={() => setVerUsuarios(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
               <button onClick={onLogout} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>

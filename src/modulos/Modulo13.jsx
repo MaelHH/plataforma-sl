@@ -467,7 +467,7 @@ export default function Modulo13() {
                     placeholder="— Selecciona una línea —"
                     options={[
                       ...lineas.map((l) => ({ value: l.id, label: l.linea })),
-                      { value: "__nueva__", label: "➕ Nueva línea de transporte" },
+                      { value: "__nueva__", label: "+ Nueva línea de transporte" },
                     ]}
                   />
                 </div>
@@ -489,7 +489,7 @@ export default function Modulo13() {
                         placeholder="— Selecciona chofer —"
                         options={[
                           ...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })),
-                          { value: "__nuevo__", label: "➕ Nuevo chofer" },
+                          { value: "__nuevo__", label: "+ Nuevo chofer" },
                         ]}
                       />
                       <div className="grid grid-cols-3 gap-2 mt-1">
@@ -507,7 +507,7 @@ export default function Modulo13() {
                         placeholder="— Selecciona tracto —"
                         options={[
                           ...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })),
-                          { value: "__nuevo__", label: "➕ Nuevo tracto" },
+                          { value: "__nuevo__", label: "+ Nuevo tracto" },
                         ]}
                       />
                       <div className="grid grid-cols-2 gap-2 mt-1">
@@ -524,7 +524,7 @@ export default function Modulo13() {
                         placeholder="— Selecciona caja —"
                         options={[
                           ...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })),
-                          { value: "__nueva__", label: "➕ Nueva caja" },
+                          { value: "__nueva__", label: "+ Nueva caja" },
                         ]}
                       />
                       <div className="grid grid-cols-2 gap-2 mt-1">
@@ -637,7 +637,7 @@ export default function Modulo13() {
                     <label className={LBL}>Fletero (proveedor)</label>
                     <button onClick={cargarProveedoresOC} disabled={flCargando} className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}{flInfo ? ` · ${flInfo}` : ""}</button>
                   </div>
-                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={(proveedores || []).length ? "— Elige fletero —" : "Trae fleteros con ↻"}
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={(proveedores || []).length ? "— Elige fletero —" : "Primero trae fleteros desde SAP"}
                     options={(proveedores || []).map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
                 </div>
                 <div>

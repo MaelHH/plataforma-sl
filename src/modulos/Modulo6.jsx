@@ -1,6 +1,6 @@
 import { useState, Fragment } from "react";
 import * as XLSX from "xlsx";
-import { ClipboardList, Filter, Boxes, ListChecks, FileSpreadsheet, Check, Circle } from "lucide-react";
+import { ClipboardList, Filter, Boxes, ListChecks, FileSpreadsheet, Check, Circle, Link2 } from "lucide-react";
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import AvisoSAP from "../components/AvisoSAP";
@@ -266,7 +266,7 @@ export default function Modulo6() {
                               </tbody>
                             </table>
                             <div className="flex items-center gap-2 text-xs text-gray-400 border-t border-gray-200 pt-2 mt-2">
-                              🔗 Consulta SAP — próximamente · OC fletero · Orden de venta · Factura cliente
+                              <Link2 size={13} className="inline mr-1" />Consulta SAP — próximamente · OC fletero · Orden de venta · Factura cliente
                             </div>
                           </td>
                         </tr>

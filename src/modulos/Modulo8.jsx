@@ -252,7 +252,7 @@ export default function Modulo8() {
   const abrirEditar = (m) => {
     const estado = m.recepcion?.estado;
     if (estado === "recibido" || estado === "rechazado") {
-      window.alert(`⚠️ Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`);
+      window.alert(`Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`);
     }
     // Protege contra registros del backend que vienen sin todos los campos.
     setForm({ ...formVacio, ...m, cargaItems: m.cargaItems?.length ? m.cargaItems : [{ prod: "", parrillas: "", bultos: "" }] });
@@ -700,7 +700,7 @@ export default function Modulo8() {
                     placeholder="— Selecciona una línea —"
                     options={[
                       ...lineas.map((l) => ({ value: l.id, label: l.linea })),
-                      { value: "__nueva__", label: "➕ Nueva línea de transporte" },
+                      { value: "__nueva__", label: "+ Nueva línea de transporte" },
                     ]}
                   />
                 </div>
@@ -722,7 +722,7 @@ export default function Modulo8() {
                         placeholder="— Selecciona chofer —"
                         options={[
                           ...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })),
-                          { value: "__nuevo__", label: "➕ Nuevo chofer" },
+                          { value: "__nuevo__", label: "+ Nuevo chofer" },
                         ]}
                       />
                       <div className="grid grid-cols-3 gap-2 mt-1">
@@ -740,7 +740,7 @@ export default function Modulo8() {
                         placeholder="— Selecciona tracto —"
                         options={[
                           ...(lineaSel?.tractos || []).map((t) => ({ value: t.id, label: `${t.marcaModelo} · ${t.placa}` })),
-                          { value: "__nuevo__", label: "➕ Nuevo tracto" },
+                          { value: "__nuevo__", label: "+ Nuevo tracto" },
                         ]}
                       />
                       <div className="grid grid-cols-2 gap-2 mt-1">
@@ -757,7 +757,7 @@ export default function Modulo8() {
                         placeholder="— Selecciona caja —"
                         options={[
                           ...(lineaSel?.cajas || []).map((c) => ({ value: c.id, label: `${c.economico} · ${c.placa}` })),
-                          { value: "__nueva__", label: "➕ Nueva caja" },
+                          { value: "__nueva__", label: "+ Nueva caja" },
                         ]}
                       />
                       <div className="grid grid-cols-2 gap-2 mt-1">
@@ -1088,7 +1088,7 @@ export default function Modulo8() {
                     <label className={LBL}>Fletero (proveedor)</label>
                     <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}{flInfo ? ` · ${flInfo}` : ""}</button>
                   </div>
-                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros con ↻"}
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Primero trae fleteros desde SAP"}
                     options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
                 </div>
                 <div>

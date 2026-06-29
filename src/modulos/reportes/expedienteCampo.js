@@ -31,7 +31,7 @@ export function generarExpedienteCampo(m) {
     <h2>Recepción en empaque</h2>
     ${infoGrid([
       ["Estado", r.estado === "recibido" ? "Recibido" : "Pendiente"],
-      ["Condición", r.condicion === "con_novedad" ? "⚠️ Con novedad" : "OK"],
+      ["Condición", r.condicion === "con_novedad" ? "Con novedad" : "OK"],
       ["Fecha de llegada", r.fechaLlegada],
       ["Hora de llegada", r.horaLlegada],
       ["Recibe", r.responsable],

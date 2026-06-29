@@ -17,7 +17,7 @@ export function generarReporteCalidad(muestreoMov, muestreos) {
       const g = parseFloat(mu.defectos[d.id]) || 0;
       const tieneFoto = !!mu.fotos?.[d.id];
       return `<tr>
-          <td>${esc(d.label)}${tieneFoto ? ' <span style="color:#6366f1">📷</span>' : ""}</td>
+          <td>${esc(d.label)}${tieneFoto ? ' <span style="color:#6366f1;font-size:10px">(foto)</span>' : ""}</td>
           <td style="text-align:right">${g.toFixed(2)}</td>
           <td style="text-align:right;${pct > 0 ? "font-weight:700" : "color:#bbb"}">${pct.toFixed(1)}%</td>
         </tr>`;
