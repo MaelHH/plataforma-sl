@@ -2,6 +2,7 @@ import { useState, useEffect, Component } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
 import Login from "./components/Login";
+import Usuarios from "./components/Usuarios";
 import { getToken, setToken, me } from "./store/api";
 
 // Indicador de conexión al backend (verde = backend, ámbar = modo local).
@@ -67,6 +68,7 @@ class ErrorBoundary extends Component {
 
 function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
+  const [verUsuarios, setVerUsuarios] = useState(false);
   const modActivo = MODULOS.find((m) => m.id === moduloActivo);
 
   return (
@@ -103,7 +105,10 @@ function AppAutenticada({ onLogout }) {
           <div className="p-4 border-t border-gray-100 text-xs text-gray-400 space-y-1">
             <EstadoConexion />
             <div>📍 Los Mochis, Sinaloa</div>
-            <button onClick={onLogout} className="mt-1 text-xs text-gray-500 hover:text-red-600 hover:underline">🔒 Cerrar sesión</button>
+            <div className="flex items-center gap-3 pt-0.5">
+              <button onClick={() => setVerUsuarios(true)} className="text-xs text-gray-500 hover:text-blue-600 hover:underline">👥 Usuarios</button>
+              <button onClick={onLogout} className="text-xs text-gray-500 hover:text-red-600 hover:underline">🔒 Cerrar sesión</button>
+            </div>
           </div>
         </div>
 
@@ -135,6 +140,7 @@ function AppAutenticada({ onLogout }) {
           </div>
         </div>
       </div>
+      {verUsuarios && <Usuarios onClose={() => setVerUsuarios(false)} />}
     </DatosProvider>
   );
 }

@@ -63,6 +63,13 @@ export const putState = (clave, obj) => req("PUT", `/api/state/${clave}`, obj ??
 
 // ── Auth ──
 export const me = () => req("GET", "/api/auth/me");
+
+// ── Gestión de usuarios ──
+export const getUsuarios = () => req("GET", "/api/usuarios");
+export const getTiposUsuario = () => req("GET", "/api/tipos-usuario");
+export const crearUsuario = (body) => req("POST", "/api/usuarios", body);
+export const actualizarUsuario = (id, body) => req("PUT", `/api/usuarios/${encodeURIComponent(id)}`, body);
+export const cambiarActivoUsuario = (id, esActivo) => req("PATCH", `/api/usuarios/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
 export const register = (datos) => req("POST", "/api/auth/register", datos);
 // El endpoint /api/auth/token suele esperar form-urlencoded (OAuth2PasswordRequestForm).
 export async function login(username, password) {
