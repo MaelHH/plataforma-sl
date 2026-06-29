@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save } from "lucide-react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
@@ -710,7 +710,7 @@ export default function Modulo9() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {mer.map((e, i) => (
                                   <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={[e.motivo, e.comentario].filter(Boolean).join(" — ")}>
-                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}{e.comentario ? " 💬" : ""}
+                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}{e.comentario ? <MessageCircle size={14} className="ml-1" /> : ""}
                                     <button onClick={() => cancelarMerma(m.id, i)} title="Cancelar esta merma (regresa al piso)" className="text-red-400 hover:text-red-700 font-bold leading-none text-xs">×</button>
                                   </span>
                                 ))}
@@ -731,12 +731,12 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-center align-top">
                           {recK > 0 && !completo && (
                             <div className="flex flex-col gap-1 items-stretch min-w-[96px]">
-                              <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>
+                              <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={14} /> Vaciar</span></button>
                               <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                             </div>
                           )}
                           {completo && (
-                            <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap">↩️ Devolver</button>
+                            <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
                           )}
                         </td>
                       </tr>
@@ -825,7 +825,7 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-gray-600 align-top">{m.consignado || m.distribuidor || m.destino || "—"}</td>
                         <td className="px-3 py-2 text-center whitespace-nowrap align-top">
                           <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
-                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
+                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                         </td>
                       </tr>
                     );
@@ -912,7 +912,7 @@ export default function Modulo9() {
                             {r?.comentario && <div className="text-[9px] text-gray-500 max-w-[110px] truncate" title={r.comentario}>{r.comentario}</div>}
                           </div>
                         ) : (
-                          <span title="Por recibir" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200">⏳</span>
+                          <span title="Por recibir" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200"><Clock size={14} /></span>
                         )}
                       </td>
                       <td className="px-2 py-2 text-center">
@@ -925,7 +925,7 @@ export default function Modulo9() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-col gap-1 items-stretch min-w-[108px]">
-                          <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
+                          <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><span className="inline-flex items-center gap-1"><FlaskConical size={14} /> {nMu ? "Calidad" : "Muestreo"}</span></button>
                           <button onClick={() => abrirInspeccion(m)} className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}><Truck size={14} /> {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? <span className="inline-flex items-center gap-1">Inspección <AlertTriangle size={14} /></span> : <span className="inline-flex items-center gap-1">Inspección <Check size={14} /></span>) : "Inspección"}</button>
                           {recibido ? (
                             <>
@@ -935,10 +935,10 @@ export default function Modulo9() {
                               ) : ordenSAPde(m) ? (
                                 <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
                               ) : null}
-                              <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
+                              <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                             </>
                           ) : rechazado ? (
-                            <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
+                            <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                           ) : (
                             <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-2 py-1.5 rounded-lg font-medium hover:bg-emerald-700">Dar recepción</button>
                           )}
@@ -1161,7 +1161,7 @@ export default function Modulo9() {
                                   </div>
                                 ) : (
                                   <label className="cursor-pointer text-indigo-400 hover:text-indigo-600 text-base" title="Agregar foto">
-                                    📷
+                                    <Camera size={16} />
                                     <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => subirFoto(d.id, e.target.files?.[0])} />
                                   </label>
                                 )}
@@ -1328,7 +1328,7 @@ export default function Modulo9() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900">⬇️ Vaciar a producción — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
+              <div className="text-sm font-semibold text-gray-900"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={16} /> Vaciar a producción</span> — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                 <span>Disponible en piso: <b>{fmt(kgEnPisoDe(vaciarMov))} kg</b></span>
                 {kgEnPisoDe(vaciarMov) > 0 && (

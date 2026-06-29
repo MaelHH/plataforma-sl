@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle } from "lucide-react";
+import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 
 // DATOS DEMO — BORRAR AL CONECTAR BACKEND
@@ -186,8 +186,8 @@ export default function Dashboard() {
           <p className="text-sm text-gray-500 mt-0.5">Visión general de la operación · {etiquetaSemana(semana)}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">◀</button>
-          <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">▶</button>
+          <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><ChevronLeft size={16} /></button>
+          <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><ChevronRight size={16} /></button>
         </div>
       </div>
 

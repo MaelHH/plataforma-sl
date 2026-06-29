@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, Pencil, Trash2, FileText, RefreshCw, Package, Receipt, Check, X, AlertTriangle } from "lucide-react";
+import { Eye, Pencil, Trash2, FileText, RefreshCw, Package, Receipt, Check, X, AlertTriangle, Plug } from "lucide-react";
 import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
@@ -724,7 +724,7 @@ export default function Modulo13() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
                 <div className="text-sm font-semibold text-gray-900">Catálogo de materiales</div>
-                <div className="text-xs text-gray-500 mt-0.5">🔌 A futuro se leerá de SAP · catálogo compartido con Importaciones de Materiales</div>
+                <div className="text-xs text-gray-500 mt-0.5"><span className="inline-flex items-center gap-1"><Plug size={14} /> A futuro se leerá de SAP · catálogo compartido con Importaciones de Materiales</span></div>
               </div>
               <button onClick={() => setCatMat(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>

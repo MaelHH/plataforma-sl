@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar } from "lucide-react";
+import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
@@ -345,12 +345,12 @@ export default function Modulo3() {
 
       {/* Selector de semana */}
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
-        <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">◀ Anterior</button>
+        <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1"><ChevronLeft size={16} /> Anterior</span></button>
         <div className="text-center">
           <div className="text-xs text-gray-400">Semana</div>
           <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
         </div>
-        <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">Siguiente ▶</button>
+        <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1">Siguiente <ChevronRight size={16} /></span></button>
       </div>
 
       {/* Aviso: Kiko actualizó el requerimiento (resumen de qué cambió) */}

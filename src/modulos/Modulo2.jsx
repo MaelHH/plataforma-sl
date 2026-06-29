@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calculator, Check, Send } from "lucide-react";
+import { Calculator, Check, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import { useDatos, ORIGEN, TOTAL, calcularDias, etiquetaSemana, moverSemana, ahora } from "../store/datos";
 
 const PT = TOTAL;
@@ -185,14 +185,14 @@ export default function Modulo2() {
 
       {/* Selector de semana */}
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
-        <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">◀ Anterior</button>
+        <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1"><ChevronLeft size={16} /> Anterior</span></button>
         <div className="text-center">
           <div className="text-xs text-gray-400">Semana</div>
           <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
           <input type="date" value={semana} onChange={(e) => { if (e.target.value) setSemana(e.target.value); }}
             className="text-xs text-gray-400 mt-1 border border-gray-200 rounded px-2 py-0.5 focus:outline-none focus:border-blue-400" />
         </div>
-        <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600">Siguiente ▶</button>
+        <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1">Siguiente <ChevronRight size={16} /></span></button>
       </div>
 
       {/* Filtro días */}
