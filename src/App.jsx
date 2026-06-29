@@ -1,6 +1,7 @@
 import { useState, useEffect, Component } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
+import { Users, LogOut } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
 import { getToken, setToken, me } from "./store/api";
@@ -106,8 +107,8 @@ function AppAutenticada({ onLogout }) {
             <EstadoConexion />
             <div>📍 Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
-              <button onClick={() => setVerUsuarios(true)} className="text-xs text-gray-500 hover:text-blue-600 hover:underline">👥 Usuarios</button>
-              <button onClick={onLogout} className="text-xs text-gray-500 hover:text-red-600 hover:underline">🔒 Cerrar sesión</button>
+              <button onClick={() => setVerUsuarios(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
+              <button onClick={onLogout} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
         </div>
