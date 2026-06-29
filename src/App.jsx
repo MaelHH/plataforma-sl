@@ -1,6 +1,8 @@
-import { useState, Component } from "react";
+import { useState, useEffect, Component } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
+import Login from "./components/Login";
+import { getToken, setToken, me } from "./store/api";
 
 // Indicador de conexión al backend (verde = backend, ámbar = modo local).
 function EstadoConexion() {
@@ -63,7 +65,7 @@ class ErrorBoundary extends Component {
   }
 }
 
-export default function App() {
+function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
   const modActivo = MODULOS.find((m) => m.id === moduloActivo);
 
@@ -101,6 +103,7 @@ export default function App() {
           <div className="p-4 border-t border-gray-100 text-xs text-gray-400 space-y-1">
             <EstadoConexion />
             <div>📍 Los Mochis, Sinaloa</div>
+            <button onClick={onLogout} className="mt-1 text-xs text-gray-500 hover:text-red-600 hover:underline">🔒 Cerrar sesión</button>
           </div>
         </div>
 
@@ -134,4 +137,35 @@ export default function App() {
       </div>
     </DatosProvider>
   );
+}
+
+// ── Gate de autenticación ────────────────────────────────────────────────────
+// Si no hay token válido, muestra el login. Al entrar, monta la app (que ya carga
+// los datos CON el token). Escucha 401 globales (token vencido) para volver al login.
+export default function App() {
+  const [auth, setAuth] = useState(() => !!getToken());
+  const [verificando, setVerificando] = useState(!!getToken());
+
+  useEffect(() => {
+    if (getToken()) {
+      me().then(() => setAuth(true))
+        .catch(() => { setToken(null); setAuth(false); })
+        .finally(() => setVerificando(false));
+    }
+    const alExpirar = () => { setAuth(false); setVerificando(false); };
+    window.addEventListener("sl-unauthorized", alExpirar);
+    return () => window.removeEventListener("sl-unauthorized", alExpirar);
+  }, []);
+
+  const cerrarSesion = () => { setToken(null); setAuth(false); };
+
+  if (verificando) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 text-sm text-gray-400">
+        <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />Verificando sesión…</span>
+      </div>
+    );
+  }
+  if (!auth) return <Login onOk={() => setAuth(true)} />;
+  return <AppAutenticada onLogout={cerrarSesion} />;
 }

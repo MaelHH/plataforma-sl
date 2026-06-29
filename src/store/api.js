@@ -35,6 +35,11 @@ async function req(method, path, body) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      // Token vencido/ausente → limpiar y avisar a la app para mostrar el login.
+      setToken(null);
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("sl-unauthorized"));
+    }
     const txt = await res.text().catch(() => "");
     throw new Error(`${method} ${path} → ${res.status} ${txt}`);
   }
