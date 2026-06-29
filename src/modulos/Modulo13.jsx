@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Eye, Pencil, Trash2, FileText, RefreshCw, Package, Receipt, Check, X, AlertTriangle } from "lucide-react";
 import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
@@ -304,7 +305,7 @@ export default function Modulo13() {
           <p className="text-sm text-gray-500 mt-0.5">Materiales transportados con el flete · catálogo de materiales (a futuro desde SAP)</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCatMat(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📦 Catálogo de materiales</button>
+          <button onClick={() => setCatMat(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Package size={14} /> Catálogo de materiales</button>
           <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
         </div>
       </div>
@@ -357,20 +358,20 @@ export default function Modulo13() {
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         {m.ocSAP ? (
                           <span className="inline-flex items-center gap-1 mr-1 align-middle">
-                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200">✓ Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            <span title="Documentos creados en SAP" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200"><Check size={14} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
                             {m.ocSAP.factura?.existe ? (
-                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200">🧾 Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
+                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200"><Receipt size={14} /> Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
                             ) : m.ocSAP.factura ? (
-                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">🧾 Sin factura</span>
+                              <span title="Aún sin factura de proveedor" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200"><Receipt size={14} /> Sin factura</span>
                             ) : null}
-                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50">{ocChkId === m.id ? "…" : "🔄"}</button>
+                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="inline-flex items-center justify-center text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50">{ocChkId === m.id ? "…" : <RefreshCw size={14} />}</button>
                           </span>
                         ) : (
-                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">📄 OC</button>
+                          <button onClick={() => abrirOC(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1"><FileText size={14} /> OC</button>
                         )}
-                        <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
-                        <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
-                        <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
+                        <button onClick={() => setVerMov(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
+                        <button onClick={() => abrirEditar(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1"><Pencil size={14} /> Editar</button>
+                        <button onClick={() => borrarMov(m.id)} className="inline-flex items-center justify-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );
@@ -387,7 +388,7 @@ export default function Modulo13() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div className="text-sm font-semibold text-gray-900">{editId ? "Editar movimiento de materiales" : "Nuevo movimiento de materiales"}</div>
-              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="px-5 py-4 space-y-5">
 
@@ -442,7 +443,7 @@ export default function Modulo13() {
                           </td>
                           <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={it.cantidad} onChange={(e) => updMatItem(i, "cantidad", e.target.value)} /></td>
                           <td className="px-2 py-1 text-gray-500">{matDe(it.materialId)?.unidad || "—"}</td>
-                          <td className="px-2 py-1 text-center">{form.materialItems.length > 1 && <button onClick={() => delMatItem(i)} className="text-gray-300 hover:text-red-500">✕</button>}</td>
+                          <td className="px-2 py-1 text-center">{form.materialItems.length > 1 && <button onClick={() => delMatItem(i)} className="text-gray-300 hover:text-red-500 inline-flex items-center justify-center"><X size={14} /></button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -450,7 +451,7 @@ export default function Modulo13() {
                 </div>
                 <div className="flex items-center justify-between mt-2">
                   <button onClick={addMatItem} className="text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar material</button>
-                  <button onClick={() => setCatMat(true)} className="text-xs text-gray-500 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-medium">📦 Editar catálogo</button>
+                  <button onClick={() => setCatMat(true)} className="inline-flex items-center gap-1 text-xs text-gray-500 hover:bg-gray-50 px-3 py-1.5 rounded-lg font-medium"><Package size={14} /> Editar catálogo</button>
                 </div>
               </div>
 
@@ -470,7 +471,7 @@ export default function Modulo13() {
                     ]}
                   />
                 </div>
-                {lineaNueva && <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">✏️ Capturando línea nueva — se guarda en el catálogo al guardar</div>}
+                {lineaNueva && <div className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2"><Pencil size={14} /> Capturando línea nueva — se guarda en el catálogo al guardar</div>}
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className={LBL}>Línea</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.linea} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, linea: e.target.value }))} /></div>
                   <div><label className={LBL}>Contacto</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.contacto} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, contacto: e.target.value }))} /></div>
@@ -559,7 +560,7 @@ export default function Modulo13() {
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Movimiento de materiales · Folio {verMov.folio || "—"}</div>
-              <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="px-5 py-4 space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-2">
@@ -618,8 +619,8 @@ export default function Modulo13() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
             <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">📄 OC de flete (materiales) — Folio {m.folio || "—"}</div>
-                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><FileText size={16} /> OC de flete (materiales) — Folio {m.folio || "—"}</div>
+                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
               </div>
               <div className="px-5 py-4 space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -630,11 +631,11 @@ export default function Modulo13() {
                   <span className="text-gray-500">Precio (Flete $ del movimiento)</span>
                   <span className="text-lg font-bold text-indigo-700">${precio.toLocaleString()}</span>
                 </div>
-                {!(precio > 0) && <div className="text-[11px] text-amber-600">⚠️ Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
+                {!(precio > 0) && <div className="inline-flex items-center gap-1 text-[11px] text-amber-600"><AlertTriangle size={14} /> Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
                 <div>
                   <div className="flex items-center justify-between">
                     <label className={LBL}>Fletero (proveedor)</label>
-                    <button onClick={cargarProveedoresOC} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : "↻ Traer de SAP"}{flInfo ? ` · ${flInfo}` : ""}</button>
+                    <button onClick={cargarProveedoresOC} disabled={flCargando} className="inline-flex items-center gap-1 text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}{flInfo ? ` · ${flInfo}` : ""}</button>
                   </div>
                   <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={(proveedores || []).length ? "— Elige fletero —" : "Trae fleteros con ↻"}
                     options={(proveedores || []).map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
@@ -704,7 +705,7 @@ export default function Modulo13() {
                 </div>
               ) : (
                 <div className="px-5 py-3 border-t border-amber-200 bg-amber-50/60">
-                  <div className="text-[12px] text-amber-800 font-medium mb-2">⚠️ ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud + Pedido). No se puede deshacer desde aquí.</div>
+                  <div className="inline-flex items-center gap-1 text-[12px] text-amber-800 font-medium mb-2"><AlertTriangle size={14} /> ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud + Pedido). No se puede deshacer desde aquí.</div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setOcConfirm(false)} disabled={ocCargando} className="text-xs px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white disabled:opacity-50">No, volver</button>
                     <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !ocProyecto || !ocCultivo || !ocLote || !(precio > 0)} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Sí, crear en SAP"}</button>
@@ -725,7 +726,7 @@ export default function Modulo13() {
                 <div className="text-sm font-semibold text-gray-900">Catálogo de materiales</div>
                 <div className="text-xs text-gray-500 mt-0.5">🔌 A futuro se leerá de SAP · catálogo compartido con Importaciones de Materiales</div>
               </div>
-              <button onClick={() => setCatMat(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatMat(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="px-5 py-4">
               <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -744,7 +745,7 @@ export default function Modulo13() {
                         <td className="px-2 py-1"><input className={INP_TBL} value={m.codigo || ""} onChange={(e) => updMaterial(m.id, "codigo", e.target.value)} placeholder="COD-001" /></td>
                         <td className="px-2 py-1"><input className={INP_TBL} value={m.descripcion || ""} onChange={(e) => updMaterial(m.id, "descripcion", e.target.value)} placeholder="Descripción del material" /></td>
                         <td className="px-2 py-1"><input className={INP_TBL} value={m.unidad || ""} onChange={(e) => updMaterial(m.id, "unidad", e.target.value)} placeholder="Pieza" /></td>
-                        <td className="px-2 py-1 text-center"><button onClick={() => delMaterial(m.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button></td>
+                        <td className="px-2 py-1 text-center"><button onClick={() => delMaterial(m.id)} className="text-gray-300 hover:text-red-500 inline-flex items-center justify-center"><X size={14} /></button></td>
                       </tr>
                     ))}
                     {materiales.length === 0 && (

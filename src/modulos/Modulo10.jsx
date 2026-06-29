@@ -6,6 +6,7 @@ import {
   IMPORT_ESTADOS, DIAS_ALERTA_SALIDA,
   fechaLimiteSalida, diasRestantesSalida, estadoVencimiento,
 } from "../store/datos";
+import { Boxes, Container, Pencil, FileText, Trash2, X, Save } from "lucide-react";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -252,7 +253,7 @@ export default function Modulo10() {
           <p className="text-sm text-gray-500 mt-0.5">Documentación de importación temporal y control de fechas límite de salida</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setVerCatalogo(true)} className="text-xs px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">📚 Catálogo de materiales</button>
+          <button onClick={() => setVerCatalogo(true)} className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Boxes size={14} /> Catálogo de materiales</button>
           <button onClick={nueva} className="text-xs px-3 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">+ Nueva importación</button>
         </div>
       </div>
@@ -277,7 +278,7 @@ export default function Modulo10() {
         </div>
         {totDocs === 0 ? (
           <div className="text-center py-10">
-            <div className="text-4xl mb-2">🛃</div>
+            <div className="flex justify-center mb-2"><Container size={36} className="text-gray-400" /></div>
             <div className="text-sm text-gray-500 mb-3">Aún no hay importaciones registradas.</div>
             <button onClick={nueva} className="text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">+ Documentar primera importación</button>
           </div>
@@ -325,9 +326,9 @@ export default function Modulo10() {
                         <span title={estCfg.label} className={`inline-flex items-center justify-center w-7 h-7 rounded-full border text-sm ${estCfg.color}`}>{estCfg.icono}</span>
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
-                        <button onClick={() => abrir(imp)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">✏️ Editar</button>
-                        <button onClick={() => generarReporte(imp)} className="text-xs px-2 py-1 border border-cyan-200 rounded-lg bg-white hover:bg-cyan-50 text-cyan-700 mr-1">📄 PDF</button>
-                        <button onClick={() => eliminar(imp.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600">🗑️</button>
+                        <button onClick={() => abrir(imp)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Pencil size={14} /> Editar</button>
+                        <button onClick={() => generarReporte(imp)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-cyan-200 rounded-lg bg-white hover:bg-cyan-50 text-cyan-700 mr-1"><FileText size={14} /> PDF</button>
+                        <button onClick={() => eliminar(imp.id)} className="inline-flex items-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );
@@ -344,7 +345,7 @@ export default function Modulo10() {
           <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[94vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div className="text-sm font-semibold text-gray-900">Importación de materiales {edit.folio ? `— ${edit.folio}` : "(nueva)"}</div>
-              <button onClick={cerrar} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrar} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
 
             <div className="px-5 py-4 space-y-5">
@@ -424,7 +425,7 @@ export default function Modulo10() {
                                 <span className={`px-2 py-0.5 rounded-full font-semibold border ${BADGE_VENC[est]}`}>{txtDias(dr)}</span>}
                             </td>
                             <td className="px-2 py-1 text-center">
-                              <button onClick={() => quitarItem(it.id)} className="text-gray-300 hover:text-red-500" title="Quitar">✕</button>
+                              <button onClick={() => quitarItem(it.id)} className="inline-flex items-center text-gray-300 hover:text-red-500" title="Quitar"><X size={14} /></button>
                             </td>
                           </tr>
                         );
@@ -449,10 +450,10 @@ export default function Modulo10() {
             </div>
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
-              <button onClick={() => generarReporte(edit)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📄 Generar PDF</button>
+              <button onClick={() => generarReporte(edit)} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700"><FileText size={14} /> Generar PDF</button>
               <div className="flex gap-2">
                 <button onClick={cerrar} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={guardar} className="text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">💾 Guardar importación</button>
+                <button onClick={guardar} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700"><Save size={14} /> Guardar importación</button>
               </div>
             </div>
           </div>
@@ -468,7 +469,7 @@ export default function Modulo10() {
                 <div className="text-sm font-semibold text-gray-900">Catálogo de materiales</div>
                 <div className="text-xs text-gray-500 mt-0.5">Artículos importables y su periodo de salida (días para retornar sin impuesto/multa)</div>
               </div>
-              <button onClick={() => setVerCatalogo(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setVerCatalogo(false)} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -491,7 +492,7 @@ export default function Modulo10() {
                         <td className="px-2 py-1"><input className={INP} value={m.unidad} onChange={(e) => updMaterial(m.id, "unidad", e.target.value)} placeholder="Pieza" /></td>
                         <td className="px-2 py-1"><input className={INP} value={m.fraccion} onChange={(e) => updMaterial(m.id, "fraccion", e.target.value)} placeholder="0000.00.00" /></td>
                         <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={m.diasSalida} onChange={(e) => updMaterial(m.id, "diasSalida", e.target.value)} placeholder="540" /></td>
-                        <td className="px-2 py-1 text-center"><button onClick={() => delMaterial(m.id)} className="text-gray-300 hover:text-red-500" title="Eliminar">✕</button></td>
+                        <td className="px-2 py-1 text-center"><button onClick={() => delMaterial(m.id)} className="inline-flex items-center text-gray-300 hover:text-red-500" title="Eliminar"><X size={14} /></button></td>
                       </tr>
                     ))}
                     {materiales.length === 0 && (

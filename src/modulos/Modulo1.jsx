@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ClipboardList, X, Plus } from "lucide-react";
 import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 
@@ -98,8 +99,8 @@ export default function Modulo1() {
           <h1 className="text-base font-semibold text-gray-900">Programa Semanal</h1>
           <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado · planeación de cajas por presentación</p>
         </div>
-        <button onClick={() => setCatAbierto(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
-          ⚙️ Catálogo de presentaciones
+        <button onClick={() => setCatAbierto(true)} className="inline-flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
+          <ClipboardList size={14} /> Catálogo de presentaciones
         </button>
       </div>
 
@@ -172,7 +173,7 @@ export default function Modulo1() {
                     ))}
                     <td className="text-right px-3 py-1 text-xs font-semibold border-b border-gray-100">{total.toLocaleString()}</td>
                     <td className="px-2 py-1 border-b border-gray-100 text-center">
-                      <button onClick={() => delFila(r.idxGlobal)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                      <button onClick={() => delFila(r.idxGlobal)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                     </td>
                   </tr>
                 );
@@ -181,7 +182,7 @@ export default function Modulo1() {
           </tbody>
         </table>
         <div className="p-2 border-t border-gray-100">
-          <button onClick={addFila} className="text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar fila</button>
+          <button onClick={addFila} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar fila</button>
         </div>
       </div>
 
@@ -194,7 +195,7 @@ export default function Modulo1() {
                 <div className="text-sm font-semibold text-gray-900">Catálogo de presentaciones</div>
                 <div className="text-xs text-gray-500 mt-0.5">Cajas por parrilla y libras por caja alimentan los cálculos de toda la plataforma</div>
               </div>
-              <button onClick={() => setCatAbierto(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatAbierto(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               <table className="w-full text-sm">
@@ -228,13 +229,13 @@ export default function Modulo1() {
                           className="w-20 text-center text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none" />
                       </td>
                       <td className="py-1.5 text-center">
-                        <button onClick={() => delCat(c.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                        <button onClick={() => delCat(c.id)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <button onClick={addCat} className="mt-3 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar presentación</button>
+              <button onClick={addCat} className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar presentación</button>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
               <button onClick={() => setCatAbierto(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>

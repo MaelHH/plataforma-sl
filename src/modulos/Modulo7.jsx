@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDatos, DC, EMPRESAS } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import MapaTive from "../components/MapaTive";
+import { FileText, Check, Camera, Search, Route, Package } from "lucide-react";
 
 const EVENTOS = [
   { id: "preenfriado", label: "Preenfriado", icon: "❄️", color: "blue" },
@@ -189,8 +190,8 @@ export default function Modulo7() {
                   <span className="text-xs text-gray-500">{t.chofer || "Sin chofer"}</span>
                   {t.placaTracto && <span className="text-xs font-mono text-gray-400">{t.placaTracto}</span>}
                   {manifiestos.map((m) => (
-                    <span key={m.eid} className="text-xs font-mono px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                      📄 {m.folio || <span className="text-amber-600 italic">s/folio</span>}
+                    <span key={m.eid} className="inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                      <FileText size={14} /> {m.folio || <span className="text-amber-600 italic">s/folio</span>}
                     </span>
                   ))}
                 </div>
@@ -199,7 +200,7 @@ export default function Modulo7() {
             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
               {conEvidencia > 0 && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">{conEvidencia} evento{conEvidencia > 1 ? "s" : ""}</span>}
               {!esHistorial ? (
-                <button onClick={() => marcarEntregado(t.id)} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700">✓ Llegó a destino</button>
+                <button onClick={() => marcarEntregado(t.id)} className="inline-flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700"><Check size={14} /> Llegó a destino</button>
               ) : (
                 <button onClick={() => reactivar(t.id)} className="text-xs bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-medium hover:bg-blue-100">↩ Regresar a ruta</button>
               )}
@@ -211,7 +212,7 @@ export default function Modulo7() {
           <div className="border-t border-gray-100 p-3 space-y-2">
             {manifiestos.length > 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <div className="text-xs font-semibold text-gray-500 uppercase mb-2">📄 Manifiestos{fEmpresa ? " (filtrado)" : ""}</div>
+                <div className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 uppercase mb-2"><FileText size={14} /> Manifiestos{fEmpresa ? " (filtrado)" : ""}</div>
                 <div className="space-y-1">
                   {manifiestos.map((m) => (
                     <div key={m.eid} className="flex items-center gap-2">
@@ -283,7 +284,7 @@ export default function Modulo7() {
                         {(estado.fotos || Array(numFotos).fill(null)).map((f, slot) => (
                           <div key={slot} onClick={() => setActivePhoto({ trailerId: t.id, eventoId: ev.id, slot })}
                             className={`h-14 border-2 rounded-md flex items-center justify-center cursor-pointer ${f ? "border-green-400 bg-green-50" : "border-dashed border-gray-300 bg-white hover:border-gray-400"}`}>
-                            {f ? <span className="text-sm">📷</span> : <span className="text-gray-300">+</span>}
+                            {f ? <Camera size={14} className="text-green-600" /> : <span className="text-gray-300">+</span>}
                           </div>
                         ))}
                       </div>
@@ -324,7 +325,7 @@ export default function Modulo7() {
 
       <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-gray-600">🔍 Filtros</span>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-600"><Search size={14} /> Filtros</span>
           {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -351,7 +352,7 @@ export default function Modulo7() {
       {tab === "ruta" && (
         enRuta.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-            <div className="text-2xl mb-3">🛣️</div>
+            <div className="flex justify-center mb-3"><Route size={28} className="text-gray-400" /></div>
             <div className="text-sm font-medium text-gray-700 mb-1">{hayFiltros ? "Sin resultados con estos filtros" : "Sin trailers en ruta"}</div>
             <div className="text-xs text-gray-400">{hayFiltros ? "Prueba limpiar los filtros" : "Aparecen aquí cuando Francisco los envía a Embarques"}</div>
           </div>
@@ -361,7 +362,7 @@ export default function Modulo7() {
       {tab === "historial" && (
         entregados.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-            <div className="text-2xl mb-3">📦</div>
+            <div className="flex justify-center mb-3"><Package size={28} className="text-gray-400" /></div>
             <div className="text-sm font-medium text-gray-700 mb-1">{hayFiltros ? "Sin resultados con estos filtros" : "Sin entregas registradas"}</div>
             <div className="text-xs text-gray-400">{hayFiltros ? "Prueba limpiar los filtros" : "Los trailers que marques \"Llegó a destino\" aparecen aquí"}</div>
           </div>
@@ -372,13 +373,13 @@ export default function Modulo7() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
             <div className="bg-gray-900 h-44 flex flex-col items-center justify-center gap-2">
-              <span className="text-4xl">📷</span>
+              <Camera size={40} className="text-white" />
               <span className="text-gray-400 text-sm">{EVENTOS.find((e) => e.id === activePhoto.eventoId)?.label} · Foto {activePhoto.slot + 1}</span>
               <span className="text-gray-600 text-xs">Simulación — en producción abre la cámara</span>
             </div>
             <div className="px-5 py-4 flex gap-2 justify-end">
               <button onClick={() => setActivePhoto(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={confirmPhoto} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">✓ Confirmar foto</button>
+              <button onClick={confirmPhoto} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"><Check size={14} /> Confirmar foto</button>
             </div>
           </div>
         </div>

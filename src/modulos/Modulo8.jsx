@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, X, AlertTriangle, MapPin, Sprout, Boxes, Inbox, Package } from "lucide-react";
 import { useDatos, nuevoId } from "../store/datos";
 import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
@@ -447,11 +448,11 @@ export default function Modulo8() {
           <p className="text-sm text-gray-500 mt-0.5">Oscar · manifiesto de carga nacional desde campo</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCatCarga(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📦 Carga</button>
-          <button onClick={() => setCatUbic(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">📍 Ranchos / Empaques</button>
-          <button onClick={() => setCatZonas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🗺️ Zonas</button>
-          <button onClick={() => setCatConsig(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🏢 Consignados</button>
-          <button onClick={() => setCatFleteros(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">🚚 Fleteros</button>
+          <button onClick={() => setCatCarga(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Package size={14} /> Carga</button>
+          <button onClick={() => setCatUbic(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><MapPin size={14} /> Ranchos / Empaques</button>
+          <button onClick={() => setCatZonas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><MapPin size={14} /> Zonas</button>
+          <button onClick={() => setCatConsig(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Inbox size={14} /> Consignados</button>
+          <button onClick={() => setCatFleteros(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Truck size={14} /> Fleteros</button>
           <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold">OS</div>
           <span className="text-sm font-medium text-gray-700">Oscar</span>
         </div>
@@ -471,7 +472,7 @@ export default function Modulo8() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 flex items-center gap-1">📊 Excel{hayFiltros ? " (filtrado)" : ""}</button>
+            <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 flex items-center gap-1"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
             <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
           </div>
         </div>
@@ -544,22 +545,22 @@ export default function Modulo8() {
                         })()}
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
-                        <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
-                        <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1">✏️ Editar</button>
+                        <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1 inline-flex items-center gap-1"><Eye size={14} /> Ver</button>
+                        <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1 inline-flex items-center gap-1"><Pencil size={14} /> Editar</button>
                         {m.ocSAP ? (
                           <span className="inline-flex items-center gap-1 mr-1 align-middle">
-                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700">✓ Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={14} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
                             {m.ocSAP.factura?.existe ? (
-                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200">🧾 Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
+                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={14} /> Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
                             ) : m.ocSAP.factura ? (
-                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">🧾 Sin factura</span>
+                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={14} /> Sin factura</span>
                             ) : null}
-                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50">{ocChkId === m.id ? "…" : "🔄"}</button>
+                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50 inline-flex items-center gap-1">{ocChkId === m.id ? "…" : <RefreshCw size={14} />}</button>
                           </span>
                         ) : (
-                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1">📄 OC</button>
+                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1 inline-flex items-center gap-1"><FileText size={14} /> OC</button>
                         )}
-                        <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
+                        <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500 inline-flex items-center"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );
@@ -576,7 +577,7 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div className="text-sm font-semibold text-gray-900">{editId ? "Editar movimiento" : "Nuevo movimiento"} — Manifiesto de carga nacional</div>
-              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrarModal} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-5">
 
@@ -666,7 +667,7 @@ export default function Modulo8() {
                           </td>
                           <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={it.parrillas} onChange={(e) => updCargaItem(i, "parrillas", e.target.value)} /></td>
                           <td className="px-2 py-1"><input type="number" className={INP + " text-right"} value={it.bultos} onChange={(e) => updCargaItem(i, "bultos", e.target.value)} /></td>
-                          <td className="px-2 py-1 text-center">{form.cargaItems.length > 1 && <button onClick={() => delCargaItem(i)} className="text-gray-300 hover:text-red-500">✕</button>}</td>
+                          <td className="px-2 py-1 text-center">{form.cargaItems.length > 1 && <button onClick={() => delCargaItem(i)} className="text-gray-300 hover:text-red-500 inline-flex items-center"><Trash2 size={14} /></button>}</td>
                         </tr>
                       ))}
                       <tr className="border-t border-gray-200 bg-gray-50 font-semibold">
@@ -703,7 +704,7 @@ export default function Modulo8() {
                     ]}
                   />
                 </div>
-                {lineaNueva && <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">✏️ Capturando línea nueva — se guarda en el catálogo al guardar</div>}
+                {lineaNueva && <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2 inline-flex items-center gap-1"><Pencil size={14} /> Capturando línea nueva — se guarda en el catálogo al guardar</div>}
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className={LBL}>Línea</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.linea} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, linea: e.target.value }))} /></div>
                   <div><label className={LBL}>Contacto</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.contacto} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, contacto: e.target.value }))} /></div>
@@ -789,7 +790,7 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Movimiento · Folio {verMov.folio || "—"}</div>
-              <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-4 text-xs">
               <div className="grid grid-cols-3 gap-2">
@@ -843,13 +844,13 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Catálogo de carga (qué se carga)</div>
-              <button onClick={() => setCatCarga(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatCarga(false)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               {cargaCampo.map((c) => (
                 <div key={c.id} className="flex items-center gap-2 mb-2">
                   <input value={c.label} onChange={(e) => updCarga(c.id, e.target.value)} className={INP_TBL} />
-                  <button onClick={() => delCarga(c.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <button onClick={() => delCarga(c.id)} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center"><Trash2 size={14} /></button>
                 </div>
               ))}
               <button onClick={addCarga} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar tipo</button>
@@ -867,16 +868,16 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Ranchos / Empaques</div>
-              <button onClick={() => setCatUbic(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatUbic(false)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-5">
               {/* ── Temporadas (proyectos SAP + manuales) · editable; todo se guarda en BD ── */}
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                  <div className="text-xs font-bold text-gray-700">🌱 Temporadas · con sus ranchos y responsables de cosecha</div>
+                  <div className="text-xs font-bold text-gray-700 inline-flex items-center gap-1"><Sprout size={16} /> Temporadas · con sus ranchos y responsables de cosecha</div>
                   <button onClick={actualizarDeSAP} disabled={sapCargando} title="Actualiza cantidades de las temporadas que ya tienes (no agrega nuevas)"
                     className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                    {sapCargando ? "…" : "🔄 Actualizar de SAP"}
+                    {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
                   </button>
                 </div>
                 {sapError && <div className="text-[11px] text-red-600 mb-1">No se pudo traer de SAP: {sapError}</div>}
@@ -894,14 +895,14 @@ export default function Modulo8() {
                   <div key={p.code} className="border border-gray-200 rounded-lg p-3 mb-2">
                     <div className="flex items-center gap-2 mb-2">
                       <input value={p.nombre} onChange={(e) => updTemporada(p.code, e.target.value)} className={INP_TBL + " font-semibold"} placeholder="Nombre de la temporada" />
-                      <button onClick={() => { if (window.confirm("¿Quitar esta temporada del catálogo? (no toca SAP)")) delTemporada(p.code); }} className="text-gray-300 hover:text-red-500 text-sm" title="Eliminar temporada">✕</button>
+                      <button onClick={() => { if (window.confirm("¿Quitar esta temporada del catálogo? (no toca SAP)")) delTemporada(p.code); }} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center" title="Eliminar temporada"><Trash2 size={14} /></button>
                     </div>
                     <div className="space-y-2 pl-1">
                       {(p.ranchos || []).map((r, ri) => (
                         <div key={ri} className="border border-gray-100 rounded-md p-2">
                           <div className="flex items-center gap-2 mb-1">
                             <input value={r.nombre} onChange={(e) => updRanchoFld(p.code, ri, "nombre", e.target.value)} className={INP_TBL + " font-medium"} placeholder="Rancho" />
-                            <button onClick={() => delRancho(p.code, ri)} className="text-gray-300 hover:text-red-500 text-xs" title="Eliminar rancho">✕</button>
+                            <button onClick={() => delRancho(p.code, ri)} className="text-gray-300 hover:text-red-500 text-xs inline-flex items-center" title="Eliminar rancho"><Trash2 size={14} /></button>
                           </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -914,7 +915,7 @@ export default function Modulo8() {
                               {(r.responsables || []).map((rr, i) => (
                                 <div key={i} className="flex items-center gap-1 mb-1">
                                   <input value={rr} onChange={(e) => updResp(p.code, ri, i, e.target.value)} className={INP_TBL} />
-                                  <button onClick={() => delResp(p.code, ri, i)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                                  <button onClick={() => delResp(p.code, ri, i)} className="text-gray-300 hover:text-red-500 text-xs inline-flex items-center"><Trash2 size={14} /></button>
                                 </div>
                               ))}
                               <button onClick={() => addResp(p.code, ri)} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded font-medium">+ Responsable</button>
@@ -928,7 +929,7 @@ export default function Modulo8() {
                 ))}
                 {proyectos.length === 0 && <div className="text-[11px] text-gray-400 italic mb-2">Aún no hay temporadas. Agrega una a mano o da clic en "Traer de SAP".</div>}
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] text-gray-500">➕ Agregar temporada de SAP:</span>
+                  <span className="text-[11px] text-gray-500 inline-flex items-center gap-1"><Plus size={14} /> Agregar temporada de SAP:</span>
                   <div className="w-64">
                     <SearchSelect className={INP} value={sapPick}
                       onChange={(v) => agregarTemporadaDeSAP(v)}
@@ -942,11 +943,11 @@ export default function Modulo8() {
                   Los datos en `ubicaciones.origenes` se conservan en la BD; ahora el catálogo
                   vivo es el de Temporadas de arriba. Para reactivarlo, restaurar este bloque. */}
               <div>
-                <div className="text-xs font-bold text-gray-700 mb-2">🏭 Destinos (empaques)</div>
+                <div className="text-xs font-bold text-gray-700 mb-2 inline-flex items-center gap-1"><Boxes size={16} /> Destinos (empaques)</div>
                 {ubicaciones.destinos.map((d) => (
                   <div key={d.id} className="flex items-center gap-2 mb-2">
                     <input value={d.nombre} onChange={(e) => updUbic("destinos", d.id, e.target.value)} className={INP_TBL} />
-                    <button onClick={() => delUbic("destinos", d.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                    <button onClick={() => delUbic("destinos", d.id)} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center"><Trash2 size={14} /></button>
                   </div>
                 ))}
                 <button onClick={() => addUbic("destinos")} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar empaque</button>
@@ -964,14 +965,14 @@ export default function Modulo8() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900">🗺️ Zonas (Viaje)</div>
-              <button onClick={() => setCatZonas(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><MapPin size={16} /> Zonas (Viaje)</div>
+              <button onClick={() => setCatZonas(false)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               {zonas.map((z, i) => (
                 <div key={i} className="flex items-center gap-2 mb-2">
                   <input value={z} onChange={(e) => updZona(i, e.target.value)} className={INP_TBL} />
-                  <button onClick={() => delZona(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <button onClick={() => delZona(i)} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center"><Trash2 size={14} /></button>
                 </div>
               ))}
               <button onClick={addZona} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar zona</button>
@@ -989,16 +990,16 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
-                <div className="text-sm font-semibold text-gray-900">🏢 Consignados / Distribuidores</div>
+                <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><Inbox size={16} /> Consignados / Distribuidores</div>
                 <div className="text-xs text-gray-500 mt-0.5">Mismo catálogo para ambos campos</div>
               </div>
-              <button onClick={() => setCatConsig(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatConsig(false)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               {consignados.map((c, i) => (
                 <div key={i} className="flex items-center gap-2 mb-2">
                   <input value={c} onChange={(e) => updConsig(i, e.target.value)} className={INP_TBL} />
-                  <button onClick={() => delConsig(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <button onClick={() => delConsig(i)} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center"><Trash2 size={14} /></button>
                 </div>
               ))}
               <button onClick={addConsig} className="mt-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar empresa</button>
@@ -1016,16 +1017,16 @@ export default function Modulo8() {
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div>
-                <div className="text-sm font-semibold text-gray-900">🚚 Fleteros (proveedores SAP)</div>
+                <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><Truck size={16} /> Fleteros (proveedores SAP)</div>
                 <div className="text-xs text-gray-500 mt-0.5">Para la orden de compra de flete</div>
               </div>
-              <button onClick={() => setCatFleteros(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatFleteros(false)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <input value={flBuscar} onChange={(e) => setFlBuscar(e.target.value)} placeholder="Buscar por nombre/código…" className={INP + " flex-1 min-w-[180px]"} />
                 <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                  {flCargando ? "Cargando…" : "🔄 Traer de SAP"}
+                  {flCargando ? "Cargando…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}
                 </button>
               </div>
               {flError && <div className="text-[11px] text-red-600">No se pudo traer de SAP: {flError}</div>}
@@ -1059,8 +1060,8 @@ export default function Modulo8() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
             <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">📄 Orden de compra de flete — Folio {m.folio || "—"}</div>
-                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><FileText size={16} /> Orden de compra de flete — Folio {m.folio || "—"}</div>
+                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
               </div>
               <div className="px-5 py-4 space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1072,7 +1073,7 @@ export default function Modulo8() {
                   <span className="text-gray-500">Precio (Flete $ del movimiento)</span>
                   <span className="text-lg font-bold text-indigo-700">${precio.toLocaleString()}</span>
                 </div>
-                {!(precio > 0) && <div className="text-[11px] text-amber-600">⚠️ Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
+                {!(precio > 0) && <div className="text-[11px] text-amber-600 inline-flex items-center gap-1"><AlertTriangle size={14} /> Este movimiento no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
                 <div>
                   <label className={LBL}>Cultivo {r?.cultivo ? <span className="text-gray-400 font-normal">· del proyecto: {r.cultivo}</span> : null}</label>
                   <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo (norma de reparto) —"
@@ -1085,7 +1086,7 @@ export default function Modulo8() {
                 <div>
                   <div className="flex items-center justify-between">
                     <label className={LBL}>Fletero (proveedor)</label>
-                    <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : "↻ Traer de SAP"}{flInfo ? ` · ${flInfo}` : ""}</button>
+                    <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}{flInfo ? ` · ${flInfo}` : ""}</button>
                   </div>
                   <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Trae fleteros con ↻"}
                     options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
@@ -1117,7 +1118,7 @@ export default function Modulo8() {
                 </div>
               ) : (
                 <div className="px-5 py-3 border-t border-amber-200 bg-amber-50/60">
-                  <div className="text-[12px] text-amber-800 font-medium mb-2">⚠️ ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud de Pedido + Pedido). Esta acción no se puede deshacer desde aquí.</div>
+                  <div className="text-[12px] text-amber-800 font-medium mb-2"><AlertTriangle size={14} className="inline-block align-text-bottom mr-1" /> ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud de Pedido + Pedido). Esta acción no se puede deshacer desde aquí.</div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setOcConfirm(false)} disabled={ocCargando} className="text-xs px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white disabled:opacity-50">No, volver</button>
                     <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Sí, crear en SAP"}</button>

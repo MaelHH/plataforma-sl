@@ -1,7 +1,10 @@
 import { useState, useEffect, Component } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
-import { Users, LogOut } from "lucide-react";
+import {
+  Users, LogOut, LayoutDashboard, Boxes, Sprout, PackageOpen, ClipboardList, Truck,
+  LayoutGrid, Camera, PackageCheck, DollarSign, Radar, FlaskConical, Container, FileText,
+} from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
 import { getToken, setToken, me } from "./store/api";
@@ -32,20 +35,20 @@ import Modulo13 from "./modulos/Modulo13";
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
 const MODULOS = [
-  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: "📈", desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
-  { id: 13, nombre: "Movimiento Materiales", sub: "Materiales", icono: "🧱", desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
-  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: "🌾", desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
-  { id: 9, nombre: "Empaque", sub: "Empaque", icono: "📥", desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
-  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: "📋", desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
-  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: "🚛", desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
-  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: "📊", desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
-  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: "📸", desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
-  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: "📦", desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
-  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: "💰", desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
-  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: "🛰️", desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
-  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: "🔬", desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
-  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: "🛃", desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
-  { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: "📄", desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
+  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: LayoutDashboard, desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
+  { id: 13, nombre: "Movimiento Materiales", sub: "Materiales", icono: Boxes, desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
+  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: Sprout, desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
+  { id: 9, nombre: "Empaque", sub: "Empaque", icono: PackageOpen, desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
+  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: ClipboardList, desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
+  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: Truck, desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
+  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: LayoutGrid, desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
+  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: Camera, desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
+  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: PackageCheck, desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
+  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: DollarSign, desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
+  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: Radar, desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
+  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: FlaskConical, desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
+  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: Container, desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
+  { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: FileText, desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
 ];
 
 // Red de seguridad: si un módulo truena, muestra el error y deja seguir navegando.
@@ -95,7 +98,7 @@ function AppAutenticada({ onLogout }) {
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
               >
-                <span className="text-base">{m.icono}</span>
+                <m.icono size={18} className="shrink-0" />
                 <div className="text-left leading-tight">
                   <div>{m.nombre}</div>
                   <div className={`text-xs font-normal ${moduloActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
@@ -118,7 +121,7 @@ function AppAutenticada({ onLogout }) {
           <div className="p-8 max-w-6xl mx-auto">
             {modActivo?.desc && (
               <div className="mb-4 flex items-start gap-2 text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
-                <span className="text-base leading-none">{modActivo.icono}</span>
+                <modActivo.icono size={16} className="shrink-0 mt-0.5 text-gray-700" />
                 <span><b className="text-gray-900">{modActivo.nombre}.</b> {modActivo.desc}</span>
               </div>
             )}

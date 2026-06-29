@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
@@ -470,7 +471,7 @@ export default function Modulo9() {
         <div className="mb-3 space-y-4">
           {/* Selector de día del reporte */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-semibold text-gray-500">📅 Reporte del día:</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500"><Calendar size={14} /> Reporte del día:</span>
             <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)}
               className="text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" />
             {diaReporte !== hoyISO() && <button onClick={() => setDiaReporte(hoyISO())} className="text-[11px] text-indigo-600 hover:text-indigo-800 underline">hoy</button>}
@@ -625,7 +626,7 @@ export default function Modulo9() {
               </span>
             </div>
             {tabRec === "histMermado" && (
-              <button onClick={abrirRezaga} className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap">➕ Registrar rezaga</button>
+              <button onClick={abrirRezaga} className="inline-flex items-center gap-1 text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap"><Plus size={14} /> Registrar rezaga</button>
             )}
           </div>
           {filasVac.length === 0 ? (
@@ -719,7 +720,7 @@ export default function Modulo9() {
                         </td>
                         <td className="px-3 py-2 text-right whitespace-nowrap align-top">
                           {completo
-                            ? <span className="font-semibold text-green-700">✓ sin piso</span>
+                            ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> sin piso</span>
                             : recK > 0
                               ? <div>
                                   <span className="font-semibold text-amber-700">{fmt(pisoK)} kg</span>
@@ -731,7 +732,7 @@ export default function Modulo9() {
                           {recK > 0 && !completo && (
                             <div className="flex flex-col gap-1 items-stretch min-w-[96px]">
                               <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap">⬇️ Vaciar</button>
-                              <button onClick={() => abrirMermar(m)} className="text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap">⚠️ Mermar</button>
+                              <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                             </div>
                           )}
                           {completo && (
@@ -772,7 +773,7 @@ export default function Modulo9() {
                           <td className="px-3 py-2 text-gray-700">{rz.origen || "—"}</td>
                           <td className="px-3 py-2 text-right font-semibold text-red-700">{rz.kg ? fmt(rz.kg) + " kg" : "—"}</td>
                           <td className="px-3 py-2 text-gray-600">{rz.comentario || "—"}</td>
-                          <td className="px-3 py-2 text-center"><button onClick={() => eliminarRezaga(rz.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button></td>
+                          <td className="px-3 py-2 text-center"><button onClick={() => eliminarRezaga(rz.id)} className="inline-flex items-center justify-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button></td>
                         </tr>
                       ))}
                       <tr className="bg-gray-50 font-semibold text-gray-800">
@@ -790,7 +791,7 @@ export default function Modulo9() {
       ) : tabRec === "clienteDirecto" ? (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <span className="text-sm font-semibold text-gray-900">🚚 Cliente Directo ({clienteDirectoList.length})</span>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Truck size={16} /> Cliente Directo ({clienteDirectoList.length})</span>
             <span className="text-xs text-gray-400 ml-2">· fletes que NO entran a empaque; se van directo con el cliente</span>
           </div>
           {clienteDirectoList.length === 0 ? (
@@ -823,7 +824,7 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-right font-semibold text-gray-800 align-top">{fmt(kg)} kg</td>
                         <td className="px-3 py-2 text-gray-600 align-top">{m.consignado || m.distribuidor || m.destino || "—"}</td>
                         <td className="px-3 py-2 text-center whitespace-nowrap align-top">
-                          <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1">👁️ Ver</button>
+                          <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
                           <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
                         </td>
                       </tr>
@@ -900,13 +901,13 @@ export default function Modulo9() {
                       <td className="px-2 py-2 text-center">
                         {recibido ? (
                           <div className="flex flex-col items-center gap-0.5">
-                            <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>{novedad ? "⚠️" : "✓"}</span>
+                            <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>{novedad ? <AlertTriangle size={14} /> : <Check size={14} />}</span>
                             <span className="text-[10px] text-green-700 font-semibold">Recepción</span>
-                            {r?.clienteDirecto && <span className="text-[9px] text-blue-700 font-semibold bg-blue-50 border border-blue-200 rounded px-1">🚚 Cliente directo</span>}
+                            {r?.clienteDirecto && <span className="inline-flex items-center gap-0.5 text-[9px] text-blue-700 font-semibold bg-blue-50 border border-blue-200 rounded px-1"><Truck size={12} /> Cliente directo</span>}
                           </div>
                         ) : rechazado ? (
                           <div className="flex flex-col items-center gap-0.5">
-                            <span title="Rechazado" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-red-100 text-red-700 border-red-200">❌</span>
+                            <span title="Rechazado" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-red-100 text-red-700 border-red-200"><X size={14} /></span>
                             <span className="text-[10px] text-red-700 font-semibold">Rechazo</span>
                             {r?.comentario && <div className="text-[9px] text-gray-500 max-w-[110px] truncate" title={r.comentario}>{r.comentario}</div>}
                           </div>
@@ -925,14 +926,14 @@ export default function Modulo9() {
                       <td className="px-3 py-2">
                         <div className="flex flex-col gap-1 items-stretch min-w-[108px]">
                           <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600">🔬 {nMu ? "Calidad" : "Muestreo"}</button>
-                          <button onClick={() => abrirInspeccion(m)} className={`text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}>🚛 {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "Inspección ⚠️" : "Inspección ✓") : "Inspección"}</button>
+                          <button onClick={() => abrirInspeccion(m)} className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}><Truck size={14} /> {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? <span className="inline-flex items-center gap-1">Inspección <AlertTriangle size={14} /></span> : <span className="inline-flex items-center gap-1">Inspección <Check size={14} /></span>) : "Inspección"}</button>
                           {recibido ? (
                             <>
-                              <button onClick={() => abrirRecepcion(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">👁️ Ver</button>
+                              <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> Ver</button>
                               {m.recepcion?.sapEnvio ? (
-                                <span title="Recibo de producción enviado a SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium">✓ SAP #{m.recepcion.sapEnvio.docNum}</span>
+                                <span title="Recibo de producción enviado a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium"><Check size={14} /> SAP #{m.recepcion.sapEnvio.docNum}</span>
                               ) : ordenSAPde(m) ? (
-                                <button onClick={() => abrirEnvioSAP(m)} className="text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700">📤 Mandar a SAP</button>
+                                <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
                               ) : null}
                               <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600">↩️ Reabrir</button>
                             </>
@@ -959,7 +960,7 @@ export default function Modulo9() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div className="text-sm font-semibold text-gray-900">Recepción — Folio {recibir.folio || "—"}</div>
-              <button onClick={() => { setRecibir(null); setForm(null); }} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => { setRecibir(null); setForm(null); }} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
 
             <div className="px-5 py-4 space-y-5">
@@ -1002,7 +1003,7 @@ export default function Modulo9() {
                               <input type="number" className={INP + " text-right"} value={form[campo]} onChange={(e) => upd(campo, e.target.value)} />
                             </td>
                             <td className={`px-3 py-1.5 text-right font-semibold ${dif === 0 ? "text-gray-400" : "text-red-600"}`}>
-                              {dif === 0 ? "✓ ok" : (dif > 0 ? "+" : "") + dif.toLocaleString()}
+                              {dif === 0 ? <span className="inline-flex items-center gap-1"><Check size={14} /> ok</span> : (dif > 0 ? "+" : "") + dif.toLocaleString()}
                             </td>
                           </tr>
                         );
@@ -1068,7 +1069,7 @@ export default function Modulo9() {
                 <label className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer ${form.clienteDirecto ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"}`}>
                   <input type="checkbox" className="mt-0.5" checked={!!form.clienteDirecto} onChange={(e) => upd("clienteDirecto", e.target.checked)} />
                   <span>
-                    <span className="text-sm font-semibold text-gray-900">🚚 Flete a Cliente Directo</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Truck size={16} /> Flete a Cliente Directo</span>
                     <span className="block text-xs text-gray-500">No entra a empaque ni a Vaciado a Empaque: se va directo con el cliente. Aparecerá en la pestaña <b>Cliente Directo</b>.</span>
                   </span>
                 </label>
@@ -1077,7 +1078,7 @@ export default function Modulo9() {
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end sticky bottom-0 bg-white">
               <button onClick={() => { setRecibir(null); setForm(null); }} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={confirmar} className="text-xs px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700">✓ Confirmar recepción</button>
+              <button onClick={confirmar} className="inline-flex items-center justify-center gap-1 text-xs px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"><Check size={14} /> Confirmar recepción</button>
             </div>
           </div>
         </div>
@@ -1095,7 +1096,7 @@ export default function Modulo9() {
                   <div className="text-sm font-semibold text-gray-900">Control de Calidad — Recepción</div>
                   <div className="text-xs text-gray-500 mt-0.5">Folio {muestreoMov.folio || "—"} · {muestreoMov.rancho || "—"} → {muestreoMov.destino || "—"}</div>
                 </div>
-                <button onClick={cerrarMuestreo} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                <button onClick={cerrarMuestreo} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
               </div>
 
               {/* Pestañas de muestreos */}
@@ -1104,7 +1105,7 @@ export default function Modulo9() {
                   <button key={i} onClick={() => setMActivo(i)}
                     className={`text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px ${i === mActivo ? "border-indigo-500 text-indigo-700 bg-indigo-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                     Muestreo {i + 1}
-                    {muestreos.length > 1 && <span onClick={(e) => { e.stopPropagation(); eliminarMuestreo(i); }} className="ml-2 text-gray-300 hover:text-red-500">✕</span>}
+                    {muestreos.length > 1 && <span onClick={(e) => { e.stopPropagation(); eliminarMuestreo(i); }} className="ml-2 inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></span>}
                   </button>
                 ))}
                 {muestreos.length < MAX_MUESTREOS && (
@@ -1156,7 +1157,7 @@ export default function Modulo9() {
                                 {mu.fotos?.[d.id] ? (
                                   <div className="flex items-center justify-center gap-1">
                                     <a href={mu.fotos[d.id]} target="_blank" rel="noreferrer"><img src={mu.fotos[d.id]} alt="" className="w-7 h-7 object-cover rounded border border-gray-200" /></a>
-                                    <button onClick={() => quitarFoto(d.id)} className="text-gray-300 hover:text-red-500 text-xs">✕</button>
+                                    <button onClick={() => quitarFoto(d.id)} className="inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                                   </div>
                                 ) : (
                                   <label className="cursor-pointer text-indigo-400 hover:text-indigo-600 text-base" title="Agregar foto">
@@ -1193,12 +1194,12 @@ export default function Modulo9() {
 
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
                 <div className="flex gap-2">
-                  <button onClick={() => generarReporteCalidad(muestreoMov, muestreos)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF</button>
-                  <button onClick={() => abrirRechazo(muestreoMov)} className="text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50">🚫 Rechazar flete</button>
+                  <button onClick={() => generarReporteCalidad(muestreoMov, muestreos)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1"><FileText size={14} /> Generar PDF</button>
+                  <button onClick={() => abrirRechazo(muestreoMov)} className="inline-flex items-center gap-1 text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50"><Ban size={14} /> Rechazar flete</button>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={cerrarMuestreo} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                  <button onClick={guardarMuestreo} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">💾 Guardar muestreo{muestreos.length > 1 ? "s" : ""}</button>
+                  <button onClick={guardarMuestreo} className="inline-flex items-center justify-center gap-1 text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700"><Save size={14} /> Guardar muestreo{muestreos.length > 1 ? "s" : ""}</button>
                 </div>
               </div>
             </div>
@@ -1215,7 +1216,7 @@ export default function Modulo9() {
                 <div className="text-sm font-semibold text-gray-900">Inspección de vehículo y producto que llega a la planta</div>
                 <div className="text-xs text-gray-500 mt-0.5">REG-EMP-24 · Folio {inspMov.folio || "—"} · {inspMov.linea || "—"} · {inspMov.chofer || "—"}</div>
               </div>
-              <button onClick={cerrarInspeccion} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrarInspeccion} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
 
             <div className="px-5 py-4 space-y-5">
@@ -1289,12 +1290,12 @@ export default function Modulo9() {
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
               <div className="flex gap-2">
-                <button onClick={() => generarReporteInspeccion(insp)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1">📄 Generar PDF</button>
-                <button onClick={() => abrirRechazo(inspMov)} className="text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50">🚫 Rechazar flete</button>
+                <button onClick={() => generarReporteInspeccion(insp)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1"><FileText size={14} /> Generar PDF</button>
+                <button onClick={() => abrirRechazo(inspMov)} className="inline-flex items-center gap-1 text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50"><Ban size={14} /> Rechazar flete</button>
               </div>
               <div className="flex gap-2">
                 <button onClick={cerrarInspeccion} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={guardarInspeccion} className="text-xs px-4 py-2 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700">💾 Guardar inspección</button>
+                <button onClick={guardarInspeccion} className="inline-flex items-center justify-center gap-1 text-xs px-4 py-2 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700"><Save size={14} /> Guardar inspección</button>
               </div>
             </div>
           </div>
@@ -1306,7 +1307,7 @@ export default function Modulo9() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900">🚫 Rechazar flete — Folio {rechazoMov.folio || "—"}</div>
+              <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Ban size={16} /> Rechazar flete — Folio {rechazoMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5">El flete saldrá de "Por recibir" y pasará al Historial como Rechazo.</div>
             </div>
             <div className="px-5 py-4">
@@ -1351,7 +1352,7 @@ export default function Modulo9() {
                   <input type="time" className={INP} value={vaciarHora} onChange={(e) => setVaciarHora(e.target.value)} />
                 </div>
               </div>
-              {vaciarFecha && vaciarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: este vaciado contará en el día {vaciarFecha}.</div>}
+              {vaciarFecha && vaciarFecha !== hoyISO() && <div className="inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={14} /> Fecha distinta a hoy: este vaciado contará en el día {vaciarFecha}.</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setVaciarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
@@ -1366,7 +1367,7 @@ export default function Modulo9() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900">⚠️ Mermar (no entró a empaque) — {mermarMov.remision || mermarMov.folio || "—"}</div>
+              <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlertTriangle size={16} /> Mermar (no entró a empaque) — {mermarMov.remision || mermarMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
                 <span>Disponible en piso: <b>{fmt(kgEnPisoDe(mermarMov))} kg</b> · se descartan (no se procesan).</span>
                 {kgEnPisoDe(mermarMov) > 0 && (
@@ -1404,7 +1405,7 @@ export default function Modulo9() {
                   <input className={INP} value={mermarComentario} onChange={(e) => setMermarComentario(e.target.value)} placeholder="Detalle de la merma…" />
                 </div>
               )}
-              {mermarFecha && mermarFecha !== hoyISO() && <div className="text-[11px] text-amber-700">⚠️ Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
+              {mermarFecha && mermarFecha !== hoyISO() && <div className="inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={14} /> Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setMermarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
@@ -1419,7 +1420,7 @@ export default function Modulo9() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900">➕ Registrar rezaga</div>
+              <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Plus size={16} /> Registrar rezaga</div>
               <div className="text-xs text-gray-500 mt-0.5">Rezaga suelta (no viene de un manifiesto). Se guarda en Historial Mermado.</div>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -1458,8 +1459,8 @@ export default function Modulo9() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
             <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">📤 Mandar cantidad a SAP — Folio {sapMov.folio || "—"}</div>
-                <button onClick={() => setSapMov(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+                <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Send size={16} /> Mandar cantidad a SAP — Folio {sapMov.folio || "—"}</div>
+                <button onClick={() => setSapMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
               </div>
               <div className="px-5 py-4 space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1468,7 +1469,7 @@ export default function Modulo9() {
                   <div><span className="text-gray-400">Orden de fabricación</span><div className="font-medium text-gray-800">{ord ? `#${ord.docNum ?? ord.absoluteEntry}` : "—"}</div></div>
                   <div><span className="text-gray-400">Completada actual</span><div className="font-medium text-gray-800">{ord ? `${ord.completedQty} / ${ord.plannedQty}` : "—"}</div></div>
                 </div>
-                {ord && ord.totalOrdenes > 1 && <div className="text-[11px] text-amber-600">⚠️ Este rancho tiene {ord.totalOrdenes} órdenes liberadas en SAP; se usará la #{ord.docNum ?? ord.absoluteEntry}.</div>}
+                {ord && ord.totalOrdenes > 1 && <div className="inline-flex items-center gap-1 text-[11px] text-amber-600"><AlertTriangle size={14} /> Este rancho tiene {ord.totalOrdenes} órdenes liberadas en SAP; se usará la #{ord.docNum ?? ord.absoluteEntry}.</div>}
                 <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between"><span className="text-xs text-gray-500">Ejote neto recibido</span><span className="font-semibold text-gray-800">{Math.round(neto)} kg</span></div>
                   <div className="flex items-center justify-between gap-2">
@@ -1478,7 +1479,7 @@ export default function Modulo9() {
                   <div className="flex items-center justify-between border-t border-indigo-100 pt-2"><span className="text-xs font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-lg font-bold text-indigo-700">{cubetas}</span></div>
                   <div className="text-[10px] text-gray-400">{Math.round(neto)} kg ÷ {kgc} kg/cubeta = {cubetas} cubetas → suma a "Cantidad completada".</div>
                 </div>
-                {!ord && <div className="text-[11px] text-red-600">⚠️ Este movimiento no tiene orden de fabricación en SAP (su rancho no está en el catálogo).</div>}
+                {!ord && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este movimiento no tiene orden de fabricación en SAP (su rancho no está en el catálogo).</div>}
                 {sapError && <div className="text-[11px] text-red-600">No se pudo enviar: {sapError}</div>}
               </div>
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">

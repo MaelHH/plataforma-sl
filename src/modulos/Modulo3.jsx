@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar } from "lucide-react";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
@@ -285,28 +286,28 @@ export default function Modulo3() {
         {has ? (
           <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 mb-2 text-xs">
             {t.linea && <div className="truncate font-medium text-gray-800">{t.linea}</div>}
-            {t.chofer && <div className="truncate">🧑 {t.chofer}</div>}
-            {t.placaTracto && <div>🚛 {t.placaTracto}</div>}
-            {t.flete && <div>💵 <span className="font-semibold text-green-700">${t.flete}</span></div>}
+            {t.chofer && <div className="truncate inline-flex items-center gap-1"><User size={14} /> {t.chofer}</div>}
+            {t.placaTracto && <div className="inline-flex items-center gap-1"><Truck size={14} /> {t.placaTracto}</div>}
+            {t.flete && <div className="inline-flex items-center gap-1"><DollarSign size={14} /> <span className="font-semibold text-green-700">${t.flete}</span></div>}
           </div>
         ) : (
           <div className="text-xs text-gray-400 mb-2 italic">Sin datos — edita la ficha</div>
         )}
         <div className="flex gap-1 flex-wrap items-center">
-          <button onClick={() => openModal(t)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">✏️ Editar</button>
+          <button onClick={() => openModal(t)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Pencil size={14} /> Editar</button>
           {(() => {
             const hall = hallazgosInsp(t.inspeccionPrecarga);
             const hecha = !!t.inspeccionPrecarga;
             return (
               <button onClick={() => openInsp(t)} title="Inspección precarga de transporte refrigerado"
-                className={`text-xs px-2 py-1 border rounded-lg bg-white ${hecha ? (hall > 0 ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-cyan-200 hover:bg-cyan-50 text-cyan-600"}`}>
-                🌡️ {hecha ? (hall > 0 ? `Inspección ⚠️${hall}` : "Inspección ✓") : "Inspección"}
+                className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${hecha ? (hall > 0 ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-cyan-200 hover:bg-cyan-50 text-cyan-600"}`}>
+                <Thermometer size={14} /> {hecha ? (hall > 0 ? <span className="inline-flex items-center gap-0.5">Inspección <AlertTriangle size={14} />{hall}</span> : <span className="inline-flex items-center gap-0.5">Inspección <Check size={14} /></span>) : "Inspección"}
               </button>
             );
           })()}
-          <button onClick={() => delTrailer(t.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500">🗑️</button>
+          <button onClick={() => delTrailer(t.id)} className="inline-flex items-center justify-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
           {t.status === "en_ruta" ? (
-            <span className="text-xs px-2 py-1 bg-green-100 border border-green-300 text-green-700 rounded-lg font-semibold">🚛 En ruta</span>
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-green-100 border border-green-300 text-green-700 rounded-lg font-semibold"><Truck size={14} /> En ruta</span>
           ) : (
             <SearchSelect value={t.status} onChange={(v) => setStatus(t.id, v)}
               className={`w-44 text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
@@ -331,11 +332,11 @@ export default function Modulo3() {
           <p className="text-sm text-gray-500 mt-0.5">Mónica · asignación y seguimiento de trailers</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCatChoferes(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
-            👤 Choferes y unidades
+          <button onClick={() => setCatChoferes(true)} className="inline-flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
+            <Users size={14} /> Choferes y unidades
           </button>
-          <button onClick={() => setCatLineas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
-            ⚙️ Catálogo de líneas
+          <button onClick={() => setCatLineas(true)} className="inline-flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
+            <ClipboardList size={14} /> Catálogo de líneas
           </button>
           <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-xs font-bold">MO</div>
           <span className="text-sm font-medium text-gray-700">Mónica</span>
@@ -360,7 +361,7 @@ export default function Modulo3() {
           <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 mb-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
-                <div className="text-sm font-bold text-amber-800">🔔 Kiko actualizó el requerimiento</div>
+                <div className="inline-flex items-center gap-1 text-sm font-bold text-amber-800"><Bell size={16} /> Kiko actualizó el requerimiento</div>
                 <div className="text-xs text-amber-700 mb-2">Ya se actualizó lo que ves abajo · {c.ts}</div>
                 {c.items.length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
@@ -389,13 +390,13 @@ export default function Modulo3() {
       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-5">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="text-sm font-bold text-gray-900">📋 Resumen de la semana — qué conseguir</div>
+            <div className="inline-flex items-center gap-1 text-sm font-bold text-gray-900"><ClipboardList size={16} /> Resumen de la semana — qué conseguir</div>
             <div className="text-xs text-gray-500 mt-0.5">Requerimiento total enviado desde Cálculo de Trailers</div>
             {requerimientoMeta[semana]?.enviadoLocal && (
-              <div className="text-xs text-blue-600 mt-1 font-medium">📥 Recibido de {requerimientoMeta[semana].actor || "Kiko"}: {requerimientoMeta[semana].enviadoLocal}</div>
+              <div className="inline-flex items-center gap-1 text-xs text-blue-600 mt-1 font-medium"><Inbox size={14} /> Recibido de {requerimientoMeta[semana].actor || "Kiko"}: {requerimientoMeta[semana].enviadoLocal}</div>
             )}
             {histReq.length > 0 && (
-              <button onClick={() => setVerHistorial(true)} className="text-xs mt-1 px-2 py-0.5 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-700 font-medium">🕑 Historial de cambios ({histReq.length})</button>
+              <button onClick={() => setVerHistorial(true)} className="inline-flex items-center gap-1 text-xs mt-1 px-2 py-0.5 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-700 font-medium"><Calendar size={14} /> Historial de cambios ({histReq.length})</button>
             )}
           </div>
           <div className="text-right">
@@ -416,8 +417,8 @@ export default function Modulo3() {
                   <span className="text-lg font-bold text-gray-900">{r.total}</span>
                 </div>
                 <div className="flex gap-2 text-xs text-gray-500">
-                  {r.contrato > 0 && <span>📄 {r.contrato} contrato</span>}
-                  {r.abierto > 0 && <span className="text-purple-600">🔓 {r.abierto} abierto</span>}
+                  {r.contrato > 0 && <span className="inline-flex items-center gap-1"><FileText size={14} /> {r.contrato} contrato</span>}
+                  {r.abierto > 0 && <span className="inline-flex items-center gap-1 text-purple-600"><PackageOpen size={14} /> {r.abierto} abierto</span>}
                 </div>
               </div>
             ))}
@@ -453,7 +454,7 @@ export default function Modulo3() {
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
           <span className="text-sm font-semibold text-gray-900">Trailers registrados · {diaFil}</span>
-          <button onClick={addTrailer} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Registrar trailer</button>
+          <button onClick={addTrailer} className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700"><Plus size={14} /> Registrar trailer</button>
         </div>
         {hoy.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-6 italic">Ningún trailer registrado este día</div>
@@ -518,7 +519,7 @@ export default function Modulo3() {
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Ficha del trailer</div>
-              <button onClick={() => setModal(null)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setModal(null)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
               <div>
@@ -542,8 +543,8 @@ export default function Modulo3() {
                     options={[...lineas.map((l) => ({ value: l.id, label: l.linea })), { value: "__nueva__", label: "➕ Nueva línea de transporte" }]} />
                 </div>
                 {lineaNueva && (
-                  <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">
-                    ✏️ Capturando línea nueva — se guardará en el catálogo al guardar la ficha
+                  <div className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2">
+                    <Pencil size={14} /> Capturando línea nueva — se guardará en el catálogo al guardar la ficha
                   </div>
                 )}
                 <div className="grid grid-cols-3 gap-2">
@@ -616,8 +617,8 @@ export default function Modulo3() {
                     </div>
 
                     {(choferNuevo || tractoNuevo || cajaNueva) && (
-                      <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5">
-                        ✏️ Los datos nuevos se guardarán en el catálogo de {form.linea} al guardar la ficha
+                      <div className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5">
+                        <Pencil size={14} /> Los datos nuevos se guardarán en el catálogo de {form.linea} al guardar la ficha
                       </div>
                     )}
                   </div>
@@ -641,14 +642,14 @@ export default function Modulo3() {
                 <div className="text-sm font-semibold text-gray-900">Inspección precarga de transporte refrigerado</div>
                 <div className="text-xs text-gray-500 mt-0.5">REG-EMP-15 · POE-MP-09 · {inspForm.companiaTransporte || "—"} → {inspForm.destino || "—"}</div>
               </div>
-              <button onClick={cerrarInsp} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrarInsp} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
 
             {/* Pestañas */}
             <div className="px-5 pt-3 flex items-center gap-2 border-b border-gray-100">
-              {[["precarga", "🌡️ Precarga refrigerado"], ["alergenos", "⚠️ Alérgenos"]].map(([k, label]) => (
+              {[["precarga", <><Thermometer size={14} /> Precarga refrigerado</>], ["alergenos", <><AlertTriangle size={14} /> Alérgenos</>]].map(([k, label]) => (
                 <button key={k} onClick={() => setInspTab(k)}
-                  className={`text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px ${inspTab === k ? "border-cyan-500 text-cyan-700 bg-cyan-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                  className={`inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px ${inspTab === k ? "border-cyan-500 text-cyan-700 bg-cyan-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                   {label}
                 </button>
               ))}
@@ -736,10 +737,10 @@ export default function Modulo3() {
             </div>
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
-              <button onClick={() => generarPrecargaPDF(inspForm)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📄 Descargar PDF</button>
+              <button onClick={() => generarPrecargaPDF(inspForm)} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700"><FileText size={14} /> Descargar PDF</button>
               <div className="flex gap-2">
                 <button onClick={cerrarInsp} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={guardarInsp} className="text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">💾 Guardar inspección</button>
+                <button onClick={guardarInsp} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700"><Save size={14} /> Guardar inspección</button>
               </div>
             </div>
           </div>
@@ -755,7 +756,7 @@ export default function Modulo3() {
                 <div className="text-sm font-semibold text-gray-900">Catálogo de líneas de transporte</div>
                 <div className="text-xs text-gray-500 mt-0.5">Los choferes y unidades se editan en "Choferes y unidades"</div>
               </div>
-              <button onClick={() => setCatLineas(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatLineas(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               <table className="w-full text-sm">
@@ -774,13 +775,13 @@ export default function Modulo3() {
                       <td className="py-1.5 pr-2"><input value={l.linea} onChange={(e) => updLinea(l.id, "linea", e.target.value)} className={INP_TBL} /></td>
                       <td className="py-1.5 pr-2"><input value={l.contacto} onChange={(e) => updLinea(l.id, "contacto", e.target.value)} className={INP_TBL} /></td>
                       <td className="py-1.5 pr-2"><input value={l.numero} onChange={(e) => updLinea(l.id, "numero", e.target.value)} className={INP_TBL} /></td>
-                      <td className="py-1.5 text-center text-xs text-gray-500">🧑 {(l.choferes || []).length} · 🚛 {(l.tractos || []).length} · 📦 {(l.cajas || []).length}</td>
-                      <td className="py-1.5 text-center"><button onClick={() => delLinea(l.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button></td>
+                      <td className="py-1.5 text-center text-xs text-gray-500"><span className="inline-flex items-center gap-1"><User size={14} /> {(l.choferes || []).length} · <Truck size={14} /> {(l.tractos || []).length} · <Package size={14} /> {(l.cajas || []).length}</span></td>
+                      <td className="py-1.5 text-center"><button onClick={() => delLinea(l.id)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <button onClick={addLinea} className="mt-3 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar línea</button>
+              <button onClick={addLinea} className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar línea</button>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
               <button onClick={() => setCatLineas(false)} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Listo</button>
@@ -798,12 +799,12 @@ export default function Modulo3() {
                 <div className="text-sm font-semibold text-gray-900">Choferes y unidades</div>
                 <div className="text-xs text-gray-500 mt-0.5">Cada registro pertenece a una línea de transporte (cámbiala con el selector)</div>
               </div>
-              <button onClick={() => setCatChoferes(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatChoferes(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-6">
               {/* Choferes */}
               <div>
-                <div className="text-xs font-bold text-gray-700 mb-2">🧑 Choferes</div>
+                <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><User size={16} /> Choferes</div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -826,17 +827,17 @@ export default function Modulo3() {
                         <td className="py-1.5 pr-2"><input value={c.nombre} onChange={(e) => updSub("choferes", c.lineaId, c.id, "nombre", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={c.telefono} onChange={(e) => updSub("choferes", c.lineaId, c.id, "telefono", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={c.licencia} onChange={(e) => updSub("choferes", c.lineaId, c.id, "licencia", e.target.value)} className={INP_TBL} /></td>
-                        <td className="py-1.5 text-center"><button onClick={() => delSub("choferes", c.lineaId, c.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button></td>
+                        <td className="py-1.5 text-center"><button onClick={() => delSub("choferes", c.lineaId, c.id)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <button onClick={() => addSub("choferes")} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar chofer</button>
+                <button onClick={() => addSub("choferes")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar chofer</button>
               </div>
 
               {/* Tractos: marca/modelo + placa */}
               <div>
-                <div className="text-xs font-bold text-gray-700 mb-2">🚛 Tractos</div>
+                <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><Truck size={16} /> Tractos</div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -857,17 +858,17 @@ export default function Modulo3() {
                         </td>
                         <td className="py-1.5 pr-2"><input value={t.marcaModelo || ""} onChange={(e) => updSub("tractos", t.lineaId, t.id, "marcaModelo", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={t.placa} onChange={(e) => updSub("tractos", t.lineaId, t.id, "placa", e.target.value)} className={INP_TBL} /></td>
-                        <td className="py-1.5 text-center"><button onClick={() => delSub("tractos", t.lineaId, t.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button></td>
+                        <td className="py-1.5 text-center"><button onClick={() => delSub("tractos", t.lineaId, t.id)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <button onClick={() => addSub("tractos")} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar tracto</button>
+                <button onClick={() => addSub("tractos")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar tracto</button>
               </div>
 
               {/* Cajas: económico + placa */}
               <div>
-                <div className="text-xs font-bold text-gray-700 mb-2">📦 Cajas</div>
+                <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><Package size={16} /> Cajas</div>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -888,12 +889,12 @@ export default function Modulo3() {
                         </td>
                         <td className="py-1.5 pr-2"><input value={c.economico} onChange={(e) => updSub("cajas", c.lineaId, c.id, "economico", e.target.value)} className={INP_TBL} /></td>
                         <td className="py-1.5 pr-2"><input value={c.placa} onChange={(e) => updSub("cajas", c.lineaId, c.id, "placa", e.target.value)} className={INP_TBL} /></td>
-                        <td className="py-1.5 text-center"><button onClick={() => delSub("cajas", c.lineaId, c.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button></td>
+                        <td className="py-1.5 text-center"><button onClick={() => delSub("cajas", c.lineaId, c.id)} className="inline-flex items-center justify-center text-gray-300 hover:text-red-500"><X size={14} /></button></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <button onClick={() => addSub("cajas")} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar caja</button>
+                <button onClick={() => addSub("cajas")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar caja</button>
               </div>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
@@ -909,10 +910,10 @@ export default function Modulo3() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
               <div>
-                <div className="text-sm font-semibold text-gray-900">🕑 Historial de cambios del requerimiento</div>
+                <div className="inline-flex items-center gap-1 text-sm font-semibold text-gray-900"><Calendar size={16} /> Historial de cambios del requerimiento</div>
                 <div className="text-xs text-gray-500 mt-0.5">Semana {etiquetaSemana(semana)} · cada envío de Kiko queda guardado (auditoría)</div>
               </div>
-              <button onClick={() => setVerHistorial(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setVerHistorial(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-3">
               {histReq.length === 0 ? (

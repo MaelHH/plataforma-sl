@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Calculator, Check, Send } from "lucide-react";
 import { useDatos, ORIGEN, TOTAL, calcularDias, etiquetaSemana, moverSemana, ahora } from "../store/datos";
 
 const PT = TOTAL;
@@ -35,7 +36,7 @@ function TablaCalculadora() {
   return (
     <div className="bg-white border border-blue-200 rounded-xl overflow-x-auto mb-6">
       <div className="px-3 py-2 bg-blue-50 border-b border-blue-100">
-        <span className="text-blue-700 font-semibold text-xs">🧮 Calculadora de campo</span>
+        <span className="inline-flex items-center gap-1 text-blue-700 font-semibold text-xs"><Calculator size={14} /> Calculadora de campo</span>
         <span className="text-blue-500 text-xs ml-2">Ejote: Bins×250÷6÷Rel · Bell Pepper: Taras÷Rel</span>
       </div>
       <table className="w-full min-w-[560px]">
@@ -306,8 +307,8 @@ export default function Modulo2() {
           <div className="text-xs text-gray-500 mt-0.5">Junta contratos + mercado abierto de esta semana y los manda al Módulo 3</div>
         </div>
         <button onClick={generarRequerimiento}
-          className={`text-sm font-semibold px-5 py-2 rounded-lg ${generado ? "bg-green-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
-          {generado ? "✓ Enviado a Mónica" : "📤 Generar requerimiento"}
+          className={`inline-flex items-center gap-1 text-sm font-semibold px-5 py-2 rounded-lg ${generado ? "bg-green-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}>
+          {generado ? <><Check size={14} /> Enviado a Mónica</> : <><Send size={14} /> Generar requerimiento</>}
         </button>
       </div>
     </div>

@@ -5,11 +5,12 @@ import { generarExpedienteCampo } from "./reportes/expedienteCampo";
 import { generarExpedienteExportacion } from "./reportes/expedienteExportacion";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
+import { Check, Circle, FileText, Sprout, Container, FlaskConical, Truck, Thermometer, AlertTriangle } from "lucide-react";
 
 // Chip de documento disponible / faltante
 const Chip = ({ ok, children }) => (
-  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${ok ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-400 border-gray-200"}`}>
-    {ok ? "✓ " : "○ "}{children}
+  <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border ${ok ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-400 border-gray-200"}`}>
+    {ok ? <Check size={12} /> : <Circle size={12} />}{children}
   </span>
 );
 
@@ -50,16 +51,16 @@ export default function Modulo11() {
           <h1 className="text-base font-semibold text-gray-900">Documentos / Impresiones</h1>
           <p className="text-sm text-gray-500 mt-0.5">Descarga e impresión de expedientes en PDF</p>
         </div>
-        <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center text-xs font-bold">📄</div>
+        <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center"><FileText size={16} /></div>
       </div>
 
       {/* Pestañas */}
       <div className="flex items-center gap-2 border-b border-gray-200 mb-4">
-        {[["campo", "🌾 Campo", "movimientos de campo + recepción en empaque"], ["exportacion", "🚢 Exportación", "flete completo: transporte, carga, inspecciones y monitoreo"]].map(([k, label, sub]) => (
+        {[["campo", <Sprout size={14} />, "Campo", "movimientos de campo + recepción en empaque"], ["exportacion", <Container size={14} />, "Exportación", "flete completo: transporte, carga, inspecciones y monitoreo"]].map(([k, icon, label, sub]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-blue-500 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            className={`inline-flex items-center gap-1 px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-blue-500 text-blue-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
             title={sub}>
-            {label}
+            {icon} {label}
           </button>
         ))}
       </div>
@@ -111,9 +112,9 @@ export default function Modulo11() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1 justify-center">
-                            <Btn color="emerald" onClick={() => generarExpedienteCampo(m)}>📄 Expediente</Btn>
-                            <Btn color="indigo" disabled={!tieneCal} onClick={() => generarReporteCalidad(m, m.muestreos)}>🔬 Calidad</Btn>
-                            <Btn color="cyan" disabled={!tieneInsp} onClick={() => generarReporteInspeccion(m.inspeccion)}>🚛 REG-EMP-24</Btn>
+                            <Btn color="emerald" onClick={() => generarExpedienteCampo(m)}><span className="inline-flex items-center gap-1"><FileText size={14} /> Expediente</span></Btn>
+                            <Btn color="indigo" disabled={!tieneCal} onClick={() => generarReporteCalidad(m, m.muestreos)}><span className="inline-flex items-center gap-1"><FlaskConical size={14} /> Calidad</span></Btn>
+                            <Btn color="cyan" disabled={!tieneInsp} onClick={() => generarReporteInspeccion(m.inspeccion)}><span className="inline-flex items-center gap-1"><Truck size={14} /> REG-EMP-24</span></Btn>
                           </div>
                         </td>
                       </tr>
@@ -156,15 +157,15 @@ export default function Modulo11() {
                         <td className="px-3 py-2 text-gray-700"><div className="font-medium">{tr.linea || "—"}</div><div className="text-gray-400">{tr.chofer || "—"}</div></td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1">
-                            <Chip ok={!!ip}>Precarga{ip && hall > 0 ? ` ⚠️${hall}` : ""}</Chip>
+                            <Chip ok={!!ip}>Precarga{ip && hall > 0 ? <span className="inline-flex items-center gap-0.5 ml-0.5"><AlertTriangle size={12} />{hall}</span> : ""}</Chip>
                             <Chip ok={!!carga}>Carga</Chip>
                             <Chip ok={mon}>Monitoreo</Chip>
                           </div>
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1 justify-center">
-                            <Btn color="blue" onClick={() => generarExpedienteExportacion(tr, carga, monitoreo[tr.id])}>📄 Expediente</Btn>
-                            <Btn color="cyan" disabled={!ip} onClick={() => generarPrecargaPDF(ip)}>🌡️ REG-EMP-15</Btn>
+                            <Btn color="blue" onClick={() => generarExpedienteExportacion(tr, carga, monitoreo[tr.id])}><span className="inline-flex items-center gap-1"><FileText size={14} /> Expediente</span></Btn>
+                            <Btn color="cyan" disabled={!ip} onClick={() => generarPrecargaPDF(ip)}><span className="inline-flex items-center gap-1"><Thermometer size={14} /> REG-EMP-15</span></Btn>
                           </div>
                         </td>
                       </tr>

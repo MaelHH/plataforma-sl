@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Camera, Truck, Check, CheckCircle2, ArrowUp, Send } from "lucide-react";
 import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
@@ -88,7 +89,7 @@ export default function Modulo4() {
           <div key={idx} onClick={() => setActivePhoto({ type: "carga", index: idx })}
             className={`h-11 border-2 rounded-md flex items-center justify-center cursor-pointer relative ${has ? "border-green-400 bg-green-50" : isFront ? "border-blue-300 bg-blue-50 hover:bg-blue-100" : "border-dashed border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50"}`}>
             {isFront && !has && <span className="absolute text-xs font-bold text-blue-200">Frente</span>}
-            {has ? <span className="text-sm">📷</span> : !isFront && <span className="text-gray-300 text-base">+</span>}
+            {has ? <Camera size={14} className="text-green-600" /> : !isFront && <span className="text-gray-300 text-base">+</span>}
           </div>
         );
       });
@@ -124,7 +125,7 @@ export default function Modulo4() {
         const isFront = parrNum <= 2;
         return (
           <div key={idx} className={`flex items-center gap-1.5 py-1 border-b border-gray-100 ${blocked ? "opacity-30" : ""}`}>
-            <div className={`w-7 shrink-0 text-center text-xs font-bold ${isFront ? "text-blue-500" : "text-gray-500"}`}>{parrNum}{isFront ? "🚛" : ""}</div>
+            <div className={`w-7 shrink-0 inline-flex items-center justify-center gap-0.5 text-center text-xs font-bold ${isFront ? "text-blue-500" : "text-gray-500"}`}>{parrNum}{isFront ? <Truck size={14} /> : ""}</div>
             <div className="flex-1 min-w-0">
               <SearchSelect value={p.prod} disabled={blocked}
                 onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
@@ -182,8 +183,8 @@ export default function Modulo4() {
               const maxed = !sel && !consolidado && empresasSel.length >= 1;
               return (
                 <button key={e.id} onClick={() => !maxed && toggleEmpresa(e.id)}
-                  className={`text-sm px-4 py-2 rounded-lg border-2 font-semibold ${maxed ? "opacity-25 cursor-not-allowed border-gray-200 bg-white text-gray-400" : sel ? e.border + " " + e.color : "border-gray-200 bg-white text-gray-600 hover:border-gray-400"}`}>
-                  {sel ? "✓ " : ""}{e.label}
+                  className={`text-sm px-4 py-2 rounded-lg border-2 font-semibold inline-flex items-center gap-1 ${maxed ? "opacity-25 cursor-not-allowed border-gray-200 bg-white text-gray-400" : sel ? e.border + " " + e.color : "border-gray-200 bg-white text-gray-600 hover:border-gray-400"}`}>
+                  {sel ? <Check size={14} /> : null}{e.label}
                 </button>
               );
             })}
@@ -252,7 +253,7 @@ export default function Modulo4() {
                       <td className="px-3 py-2 text-right">{c.cargaFotos ?? 0}/30</td>
                       <td className="px-3 py-2 text-right">{c.frontalFotos ?? 0}</td>
                       <td className="px-3 py-2 text-center">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${c.sapStatus === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>{c.sapStatus === "cargado" ? "✓ Cargado" : "⏳ Pendiente"}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border inline-flex items-center gap-1 ${c.sapStatus === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200"}`}>{c.sapStatus === "cargado" ? <><Check size={14} /> Cargado</> : "Pendiente"}</span>
                       </td>
                     </tr>
                   ))}
@@ -268,7 +269,7 @@ export default function Modulo4() {
         <div className="text-xs font-semibold text-gray-500 uppercase mb-3">
           Seleccionar trailer en instalaciones
           {disponibles.length === 0 && !enviado && <span className="ml-2 font-normal text-orange-600 normal-case">— Mónica aún no pone ninguno</span>}
-          {enviado && <span className="ml-2 font-normal text-green-600 normal-case">— carga enviada ✓</span>}
+          {enviado && <span className="ml-2 font-normal text-green-600 normal-case inline-flex items-center gap-1">— carga enviada <Check size={14} /></span>}
         </div>
         {disponibles.length === 0 ? (
           <div className="text-xs text-gray-400 italic text-center py-3">Cuando Mónica marque "En instalaciones" aparecerá aquí</div>
@@ -280,7 +281,7 @@ export default function Modulo4() {
                 <div key={t.id} onClick={() => selectTrailer(t)} className={`border-2 rounded-xl p-3 cursor-pointer ${sel ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300"}`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${DC[t.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{t.dest || "Sin destino"}</span>
-                    {sel && <span className="text-xs text-blue-600 font-bold">✓ Seleccionado</span>}
+                    {sel && <span className="text-xs text-blue-600 font-bold inline-flex items-center gap-1"><Check size={14} /> Seleccionado</span>}
                   </div>
                   <div className="text-xs text-gray-700 font-medium">{t.linea || "Sin línea"}</div>
                   <div className="text-xs text-gray-500">{t.chofer || "Sin chofer"}</div>
@@ -293,14 +294,14 @@ export default function Modulo4() {
       </div>
 
       {!trailerSel && disponibles.length > 0 && !enviado && (
-        <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-400">
-          👆 Selecciona un trailer para cargar evidencias y distribución
+        <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-8 text-center text-sm text-gray-400 inline-flex items-center justify-center gap-1 w-full">
+          <ArrowUp size={14} /> Selecciona un trailer para cargar evidencias y distribución
         </div>
       )}
 
       {enviado && (
         <div className="bg-green-50 border border-green-300 rounded-xl p-8 text-center">
-          <div className="text-4xl mb-3">✅</div>
+          <div className="flex justify-center mb-3"><CheckCircle2 size={32} className="text-green-600" /></div>
           <div className="text-sm font-semibold text-green-800 mb-1">Información enviada a Embarques</div>
           <div className="text-xs text-green-600 mb-4">Daniel y Cristina ya pueden verla y registrarla en SAP</div>
           <button onClick={resetTodo} className="text-xs bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700">Preparar siguiente trailer</button>
@@ -343,9 +344,9 @@ export default function Modulo4() {
               {FRONTAL_FIELDS.map((f) => (
                 <div key={f.id} onClick={() => setActivePhoto({ type: "frontal", index: f.id })}
                   className={`border-2 rounded-xl p-3 cursor-pointer flex flex-col items-center justify-center gap-1 ${frontalPhotos[f.id] ? "border-green-400 bg-green-50" : "border-dashed border-gray-300 bg-gray-50 hover:border-purple-400"}`} style={{ minHeight: "72px" }}>
-                  <span className="text-2xl">{frontalPhotos[f.id] ? "📷" : f.icon}</span>
+                  <span className="text-2xl">{frontalPhotos[f.id] ? <Camera size={20} className="text-green-600" /> : f.icon}</span>
                   <span className="text-xs font-medium text-center text-gray-700">{f.label}</span>
-                  {frontalPhotos[f.id] ? <span className="text-xs text-green-600 font-semibold">✓ Con foto</span> : <span className="text-xs text-gray-400">Toca para subir</span>}
+                  {frontalPhotos[f.id] ? <span className="text-xs text-green-600 font-semibold inline-flex items-center gap-1"><Check size={14} /> Con foto</span> : <span className="text-xs text-gray-400">Toca para subir</span>}
                 </div>
               ))}
             </div>
@@ -356,7 +357,7 @@ export default function Modulo4() {
           {consolidadoSection()}
 
           <div className="flex items-center justify-end mt-4">
-            <button onClick={enviar} className="bg-green-600 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-700">↗ Enviar a Embarques</button>
+            <button onClick={enviar} className="bg-green-600 text-white text-sm font-semibold px-5 py-2 rounded-lg hover:bg-green-700 inline-flex items-center gap-1"><Send size={14} /> Enviar a Embarques</button>
           </div>
         </div>
       )}
@@ -369,7 +370,7 @@ export default function Modulo4() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
             <div className="bg-gray-900 h-44 flex flex-col items-center justify-center gap-2">
-              <span className="text-4xl">📷</span>
+              <Camera size={32} className="text-white" />
               <span className="text-gray-400 text-sm">
                 {activePhoto.type === "carga" && `Carga · Parrilla ${activePhoto.index + 1}`}
                 {activePhoto.type === "frontal" && FRONTAL_FIELDS.find((f) => f.id === activePhoto.index)?.label}
@@ -378,7 +379,7 @@ export default function Modulo4() {
             </div>
             <div className="px-5 py-4 flex gap-2 justify-end">
               <button onClick={() => setActivePhoto(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={confirmPhoto} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">✓ Confirmar foto</button>
+              <button onClick={confirmPhoto} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold inline-flex items-center gap-1"><Check size={14} /> Confirmar foto</button>
             </div>
           </div>
         </div>

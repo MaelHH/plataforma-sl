@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDatos, CATS_QC, CALIDAD_ESTADOS, ahora } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
+import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check } from "lucide-react";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -272,9 +273,9 @@ export default function Modulo12() {
           <p className="text-sm text-gray-500 mt-0.5">Inspección de calidad de los embarques antes de liberar · fotos por defecto, según el producto</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setCatDef(true)} className={BTN_CAT}>🔬 Defectos</button>
-          <button onClick={() => setCatInsp(true)} className={BTN_CAT}>👤 Inspectores</button>
-          <button onClick={() => setCatLug(true)} className={BTN_CAT}>📍 Lugares</button>
+          <button onClick={() => setCatDef(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><FlaskConical size={14} /> Defectos</button>
+          <button onClick={() => setCatInsp(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><User size={14} /> Inspectores</button>
+          <button onClick={() => setCatLug(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><MapPin size={14} /> Lugares</button>
           <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold">QC</div>
         </div>
       </div>
@@ -287,7 +288,7 @@ export default function Modulo12() {
 
       {cargasEmbarques.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-          <div className="text-2xl mb-3">🔬</div>
+          <div className="flex justify-center mb-3"><FlaskConical size={28} className="text-gray-400" /></div>
           <div className="text-sm font-medium text-gray-700 mb-1">Sin embarques para inspeccionar</div>
           <div className="text-xs text-gray-400">Aparecerán aquí las cargas que salieron de Embarques</div>
         </div>
@@ -311,7 +312,7 @@ export default function Modulo12() {
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-200">{carga.trailer?.dest || "—"}</span>
                   <div className="text-xs text-gray-500"><span className="font-medium">{carga.trailer?.chofer || "Sin chofer"}</span>{carga.trailer?.placaTracto && <span className="ml-1 font-mono text-gray-400">· {carga.trailer.placaTracto}</span>}</div>
                   {carga.calidad?.producto && (
-                    <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-medium">🌱 {carga.calidad.producto}</span>
+                    <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-medium"><Sprout size={14} /> {carga.calidad.producto}</span>
                   )}
                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border flex items-center gap-1 ${cfg.color}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`}></span>{cfg.label}
@@ -320,8 +321,8 @@ export default function Modulo12() {
                     <span className="text-xs text-gray-400">{carga.calidad.inspector || ""} · {carga.calidad.resueltoTs}</span>
                   )}
                   <div className="ml-auto">
-                    <button onClick={() => abrir(carga)} className="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700">
-                      🔬 {est === "pendiente" ? "Inspeccionar" : "Ver / Editar"}
+                    <button onClick={() => abrir(carga)} className="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                      <FlaskConical size={14} /> {est === "pendiente" ? "Inspeccionar" : "Ver / Editar"}
                     </button>
                   </div>
                 </div>
@@ -342,7 +343,7 @@ export default function Modulo12() {
                 <div className="text-sm font-semibold text-gray-900">Inspección de calidad del embarque</div>
                 <div className="text-xs text-gray-500 mt-0.5">{cargaSel.fecha} · {cargaSel.trailer?.dest || "—"} · {cargaSel.trailer?.chofer || "—"}</div>
               </div>
-              <button onClick={cerrar} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={cerrar} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
 
             <div className="px-5 py-4 space-y-4">
@@ -413,7 +414,7 @@ export default function Modulo12() {
               {!insp.producto ? (
                 <div className="text-center text-xs text-gray-400 italic py-8 border border-dashed border-gray-200 rounded-xl">Selecciona un producto para ver sus defectos.</div>
               ) : defectosProducto.length === 0 ? (
-                <div className="text-center text-xs text-gray-400 italic py-8 border border-dashed border-gray-200 rounded-xl">Este producto no tiene defectos. Agrégalos en el catálogo 🔬 Defectos.</div>
+                <div className="text-center text-xs text-gray-400 italic py-8 border border-dashed border-gray-200 rounded-xl inline-flex items-center justify-center gap-1 w-full">Este producto no tiene defectos. Agrégalos en el catálogo <FlaskConical size={14} className="inline" /> Defectos.</div>
               ) : (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -438,8 +439,8 @@ export default function Modulo12() {
                                     <span className={`text-xs truncate flex-1 min-w-0 ${tienePeso ? "font-semibold text-gray-800" : "text-gray-600"}`}>{d.label}</span>
                                     <input type="number" step="0.01" className="w-20 shrink-0 text-right text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white" value={reg.peso || ""} onChange={(e) => updDefecto(d.id, "peso", e.target.value)} placeholder="g" title="Peso del defecto (g)" />
                                     <span className="w-12 shrink-0 text-right text-[10px] text-gray-400">{pctDe(d).toFixed(1)}%</span>
-                                    <label className="cursor-pointer text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap shrink-0" title="Agregar fotos">
-                                      📷{reg.fotos?.length ? ` ${reg.fotos.length}` : ""}
+                                    <label className="cursor-pointer inline-flex items-center gap-1 text-xs px-2 py-1.5 border border-indigo-200 rounded-md text-indigo-600 hover:bg-indigo-50 whitespace-nowrap shrink-0" title="Agregar fotos">
+                                      <Camera size={14} />{reg.fotos?.length ? ` ${reg.fotos.length}` : ""}
                                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => subirFotos(d.id, e.target.files)} />
                                     </label>
                                   </div>
@@ -448,7 +449,7 @@ export default function Modulo12() {
                                       {reg.fotos.map((src, idx) => (
                                         <div key={idx} className="relative">
                                           <a href={src} target="_blank" rel="noreferrer"><img src={src} alt="" className="w-14 h-14 object-cover rounded border border-gray-200" /></a>
-                                          <button onClick={() => quitarFoto(d.id, idx)} className="absolute -top-1.5 -right-1.5 bg-white border border-gray-200 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500 text-[10px]">✕</button>
+                                          <button onClick={() => quitarFoto(d.id, idx)} className="absolute -top-1.5 -right-1.5 bg-white border border-gray-200 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:text-red-500"><X size={10} /></button>
                                         </div>
                                       ))}
                                     </div>
@@ -478,13 +479,13 @@ export default function Modulo12() {
 
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 flex-wrap justify-between items-center sticky bottom-0 bg-white">
               <div className="flex gap-2 flex-wrap">
-                <button onClick={generarReporteQC} className="text-xs px-3 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700">📊 QC Report</button>
-                <button onClick={mandarCorreo} className="text-xs px-3 py-2 border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-50">📧 Mandar Correo</button>
-                <button onClick={mandarWapp} className="text-xs px-3 py-2 border border-green-300 text-green-700 rounded-lg font-semibold hover:bg-green-50">💬 Mandar WhatsApp</button>
+                <button onClick={generarReporteQC} className="inline-flex items-center gap-1 text-xs px-3 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700"><BarChart3 size={14} /> QC Report</button>
+                <button onClick={mandarCorreo} className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-50"><Send size={14} /> Mandar Correo</button>
+                <button onClick={mandarWapp} className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-green-300 text-green-700 rounded-lg font-semibold hover:bg-green-50"><Phone size={14} /> Mandar WhatsApp</button>
               </div>
               <div className="flex gap-2">
-                <button onClick={guardar} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">💾 Guardar (sin decidir)</button>
-                <button onClick={() => resolver("aprobado")} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">✓ Inspeccionar</button>
+                <button onClick={guardar} className="inline-flex items-center gap-1 text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"><Save size={14} /> Guardar (sin decidir)</button>
+                <button onClick={() => resolver("aprobado")} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"><Check size={14} /> Inspeccionar</button>
               </div>
             </div>
           </div>
@@ -497,7 +498,7 @@ export default function Modulo12() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
               <div className="text-sm font-semibold text-gray-900">Catálogo de defectos por producto</div>
-              <button onClick={() => setCatDef(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatDef(false)} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
               {/* Selección / alta de producto */}
@@ -526,7 +527,7 @@ export default function Modulo12() {
                         <select value={d.cat} onChange={(e) => updDefCat(prodEditar, d.id, e.target.value)} className="text-xs px-2 py-1.5 border border-gray-200 rounded-md bg-white">
                           {Object.entries(CATS_QC).map(([k, cfg]) => <option key={k} value={k}>{cfg.label}</option>)}
                         </select>
-                        <button onClick={() => delDef(prodEditar, d.id)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                        <button onClick={() => delDef(prodEditar, d.id)} className="inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                       </div>
                     ))}
                   </div>
@@ -549,13 +550,13 @@ export default function Modulo12() {
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Inspectores de calidad</div>
-              <button onClick={() => setCatInsp(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatInsp(false)} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               {inspectoresCalidad.map((x, i) => (
                 <div key={i} className="flex items-center gap-2 mb-2">
                   <input value={x} onChange={(e) => updInspector(i, e.target.value)} className={INP} />
-                  <button onClick={() => delInspector(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <button onClick={() => delInspector(i)} className="inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                 </div>
               ))}
               <button onClick={addInspector} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar inspector</button>
@@ -573,13 +574,13 @@ export default function Modulo12() {
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900">Lugares de inspección</div>
-              <button onClick={() => setCatLug(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+              <button onClick={() => setCatLug(false)} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
               {lugaresCalidad.map((x, i) => (
                 <div key={i} className="flex items-center gap-2 mb-2">
                   <input value={x} onChange={(e) => updLugar(i, e.target.value)} className={INP} />
-                  <button onClick={() => delLugar(i)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
+                  <button onClick={() => delLugar(i)} className="inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></button>
                 </div>
               ))}
               <button onClick={addLugar} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar lugar</button>

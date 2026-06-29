@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ClipboardList, FileText, Check, RefreshCw } from "lucide-react";
 import { useDatos, CAT_VACIO, EMPRESAS, DC } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
 
@@ -60,7 +61,7 @@ export default function Modulo5() {
 
       {cargasEmbarques.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-          <div className="text-2xl mb-3">📋</div>
+          <div className="flex justify-center mb-3"><ClipboardList size={24} className="text-gray-400" /></div>
           <div className="text-sm font-medium text-gray-700 mb-1">Sin cargas recibidas</div>
           <div className="text-xs text-gray-400">Francisco debe enviar evidencias desde el Módulo 4</div>
         </div>
@@ -87,8 +88,8 @@ export default function Modulo5() {
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[carga.trailer.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{carga.trailer.dest}</span>
                   <div className="text-xs text-gray-500"><span className="font-medium">{carga.trailer.chofer || "Sin chofer"}</span>{carga.trailer.placaTracto && <span className="ml-1 font-mono text-gray-400">· {carga.trailer.placaTracto}</span>}</div>
                   {/* Indicador de manifiestos */}
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${completos ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                    📄 {completos ? "Manifiestos ✓" : "Falta manifiesto"}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border inline-flex items-center gap-1 ${completos ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                    <FileText size={14} /> {completos ? <span className="inline-flex items-center gap-1">Manifiestos <Check size={14} /></span> : "Falta manifiesto"}
                   </span>
                   {carga.consolidado ? (
                     <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">{carga.empresasSel.length} empresas</span>
@@ -96,10 +97,10 @@ export default function Modulo5() {
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${empBadge[carga.empresasSel?.[0]] || "bg-gray-100 text-gray-500 border-gray-200"}`}>{EMPRESAS.find((e) => e.id === carga.empresasSel?.[0])?.label || "Sin empresa"}</span>
                   )}
                   <div className="ml-auto flex items-center gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); toggleSap(carga.id); }} className={`text-xs px-3 py-1 rounded-lg border font-medium ${carga.sapStatus === "cargado" ? "bg-green-50 border-green-300 text-green-700" : "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"}`}>
-                      {carga.sapStatus === "cargado" ? "✓ Cargado en SAP" : "⏳ Pendiente SAP"}
+                    <button onClick={(e) => { e.stopPropagation(); toggleSap(carga.id); }} className={`text-xs px-3 py-1 rounded-lg border font-medium inline-flex items-center gap-1 ${carga.sapStatus === "cargado" ? "bg-green-50 border-green-300 text-green-700" : "bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"}`}>
+                      {carga.sapStatus === "cargado" ? <><Check size={14} /> Cargado en SAP</> : "Pendiente SAP"}
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); devolver(carga); }} className="text-xs px-3 py-1 rounded-lg border font-medium bg-red-50 border-red-200 text-red-600 hover:bg-red-100">↩ Devolver</button>
+                    <button onClick={(e) => { e.stopPropagation(); devolver(carga); }} className="text-xs px-3 py-1 rounded-lg border font-medium bg-red-50 border-red-200 text-red-600 hover:bg-red-100 inline-flex items-center gap-1"><RefreshCw size={14} /> Devolver</button>
                     <span className="text-gray-400 text-sm">{isOpen ? "▲" : "▼"}</span>
                   </div>
                 </div>
@@ -117,7 +118,7 @@ export default function Modulo5() {
 
                     {/* Manifiestos por empresa */}
                     <div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">📄 Manifiesto por empresa</div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2 inline-flex items-center gap-1"><FileText size={16} /> Manifiesto por empresa</div>
                       <div className="space-y-2">
                         {empresasDe(carga).map((eid) => {
                           const emp = EMPRESAS.find((e) => e.id === eid);

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle } from "lucide-react";
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 
 // DATOS DEMO — BORRAR AL CONECTAR BACKEND
@@ -203,7 +204,7 @@ export default function Dashboard() {
           <div className="text-xs text-gray-400 mt-1">esta semana</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-xs text-gray-500 mb-1">En ruta 🚛</div>
+          <div className="text-xs text-gray-500 mb-1 inline-flex items-center gap-1">En ruta <Truck size={14} /></div>
           <div className="text-3xl font-bold text-green-600">{enRuta.length}</div>
           <div className="text-xs text-gray-400 mt-1">{entregados.length} entregados</div>
         </div>
@@ -242,9 +243,9 @@ export default function Dashboard() {
 
         {/* Alertas */}
         <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-sm font-semibold text-gray-900 mb-3">🔔 Alertas y pendientes</div>
+          <div className="text-sm font-semibold text-gray-900 mb-3 inline-flex items-center gap-1"><Bell size={16} /> Alertas y pendientes</div>
           {alertas.length === 0 ? (
-            <div className="text-xs text-gray-400 italic text-center py-6">Todo en orden ✓</div>
+            <div className="text-xs text-gray-400 italic text-center py-6 inline-flex items-center justify-center gap-1 w-full">Todo en orden <Check size={14} /></div>
           ) : (
             <div className="space-y-2">
               {alertas.map((a, i) => (
@@ -257,7 +258,7 @@ export default function Dashboard() {
 
       {/* Viajes en ruta */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
-        <div className="text-sm font-semibold text-gray-900 mb-3">🚛 Viajes activos en ruta</div>
+        <div className="text-sm font-semibold text-gray-900 mb-3 inline-flex items-center gap-1"><Truck size={16} /> Viajes activos en ruta</div>
         {enRuta.length === 0 ? (
           <div className="text-xs text-gray-400 italic text-center py-6">Ningún trailer en ruta ahora</div>
         ) : (
@@ -279,11 +280,11 @@ export default function Dashboard() {
       {/* Pendiente de facturar en SAP */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-semibold text-gray-900">🧾 Pendiente de registrar en SAP</div>
+          <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><Receipt size={16} /> Pendiente de registrar en SAP</div>
           {totalPendienteSap > 0 && <span className="text-sm font-bold text-orange-600">${totalPendienteSap.toLocaleString()}</span>}
         </div>
         {cargasPendientesSap.length === 0 ? (
-          <div className="text-xs text-gray-400 italic text-center py-6">Todo registrado en SAP ✓</div>
+          <div className="text-xs text-gray-400 italic text-center py-6 inline-flex items-center justify-center gap-1 w-full">Todo registrado en SAP <Check size={14} /></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {cargasPendientesSap.map((c) => (
@@ -304,7 +305,7 @@ export default function Dashboard() {
 
       {/* ─── ANÁLISIS DE COSTOS ─── */}
       <div className="border-t border-gray-200 pt-5 mt-2">
-        <div className="text-sm font-bold text-gray-900 mb-3">💲 Análisis de Costos · costo por libra</div>
+        <div className="text-sm font-bold text-gray-900 mb-3 inline-flex items-center gap-1"><DollarSign size={16} /> Análisis de Costos · costo por libra</div>
 
         {viajesValidos.length === 0 ? (
           <div className="bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">
@@ -342,9 +343,9 @@ export default function Dashboard() {
 
             {/* Leyenda */}
             <div className="flex gap-4 mb-2 text-xs text-gray-500">
-              <span>🟢 Bajo el promedio</span>
-              <span>🟡 Hasta +15%</span>
-              <span>🔴 +15% o más</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Bajo el promedio</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Hasta +15%</span>
+              <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> +15% o más</span>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -393,7 +394,7 @@ export default function Dashboard() {
         {/* ─── TENDENCIA DE COSTO (DATOS DEMO — BORRAR AL CONECTAR BACKEND) ─── */}
         <div className="mt-5">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-bold text-gray-900">📈 Tendencia de costo por libra</div>
+            <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1"><TrendingUp size={16} /> Tendencia de costo por libra</div>
             <div className="flex gap-2">
               {[["semanal", "Semanal"], ["mensual", "Mensual"], ["temporada", "Temporada"]].map(([id, lbl]) => (
                 <button key={id} onClick={() => setVistaTendencia(id)}
@@ -431,7 +432,7 @@ export default function Dashboard() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="text-xs text-amber-600 mt-2 italic">⚠️ Datos de ejemplo — se reemplazan con el histórico real al conectar la base de datos.</div>
+          <div className="text-xs text-amber-600 mt-2 italic inline-flex items-center gap-1"><AlertTriangle size={14} /> Datos de ejemplo — se reemplazan con el histórico real al conectar la base de datos.</div>
         </div>
       </div>
     </div>

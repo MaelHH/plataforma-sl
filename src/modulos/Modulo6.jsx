@@ -1,5 +1,6 @@
 import { useState, Fragment } from "react";
 import * as XLSX from "xlsx";
+import { ClipboardList, Filter, Boxes, ListChecks, FileSpreadsheet, Check, Circle } from "lucide-react";
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import AvisoSAP from "../components/AvisoSAP";
@@ -121,7 +122,7 @@ export default function Modulo6() {
 
       {cargasEmbarques.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-          <div className="text-2xl mb-3">📋</div>
+          <div className="flex justify-center mb-3"><ClipboardList size={24} className="text-gray-400" /></div>
           <div className="text-sm font-medium text-gray-700 mb-1">Sin cargas disponibles</div>
           <div className="text-xs text-gray-400">Las cargas enviadas por Francisco aparecerán aquí</div>
         </div>
@@ -141,7 +142,7 @@ export default function Modulo6() {
           {/* Barra de filtros */}
           <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-gray-600">🔍 Filtros</span>
+              <span className="text-xs font-semibold text-gray-600 inline-flex items-center gap-1"><Filter size={14} /> Filtros</span>
               {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
@@ -163,11 +164,11 @@ export default function Modulo6() {
 
           <div className="flex items-center justify-between mb-3">
             <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
-              <button onClick={() => setVista("tarjetas")} className={`text-xs px-3 py-1.5 font-medium ${vista === "tarjetas" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}>🗂️ Tarjetas</button>
-              <button onClick={() => setVista("tabla")} className={`text-xs px-3 py-1.5 font-medium ${vista === "tabla" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}>🧮 Base de datos</button>
+              <button onClick={() => setVista("tarjetas")} className={`text-xs px-3 py-1.5 font-medium inline-flex items-center gap-1 ${vista === "tarjetas" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}><Boxes size={14} /> Tarjetas</button>
+              <button onClick={() => setVista("tabla")} className={`text-xs px-3 py-1.5 font-medium inline-flex items-center gap-1 ${vista === "tabla" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}><ListChecks size={14} /> Base de datos</button>
             </div>
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 flex items-center gap-2">
-              📊 Descargar a Excel{hayFiltros ? " (filtrado)" : ""}
+              <FileSpreadsheet size={14} /> Descargar a Excel{hayFiltros ? " (filtrado)" : ""}
             </button>
           </div>
 
@@ -208,8 +209,8 @@ export default function Modulo6() {
                             : <span className={`px-2 py-0.5 rounded-full font-medium ${empBadge[carga.empresasSel?.[0]] || "bg-gray-100 text-gray-500"}`}>{EMPRESAS.find((e) => e.id === carga.empresasSel?.[0])?.label || "Sin empresa"}</span>}
                         </td>
                         <td className="px-3 py-2 text-center">
-                          <button onClick={(e) => { e.stopPropagation(); toggleSap(ci); }} className={`px-2 py-0.5 rounded-full font-semibold border ${carga.sapStatus === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"}`}>
-                            {carga.sapStatus === "cargado" ? "✓ Cargado" : "⏳ Pendiente"}
+                          <button onClick={(e) => { e.stopPropagation(); toggleSap(ci); }} className={`px-2 py-0.5 rounded-full font-semibold border inline-flex items-center gap-1 ${carga.sapStatus === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"}`}>
+                            {carga.sapStatus === "cargado" ? <><Check size={14} /> Cargado</> : "Pendiente"}
                           </button>
                         </td>
                         <td className="px-3 py-2 text-center text-gray-400">{isOpen ? "▲" : "▼"}</td>
@@ -320,7 +321,7 @@ export default function Modulo6() {
                       <td className="px-2 py-1.5 text-right text-gray-500">${Number(f.fleteTotal).toLocaleString()}</td>
                       <td className="px-2 py-1.5 font-mono text-gray-700">{f.manifiesto || <span className="text-amber-600 italic">falta</span>}</td>
                       <td className="px-2 py-1.5 text-center">
-                        <button onClick={() => toggleSap(f.ci)} className={`px-2 py-0.5 rounded-full font-semibold border ${f.sap === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"}`}>{f.sap === "cargado" ? "✓" : "⏳"}</button>
+                        <button onClick={() => toggleSap(f.ci)} className={`px-2 py-0.5 rounded-full font-semibold border inline-flex items-center justify-center ${f.sap === "cargado" ? "bg-green-100 text-green-700 border-green-200" : "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200"}`}>{f.sap === "cargado" ? <Check size={14} /> : <Circle size={14} />}</button>
                       </td>
                     </tr>
                   ))}
