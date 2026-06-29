@@ -4,6 +4,7 @@ import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, 
 import { useDatos, nuevoId } from "../store/datos";
 import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
+import { useDialog } from "../components/Dialog";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -26,6 +27,7 @@ function diasPlazo(salidaISO, reciboISO) {
 
 export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
+  const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se está editando (null = nuevo)
@@ -252,7 +254,7 @@ export default function Modulo8() {
   const abrirEditar = (m) => {
     const estado = m.recepcion?.estado;
     if (estado === "recibido" || estado === "rechazado") {
-      window.alert(`Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`);
+      dlg.alerta({ title: "Atención", message: `Este flete ya fue ${estado === "recibido" ? "RECIBIDO" : "RECHAZADO"} en Recepción en Empaque.\n\nLos cambios que hagas aquí NO actualizan automáticamente lo que ya quedó registrado en recepción/empaque. Debes AVISAR MANUALMENTE al área, porque la base de datos ya se afectó.`, danger: true });
     }
     // Protege contra registros del backend que vienen sin todos los campos.
     setForm({ ...formVacio, ...m, cargaItems: m.cargaItems?.length ? m.cargaItems : [{ prod: "", parrillas: "", bultos: "" }] });
@@ -349,7 +351,7 @@ export default function Modulo8() {
     resetModos();
   };
 
-  const borrarMov = (id) => { if (window.confirm("¿Eliminar este movimiento?")) setMovimientos((prev) => prev.filter((m) => m.id !== id)); };
+  const borrarMov = async (id) => { if (await dlg.confirm({ title: "Eliminar movimiento", message: "¿Eliminar este movimiento?", confirmText: "Eliminar", danger: true })) setMovimientos((prev) => prev.filter((m) => m.id !== id)); };
 
   // ── Editores de catálogos ──
   const updCarga = (id, val) => setCargaCampo((prev) => prev.map((c) => c.id === id ? { ...c, label: val } : c));
@@ -372,7 +374,7 @@ export default function Modulo8() {
 
   // ── Exportar a Excel (respeta los filtros activos) ──
   const exportarExcel = () => {
-    if (movsFiltrados.length === 0) { alert("No hay movimientos para exportar con los filtros actuales."); return; }
+    if (movsFiltrados.length === 0) { dlg.alerta({ title: "Sin datos", message: "No hay movimientos para exportar con los filtros actuales." }); return; }
     const filas = movsFiltrados.map((m) => {
       const par = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.parrillas) || 0), 0);
       const bul = (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
@@ -895,7 +897,7 @@ export default function Modulo8() {
                   <div key={p.code} className="border border-gray-200 rounded-lg p-3 mb-2">
                     <div className="flex items-center gap-2 mb-2">
                       <input value={p.nombre} onChange={(e) => updTemporada(p.code, e.target.value)} className={INP_TBL + " font-semibold"} placeholder="Nombre de la temporada" />
-                      <button onClick={() => { if (window.confirm("¿Quitar esta temporada del catálogo? (no toca SAP)")) delTemporada(p.code); }} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center" title="Eliminar temporada"><Trash2 size={14} /></button>
+                      <button onClick={async () => { if (await dlg.confirm({ title: "Quitar temporada", message: "¿Quitar esta temporada del catálogo? (no toca SAP)", confirmText: "Quitar", danger: true })) delTemporada(p.code); }} className="text-gray-300 hover:text-red-500 text-sm inline-flex items-center" title="Eliminar temporada"><Trash2 size={14} /></button>
                     </div>
                     <div className="space-y-2 pl-1">
                       {(p.ranchos || []).map((r, ri) => (

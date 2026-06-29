@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDatos, CATS_QC, CALIDAD_ESTADOS, ahora } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
 import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check } from "lucide-react";
+import { useDialog } from "../components/Dialog";
 
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
@@ -31,6 +32,7 @@ export default function Modulo12() {
     inspectoresCalidad, setInspectoresCalidad,
     lugaresCalidad, setLugaresCalidad,
   } = useDatos();
+  const dlg = useDialog();
 
   const [cargaSel, setCargaSel] = useState(null); // carga en inspección
   const [insp, setInsp] = useState(null);
@@ -88,8 +90,8 @@ export default function Modulo12() {
     if (!n) return;
     setDefectosCalidad((p) => (p[n] ? p : { ...p, [n]: [] }));
   };
-  const delProd = (prod) => {
-    if (!window.confirm(`¿Eliminar el producto "${prod}" y todos sus defectos?`)) return;
+  const delProd = async (prod) => {
+    if (!(await dlg.confirm({ title: "Eliminar producto", message: `¿Eliminar el producto "${prod}" y todos sus defectos?`, confirmText: "Eliminar", danger: true }))) return;
     setDefectosCalidad((p) => { const c = { ...p }; delete c[prod]; return c; });
   };
 
@@ -170,7 +172,7 @@ export default function Modulo12() {
   // QC REPORT estilo dashboard (Power BI)
   const generarReporteQC = () => {
     const win = window.open("", "_blank");
-    if (!win) { alert("Permite las ventanas emergentes para generar el reporte."); return; }
+    if (!win) { dlg.alerta({ title: "Ventanas bloqueadas", message: "Permite las ventanas emergentes para generar el reporte." }); return; }
 
     const defsConPct = defectosProducto.map((d) => ({ d, pct: pctDe(d) })).filter((x) => x.pct > 0);
     const filasDef = defsConPct.length ? defsConPct.map(({ d, pct }) =>

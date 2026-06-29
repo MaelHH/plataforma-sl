@@ -7,6 +7,7 @@ import {
   fechaLimiteSalida, diasRestantesSalida, estadoVencimiento,
 } from "../store/datos";
 import { Boxes, Container, Pencil, FileText, Trash2, X, Save, FileEdit, ClipboardList, Clock, CircleCheck } from "lucide-react";
+import { useDialog } from "../components/Dialog";
 
 // Icono lucide por estado de importación (reemplaza los emojis del catálogo).
 const EST_ICONO = { borrador: FileEdit, documentada: ClipboardList, en_proceso: Clock, retornada: CircleCheck };
@@ -83,6 +84,7 @@ const LBL = "text-xs text-gray-500 block mb-0.5";
 
 export default function Modulo10() {
   const { importaciones, setImportaciones, materiales, setMateriales } = useDatos();
+  const dlg = useDialog();
 
   const [edit, setEdit] = useState(null); // importación en edición (objeto) o null
   const [verCatalogo, setVerCatalogo] = useState(false);
@@ -132,8 +134,8 @@ export default function Modulo10() {
     cerrar();
   };
 
-  const eliminar = (id) => {
-    if (!window.confirm("¿Eliminar esta importación? No se podrá recuperar.")) return;
+  const eliminar = async (id) => {
+    if (!(await dlg.confirm({ title: "Eliminar importación", message: "¿Eliminar esta importación? No se podrá recuperar.", confirmText: "Eliminar", danger: true }))) return;
     setImportaciones((prev) => prev.filter((i) => i.id !== id));
   };
 
@@ -150,7 +152,7 @@ export default function Modulo10() {
 
   const generarReporte = (imp) => {
     const win = window.open("", "_blank");
-    if (!win) { alert("Permite las ventanas emergentes para generar el PDF."); return; }
+    if (!win) { dlg.alerta({ title: "Ventanas bloqueadas", message: "Permite las ventanas emergentes para generar el PDF." }); return; }
 
     const filas = imp.items.map((it) => {
       const { limite, dr, est } = vencimientoItem(imp, it);

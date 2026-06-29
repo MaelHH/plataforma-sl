@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
+import { DialogProvider, useDialog } from "./components/Dialog";
 import { getToken, setToken, me } from "./store/api";
 
 // Indicador de conexión al backend (verde = backend, ámbar = modo local).
@@ -75,6 +76,11 @@ function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
   const [verUsuarios, setVerUsuarios] = useState(false);
   const modActivo = MODULOS.find((m) => m.id === moduloActivo);
+  const dlg = useDialog();
+
+  const confirmarSalir = async () => {
+    if (await dlg.confirm({ title: "Cerrar sesión", message: "¿Seguro que quieres cerrar la sesión?", confirmText: "Cerrar sesión", danger: true })) onLogout();
+  };
 
   return (
     <DatosProvider>
@@ -112,7 +118,7 @@ function AppAutenticada({ onLogout }) {
             <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
               <button onClick={() => setVerUsuarios(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
-              <button onClick={() => { if (window.confirm("¿Seguro que quieres cerrar la sesión?")) onLogout(); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
+              <button onClick={confirmarSalir} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
         </div>
@@ -153,7 +159,7 @@ function AppAutenticada({ onLogout }) {
 // ── Gate de autenticación ────────────────────────────────────────────────────
 // Si no hay token válido, muestra el login. Al entrar, monta la app (que ya carga
 // los datos CON el token). Escucha 401 globales (token vencido) para volver al login.
-export default function App() {
+function AppGate() {
   const [auth, setAuth] = useState(() => !!getToken());
   const [verificando, setVerificando] = useState(!!getToken());
 
@@ -179,4 +185,12 @@ export default function App() {
   }
   if (!auth) return <Login onOk={() => setAuth(true)} />;
   return <AppAutenticada onLogout={cerrarSesion} />;
+}
+
+export default function App() {
+  return (
+    <DialogProvider>
+      <AppGate />
+    </DialogProvider>
+  );
 }

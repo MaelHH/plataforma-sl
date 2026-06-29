@@ -3,6 +3,7 @@ import { Eye, Pencil, Trash2, FileText, RefreshCw, Package, Receipt, Check, X, A
 import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { useDialog } from "../components/Dialog";
 
 // FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
 const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
@@ -19,6 +20,7 @@ function hoyISO() {
 // (a futuro se leerá de SAP).
 export default function Modulo13() {
   const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores } = useDatos();
+  const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se edita (null = nuevo)
@@ -138,7 +140,7 @@ export default function Modulo13() {
     resetModos();
   };
 
-  const borrarMov = (id) => { if (window.confirm("¿Eliminar este movimiento de materiales?")) setMovMateriales((prev) => prev.filter((m) => m.id !== id)); };
+  const borrarMov = async (id) => { if (await dlg.confirm({ title: "Eliminar movimiento", message: "¿Eliminar este movimiento de materiales?", confirmText: "Eliminar", danger: true })) setMovMateriales((prev) => prev.filter((m) => m.id !== id)); };
 
   // ── Orden de compra de FLETE de materiales (SAP) ──
   // Igual que la OC de campo→empaque (Modulo8) pero SIMPLE: item FLETE-0003,

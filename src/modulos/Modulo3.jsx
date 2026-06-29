@@ -2,6 +2,7 @@ import { useState } from "react";
 import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
+import { useDialog } from "../components/Dialog";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
 import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
@@ -15,6 +16,7 @@ function lunesActual() {
 
 export default function Modulo3() {
   const { trailers, setTrailers, requerimientoGen, requerimientoMeta, setRequerimientoMeta, lineas, setLineas, bitacora } = useDatos();
+  const dlg = useDialog();
   const [semana, setSemana] = useState(lunesActual());
   const dias = calcularDias(semana);
   const [diaFil, setDiaFil] = useState(dias[0]);
@@ -71,8 +73,8 @@ export default function Modulo3() {
     setModal(t.id);
   };
   const openModal = (t) => { setForm({ ...t }); resetModos(); setModal(t.id); };
-  const delTrailer = (id) => {
-    if (window.confirm("¿Eliminar este trailer? Esta acción no se puede deshacer.")) {
+  const delTrailer = async (id) => {
+    if (await dlg.confirm({ title: "Eliminar trailer", message: "¿Eliminar este trailer? Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true })) {
       setTrailers((prev) => prev.filter((t) => t.id !== id));
     }
   };

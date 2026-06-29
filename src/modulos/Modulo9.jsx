@@ -7,6 +7,7 @@ import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import ColaTabs from "../components/ColaTabs";
 import AvisoSAP from "../components/AvisoSAP";
+import { useDialog } from "../components/Dialog";
 
 // Muestreo vacío. Arrastra lote y fecha del movimiento de campo, y un folio
 // consecutivo autogenerado.
@@ -94,6 +95,7 @@ const inspeccionConHallazgo = (insp) =>
 
 export default function Modulo9() {
   const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, registrarEvento } = useDatos();
+  const dlg = useDialog();
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
@@ -254,8 +256,8 @@ export default function Modulo9() {
     setForm(null);
   };
 
-  const reabrir = (id) => {
-    if (!window.confirm("¿Reabrir este flete? Volverá a 'Por recibir' y se borrará el vaciado registrado.")) return;
+  const reabrir = async (id) => {
+    if (!(await dlg.confirm({ title: "Reabrir flete", message: "¿Reabrir este flete? Volverá a 'Por recibir' y se borrará el vaciado registrado.", confirmText: "Reabrir", danger: true }))) return;
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined, vaciado: undefined } : m)));
   };
 
@@ -300,8 +302,8 @@ export default function Modulo9() {
       : m)));
 
   // Devolver un manifiesto a "Vaciado a Empaque" (deshace vaciados y mermas; el piso vuelve completo).
-  const devolverManifiesto = (id) => {
-    if (!window.confirm("¿Devolver este manifiesto a 'Vaciado a Empaque'? Se quitarán los vaciados y mermas registrados y el piso volverá completo.")) return;
+  const devolverManifiesto = async (id) => {
+    if (!(await dlg.confirm({ title: "Devolver manifiesto", message: "¿Devolver este manifiesto a 'Vaciado a Empaque'? Se quitarán los vaciados y mermas registrados y el piso volverá completo.", confirmText: "Devolver", danger: true }))) return;
     setMovimientos((prev) => prev.map((m) => (m.id === id
       ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [] } }
       : m)));
@@ -322,7 +324,7 @@ export default function Modulo9() {
     setRezagas((prev) => [item, ...prev]);
     setRezagaForm(null);
   };
-  const eliminarRezaga = (id) => { if (window.confirm("¿Eliminar esta rezaga?")) setRezagas((prev) => prev.filter((r) => r.id !== id)); };
+  const eliminarRezaga = async (id) => { if (await dlg.confirm({ title: "Eliminar rezaga", message: "¿Eliminar esta rezaga?", confirmText: "Eliminar", danger: true })) setRezagas((prev) => prev.filter((r) => r.id !== id)); };
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
   const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
@@ -416,9 +418,9 @@ export default function Modulo9() {
   // Incluye opción para agregar uno nuevo al vuelo.
   const selectorInspector = (value, onSet) => (
     <SearchSelect className={INP} value={value} placeholder="— Inspector —"
-      onChange={(v) => {
+      onChange={async (v) => {
         if (v === "__nuevo__") {
-          const nombre = (window.prompt("Nombre del inspector:") || "").trim();
+          const nombre = ((await dlg.prompt({ title: "Nuevo inspector", message: "Nombre del inspector:" })) || "").trim();
           if (nombre) { if (!inspectoresCalidad.includes(nombre)) setInspectoresCalidad((p) => [...p, nombre]); onSet(nombre); }
           return;
         }

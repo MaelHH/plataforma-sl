@@ -4,9 +4,11 @@ import { ClipboardList, Filter, Boxes, ListChecks, FileSpreadsheet, Check, Circl
 import { useDatos, CAT_VACIO, EMPRESAS, DC, idxToParr } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import AvisoSAP from "../components/AvisoSAP";
+import { useDialog } from "../components/Dialog";
 
 export default function Modulo6() {
   const { cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
+  const dlg = useDialog();
   const CATALOGO = [CAT_VACIO, ...catalogo];
   const [cargaSel, setCargaSel] = useState(null);
   const [vista, setVista] = useState("tarjetas"); // tarjetas | tabla
@@ -92,7 +94,7 @@ export default function Modulo6() {
       Manifiesto: f.manifiesto, Fecha: f.fecha, Origen: f.origen, Destino: f.destino, Linea: f.linea, Chofer: f.chofer, Placas: f.placas, Economico: f.economico, Tipo: f.tipo, Empresa: f.empresa, Productos: f.productos, Cajas: f.cajas, "% Flete": f.pct, "Flete a cobrar": f.fProp, "Flete total": f.fleteTotal, SAP: f.sap === "cargado" ? "Cargado" : "Pendiente",
     }));
     if (filas.length === 0) {
-      alert("No hay cargas para exportar con los filtros actuales.");
+      dlg.alerta({ title: "Sin datos", message: "No hay cargas para exportar con los filtros actuales." });
       return;
     }
     const ws = XLSX.utils.json_to_sheet(filas);
