@@ -112,7 +112,7 @@ function AppAutenticada({ onLogout }) {
             <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
               <button onClick={() => setVerUsuarios(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
-              <button onClick={onLogout} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
+              <button onClick={() => { if (window.confirm("¿Seguro que quieres cerrar la sesión?")) onLogout(); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
         </div>
