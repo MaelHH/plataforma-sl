@@ -14,8 +14,10 @@ export default function Usuarios({ onClose }) {
   const [tipos, setTipos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
-  const [nuevo, setNuevo] = useState({ email: "", password: "", full_name: "", tipo_usuario_id: "usuario" });
+  const [nuevo, setNuevo] = useState({ email: "", password: "", full_name: "", tipo_usuario_id: "" });
   const [creando, setCreando] = useState(false);
+
+  const tipoDefault = () => (tipos.find((t) => t.nombre === "usuario") || tipos[0])?.id ?? "";
 
   const cargar = async () => {
     try {
@@ -29,7 +31,12 @@ export default function Usuarios({ onClose }) {
   useEffect(() => {
     let vivo = true;
     Promise.all([getUsuarios(), getTiposUsuario()])
-      .then(([us, ts]) => { if (vivo) { setUsuarios(us); setTipos(ts); } })
+      .then(([us, ts]) => {
+        if (!vivo) return;
+        setUsuarios(us); setTipos(ts);
+        const def = (ts.find((t) => t.nombre === "usuario") || ts[0]);
+        if (def) setNuevo((n) => (n.tipo_usuario_id ? n : { ...n, tipo_usuario_id: def.id }));
+      })
       .catch((e) => { if (vivo) setError(msgError(e)); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
@@ -39,7 +46,7 @@ export default function Usuarios({ onClose }) {
     setError(""); setCreando(true);
     try {
       await crearUsuario({ ...nuevo, email: nuevo.email.trim().toLowerCase() });
-      setNuevo({ email: "", password: "", full_name: "", tipo_usuario_id: "usuario" });
+      setNuevo({ email: "", password: "", full_name: "", tipo_usuario_id: tipoDefault() });
       await cargar();
     } catch (e) { setError(msgError(e)); }
     finally { setCreando(false); }
