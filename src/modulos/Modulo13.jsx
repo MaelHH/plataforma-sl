@@ -8,9 +8,7 @@ import { useDialog } from "../components/Dialog";
 // FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
 const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
 
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { hoyISO } from "../utils/fecha";
 
 // Movimiento Materiales (id 13)
 // Registra el movimiento de materiales con los MISMOS datos del fletero/transporte

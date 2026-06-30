@@ -6,9 +6,7 @@ import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getIt
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
 
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { hoyISO } from "../utils/fecha";
 
 // Fecha en que el empaque recibió el flete. La estampa M9 (Recepción) al dar
 // recepción (`recepcion.fechaLlegada`). Queda vacía mientras el flete no se reciba.

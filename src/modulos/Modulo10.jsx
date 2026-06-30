@@ -13,9 +13,7 @@ import { useDialog } from "../components/Dialog";
 // Icono lucide por estado de importación (reemplaza los emojis del catálogo).
 const EST_ICONO = { borrador: FileEdit, documentada: ClipboardList, en_proceso: Clock, retornada: CircleCheck };
 
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { hoyISO } from "../utils/fecha";
 
 function nuevoId(pref) {
   try {

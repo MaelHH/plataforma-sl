@@ -396,8 +396,12 @@ const CONFIG = {
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
 // Colecciones: upsert por id (PUT) + borrar lo que ya no está. Singletons: PUT completo.
+// Devuelve el snapshot REALMENTE sincronizado: si una clave falla, conserva su valor
+// anterior para que NO se marque como guardada y se reintente en el próximo ciclo
+// (antes un fallo se ignoraba con console.warn y el dato se daba por sincronizado → se perdía).
 async function sincronizarBackend(snap, prevRef) {
   const prev = prevRef.current || {};
+  const sincronizado = { ...snap };
   for (const k of Object.keys(CONFIG)) {
     const cfg = CONFIG[k];
     const nuevo = snap[k];
@@ -422,9 +426,10 @@ async function sincronizarBackend(snap, prevRef) {
       }
     } catch (e) {
       console.warn("Error sincronizando", k, e);
+      sincronizado[k] = anterior;   // no se guardó → se reintenta en el próximo ciclo (no se da por sincronizado)
     }
   }
-  return snap;
+  return sincronizado;
 }
 
 // ─── CONTEXT ───

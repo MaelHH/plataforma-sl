@@ -27,13 +27,7 @@ const TENDENCIA_DEMO = {
 };
 // FIN DATOS DEMO
 
-function lunesActual() {
-  const hoy = new Date();
-  const dia = hoy.getDay();
-  const diff = dia === 0 ? -6 : 1 - dia;
-  hoy.setDate(hoy.getDate() + diff);
-  return hoy.toISOString().slice(0, 10);
-}
+import { lunesActual } from "../utils/fecha";
 
 // Semáforo vs promedio
 function semaforo(valor, promedio) {

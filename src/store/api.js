@@ -10,17 +10,6 @@
 const hostBackend = typeof window !== "undefined" ? `http://${window.location.hostname}:4104` : "http://localhost:4104";
 export const API_URL = (import.meta.env.VITE_API_URL || hostBackend).replace(/\/$/, "");
 
-// Colecciones (arrays de objetos con `id`) y singletons (objetos / arrays simples).
-export const COLECCIONES = [
-  "trailers", "movimientos", "cargasEmbarques", "catalogo", "cultivos",
-  "lineas", "materiales", "importaciones", "bitacora", "cargaCampo",
-];
-export const SINGLETONS = [
-  "programa", "monitoreo", "requerimientoGen", "requerimientoMeta", "ubicaciones",
-  "defectosCalidad", "responsables", "inspectoresCalidad", "lugaresCalidad",
-  "zonas", "consignados",
-];
-
 const tokenKey = "plataforma_sl_token";
 export const getToken = () => { try { return localStorage.getItem(tokenKey); } catch { return null; } };
 export const setToken = (t) => { try { t ? localStorage.setItem(tokenKey, t) : localStorage.removeItem(tokenKey); } catch { /* ignore */ } };
@@ -85,7 +74,6 @@ export const getTiposUsuario = () => req("GET", "/api/tipos-usuario");
 export const crearUsuario = (body) => req("POST", "/api/usuarios", body);
 export const actualizarUsuario = (id, body) => req("PUT", `/api/usuarios/${encodeURIComponent(id)}`, body);
 export const cambiarActivoUsuario = (id, esActivo) => req("PATCH", `/api/usuarios/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
-export const register = (datos) => req("POST", "/api/auth/register", datos);
 // El endpoint /api/auth/token suele esperar form-urlencoded (OAuth2PasswordRequestForm).
 export async function login(username, password) {
   const body = new URLSearchParams({ username, password });
@@ -116,9 +104,7 @@ const qs = (params = {}) => {
   const s = p.toString();
   return s ? `?${s}` : "";
 };
-export const getRanchosSAP = (project) => req("GET", `/api/sap/ranchos${qs({ project })}`);
 export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
-export const getOrdenesFabricacionSAP = (project) => req("GET", `/api/sap/ordenes-fabricacion${qs({ project })}`);
 // Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
 export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalogo${qs({ project })}`);
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.

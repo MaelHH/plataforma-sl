@@ -11,13 +11,7 @@ const DC = {
   "McAllen": "bg-blue-100 text-blue-800",
 };
 
-function lunesActual() {
-  const hoy = new Date();
-  const dia = hoy.getDay();
-  const diff = dia === 0 ? -6 : 1 - dia;
-  hoy.setDate(hoy.getDate() + diff);
-  return hoy.toISOString().slice(0, 10);
-}
+import { lunesActual } from "../utils/fecha";
 
 function TablaCalculadora() {
   const [vals, setVals] = useState({ ejote_taras: "", ejote_rel: "", bell_taras: "", bell_rel: "" });

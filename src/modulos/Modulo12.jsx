@@ -5,9 +5,7 @@ import ColaTabs from "../components/ColaTabs";
 import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check } from "lucide-react";
 import { useDialog } from "../components/Dialog";
 
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { hoyISO } from "../utils/fecha";
 const genId = () => "D_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 // Aprobación de calidad vacía para una carga.

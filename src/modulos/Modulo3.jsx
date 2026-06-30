@@ -6,13 +6,7 @@ import { useDialog } from "../components/Dialog";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
 import { useDatos, ORIGEN, ORIGENES, DESTINOS_ALL, DC, STATUS_CFG, EMPTY_TRAILER, PRECARGA_PREGUNTAS, ALERGENOS_MX, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 
-function lunesActual() {
-  const hoy = new Date();
-  const dia = hoy.getDay();
-  const diff = dia === 0 ? -6 : 1 - dia;
-  hoy.setDate(hoy.getDate() + diff);
-  return hoy.toISOString().slice(0, 10);
-}
+import { lunesActual } from "../utils/fecha";
 
 export default function Modulo3() {
   const { trailers, setTrailers, requerimientoGen, requerimientoMeta, setRequerimientoMeta, lineas, setLineas, bitacora } = useDatos();

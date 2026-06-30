@@ -17,9 +17,7 @@ const muestreoVacio = (m, folio) => ({
   fotos: {}, // 1 foto por defecto: { [defId]: dataURL }
 });
 
-function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { hoyISO } from "../utils/fecha";
 // Hora actual "HH:MM" (24h) para los inputs type=time.
 function ahoraHM() {
   const d = new Date();

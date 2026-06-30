@@ -4,13 +4,7 @@ import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, nuevoId, calcularDias, e
 import SearchSelect from "../components/SearchSelect";
 
 // Lunes de la semana actual en formato YYYY-MM-DD
-function lunesActual() {
-  const hoy = new Date();
-  const dia = hoy.getDay(); // 0=dom, 1=lun...
-  const diff = dia === 0 ? -6 : 1 - dia;
-  hoy.setDate(hoy.getDate() + diff);
-  return hoy.toISOString().slice(0, 10);
-}
+import { lunesActual } from "../utils/fecha";
 
 // Selector buscable de presentación (filtrado por cultivo)
 function SelectorPresentacion({ value, opciones, onChange }) {
