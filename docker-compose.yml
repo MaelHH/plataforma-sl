@@ -1,0 +1,17 @@
+# Despliegue del frontend de Plataforma SL en el VPS (mismo patrón que MangoFlow).
+# Build de la SPA (Vite) servida por Nginx en el puerto 80.
+#
+# Uso:
+#   docker compose up -d --build
+#
+# Los usuarios entran a http://100.93.143.57 (la IP Tailscale del VPS). El frontend
+# detecta solo el backend en http://<host>:4104, así que el backend debe estar publicado
+# en el puerto 4104 y CORS_ORIGINS del backend debe incluir http://100.93.143.57.
+
+services:
+  frontend:
+    build: .
+    container_name: plataformasl-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
