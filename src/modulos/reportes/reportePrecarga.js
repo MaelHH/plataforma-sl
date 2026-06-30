@@ -1,6 +1,7 @@
 import { PRECARGA_PREGUNTAS, ALERGENOS_MX } from "../../store/datos";
+import { esc } from "../../utils/esc";
 
-const escI = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const escI = esc;
 
 // ── Reporte PDF: Revisión precarga de transporte refrigerado (REG-EMP-15)
 //    + manifiesto de alérgenos (2 páginas) ──

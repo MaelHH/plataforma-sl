@@ -185,6 +185,7 @@ export default function Modulo8() {
         proyecto: m.proyecto || null, cultivo: ocCultivo || r?.cultivo || null, lote: m.rancho || null,
         departamento: r?.departamento || m.departamento || null, comentario: ocComentario,
         requiredDate: ocFecha || null,
+        movimientoId: m.id, origen: "movimiento",   // idempotencia: evita doble OC en SAP
       });
       setMovimientos((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: new Date().toISOString() } } : x));
       setOcMov(null);

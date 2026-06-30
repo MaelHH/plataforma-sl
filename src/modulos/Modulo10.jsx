@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { esc } from "../utils/esc";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
 import {
@@ -148,8 +149,6 @@ export default function Modulo10() {
     setMateriales((prev) => prev.filter((m) => m.id !== id));
 
   // ── Reporte PDF ──
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
   const generarReporte = (imp) => {
     const win = window.open("", "_blank");
     if (!win) { dlg.alerta({ title: "Ventanas bloqueadas", message: "Permite las ventanas emergentes para generar el PDF." }); return; }

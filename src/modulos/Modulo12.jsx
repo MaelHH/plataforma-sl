@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { esc } from "../utils/esc";
 import { useDatos, CATS_QC, CALIDAD_ESTADOS, ahora } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
 import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check } from "lucide-react";
@@ -142,7 +143,6 @@ export default function Modulo12() {
   const pctGood = Math.max(0, 100 - pctDefects);
 
   // ── Resumen, PDF y envío (correo / WhatsApp) ──
-  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const defectosConHallazgo = () => (insp ? defectosProducto.filter((d) => (parseFloat(insp.defectos[d.id]?.peso) || 0) > 0) : []);
 
   const resumenTexto = () => {
@@ -166,7 +166,7 @@ export default function Modulo12() {
     window.location.assign(`mailto:?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(resumenTexto())}`);
   };
   const mandarWapp = () => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(resumenTexto())}`, "_blank");
+    window.open(`https://wa.me/?text=${encodeURIComponent(resumenTexto())}`, "_blank", "noopener,noreferrer");
   };
 
   // QC REPORT estilo dashboard (Power BI)

@@ -250,6 +250,7 @@ export default function Modulo13() {
         proyecto: ocProyecto, cultivo: ocCultivo, lote: ocLote,
         departamento: ocDepto || DEPTO_DEFAULT, comentario: ocComentario,
         requiredDate: ocFecha || null, warehouse: ALMACEN_MATERIALES,
+        movimientoId: m.id, origen: "mov_material",   // idempotencia: evita doble OC en SAP
       });
       setMovMateriales((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, departamento: ocDepto || DEPTO_DEFAULT, ts: new Date().toISOString() } } : x));
       setOcMov(null);

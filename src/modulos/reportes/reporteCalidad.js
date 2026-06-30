@@ -1,8 +1,8 @@
 import { DEFECTOS_QC, CATS_QC, INSP_VEHICULO, INSP_PRODUCTO } from "../../store/datos";
 import { pctDefecto, pctCategoria, calcQCI } from "../helpers/calidad";
+import { esc } from "../../utils/esc";
 
 const colorQCI = (q) => (q >= 90 ? "#16a34a" : q >= 80 ? "#65a30d" : q >= 70 ? "#d97706" : "#dc2626");
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // ── Reporte PDF de Control de Calidad (muestreos de recepción) ──
 export function generarReporteCalidad(muestreoMov, muestreos) {
@@ -27,7 +27,7 @@ export function generarReporteCalidad(muestreoMov, muestreos) {
       `<div class="cat"><span>${esc(cfg.label)}</span><b>${pctCategoria(mu, k).toFixed(1)}%</b></div>`).join("");
 
     const fotos = DEFECTOS_QC.filter((d) => mu.fotos?.[d.id]).map((d) =>
-      `<figure><img src="${mu.fotos[d.id]}" /><figcaption>${esc(d.label)}</figcaption></figure>`).join("");
+      `<figure><img src="${esc(mu.fotos[d.id])}" /><figcaption>${esc(d.label)}</figcaption></figure>`).join("");
 
     return `
         <section class="muestreo">

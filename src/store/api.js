@@ -25,11 +25,26 @@ const tokenKey = "plataforma_sl_token";
 export const getToken = () => { try { return localStorage.getItem(tokenKey); } catch { return null; } };
 export const setToken = (t) => { try { t ? localStorage.setItem(tokenKey, t) : localStorage.removeItem(tokenKey); } catch { /* ignore */ } };
 
+// Timeouts: sin esto, un backend colgado deja la app esperando para siempre
+// ("Conectando…"/"Verificando sesión…" infinito). Abortamos con AbortController.
+const TIMEOUT_MS = 15000;        // peticiones normales
+const TIMEOUT_HEALTH_MS = 8000;  // health/login: más cortos
+
+async function fetchConTimeout(url, opts = {}, ms = TIMEOUT_MS) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function req(method, path, body) {
   const headers = { "Content-Type": "application/json" };
   const tok = getToken();
   if (tok) headers.Authorization = `Bearer ${tok}`;
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetchConTimeout(`${API_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -74,20 +89,23 @@ export const register = (datos) => req("POST", "/api/auth/register", datos);
 // El endpoint /api/auth/token suele esperar form-urlencoded (OAuth2PasswordRequestForm).
 export async function login(username, password) {
   const body = new URLSearchParams({ username, password });
-  const res = await fetch(`${API_URL}/api/auth/token`, {
+  const res = await fetchConTimeout(`${API_URL}/api/auth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
-  });
+  }, TIMEOUT_HEALTH_MS);
   if (!res.ok) throw new Error(`login → ${res.status}`);
   const data = await res.json();
   if (data.access_token) setToken(data.access_token);
   return data;
 }
 
-// ¿El backend está disponible?
+// ¿El backend está disponible? Timeout corto para no quedar colgado si no responde.
 export async function disponible() {
-  try { await health(); return true; } catch { return false; }
+  try {
+    const res = await fetchConTimeout(`${API_URL}/api/health`, {}, TIMEOUT_HEALTH_MS);
+    return res.ok;
+  } catch { return false; }
 }
 
 // ── SAP (solo lectura · Paso 1) ──

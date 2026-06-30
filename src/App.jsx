@@ -1,4 +1,4 @@
-import { useState, useEffect, Component } from "react";
+import { useState, useEffect, Component, lazy, Suspense } from "react";
 import "./index.css";
 import { DatosProvider, useDatos } from "./store/datos";
 import {
@@ -19,20 +19,22 @@ function EstadoConexion() {
     ? <span className="flex items-center gap-1.5 text-green-600"><span className="w-2 h-2 rounded-full bg-green-500"></span>Backend conectado</span>
     : <span className="flex items-center gap-1.5 text-amber-600" title="El backend no respondió; los datos se guardan solo en este navegador."><span className="w-2 h-2 rounded-full bg-amber-500"></span>Modo local (sin backend)</span>;
 }
-import Dashboard from "./modulos/Dashboard";
-import Modulo1 from "./modulos/Modulo1";
-import Modulo2 from "./modulos/Modulo2";
-import Modulo3 from "./modulos/Modulo3";
-import Modulo4 from "./modulos/Modulo4";
-import Modulo5 from "./modulos/Modulo5";
-import Modulo6 from "./modulos/Modulo6";
-import Modulo7 from "./modulos/Modulo7";
-import Modulo8 from "./modulos/Modulo8";
-import Modulo9 from "./modulos/Modulo9";
-import Modulo10 from "./modulos/Modulo10";
-import Modulo11 from "./modulos/Modulo11";
-import Modulo12 from "./modulos/Modulo12";
-import Modulo13 from "./modulos/Modulo13";
+// Carga diferida (code-splitting): cada módulo se descarga solo cuando se abre, así el
+// bundle inicial es mucho más liviano (recharts/leaflet/xlsx no se cargan de entrada).
+const Dashboard = lazy(() => import("./modulos/Dashboard"));
+const Modulo1 = lazy(() => import("./modulos/Modulo1"));
+const Modulo2 = lazy(() => import("./modulos/Modulo2"));
+const Modulo3 = lazy(() => import("./modulos/Modulo3"));
+const Modulo4 = lazy(() => import("./modulos/Modulo4"));
+const Modulo5 = lazy(() => import("./modulos/Modulo5"));
+const Modulo6 = lazy(() => import("./modulos/Modulo6"));
+const Modulo7 = lazy(() => import("./modulos/Modulo7"));
+const Modulo8 = lazy(() => import("./modulos/Modulo8"));
+const Modulo9 = lazy(() => import("./modulos/Modulo9"));
+const Modulo10 = lazy(() => import("./modulos/Modulo10"));
+const Modulo11 = lazy(() => import("./modulos/Modulo11"));
+const Modulo12 = lazy(() => import("./modulos/Modulo12"));
+const Modulo13 = lazy(() => import("./modulos/Modulo13"));
 
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
@@ -133,20 +135,22 @@ function AppAutenticada({ onLogout }) {
               </div>
             )}
             <ErrorBoundary key={moduloActivo}>
-              {moduloActivo === 0 && <Dashboard />}
-              {moduloActivo === 1 && <Modulo1 />}
-              {moduloActivo === 2 && <Modulo2 />}
-              {moduloActivo === 3 && <Modulo3 />}
-              {moduloActivo === 4 && <Modulo4 />}
-              {moduloActivo === 5 && <Modulo5 />}
-              {moduloActivo === 6 && <Modulo6 />}
-              {moduloActivo === 7 && <Modulo7 />}
-              {moduloActivo === 8 && <Modulo8 />}
-              {moduloActivo === 9 && <Modulo9 />}
-              {moduloActivo === 10 && <Modulo10 />}
-              {moduloActivo === 11 && <Modulo11 />}
-              {moduloActivo === 12 && <Modulo12 />}
-              {moduloActivo === 13 && <Modulo13 />}
+              <Suspense fallback={<div className="text-sm text-gray-400 py-10 text-center">Cargando módulo…</div>}>
+                {moduloActivo === 0 && <Dashboard />}
+                {moduloActivo === 1 && <Modulo1 />}
+                {moduloActivo === 2 && <Modulo2 />}
+                {moduloActivo === 3 && <Modulo3 />}
+                {moduloActivo === 4 && <Modulo4 />}
+                {moduloActivo === 5 && <Modulo5 />}
+                {moduloActivo === 6 && <Modulo6 />}
+                {moduloActivo === 7 && <Modulo7 />}
+                {moduloActivo === 8 && <Modulo8 />}
+                {moduloActivo === 9 && <Modulo9 />}
+                {moduloActivo === 10 && <Modulo10 />}
+                {moduloActivo === 11 && <Modulo11 />}
+                {moduloActivo === 12 && <Modulo12 />}
+                {moduloActivo === 13 && <Modulo13 />}
+              </Suspense>
             </ErrorBoundary>
           </div>
         </div>
@@ -166,7 +170,9 @@ function AppGate() {
   useEffect(() => {
     if (getToken()) {
       me().then(() => setAuth(true))
-        .catch(() => { setToken(null); setAuth(false); })
+        // En un 401 real, `req` ya limpió el token → getToken() es null → al login.
+        // En error de RED (timeout/backend caído), el token sigue → entra igual (modo local).
+        .catch(() => { setAuth(!!getToken()); })
         .finally(() => setVerificando(false));
     }
     const alExpirar = () => { setAuth(false); setVerificando(false); };

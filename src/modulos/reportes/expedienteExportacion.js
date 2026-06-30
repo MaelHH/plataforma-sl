@@ -1,6 +1,6 @@
 import { EMPRESAS, PRECARGA_PREGUNTAS, ALERGENOS_MX } from "../../store/datos";
+import { esc } from "../../utils/esc";
 
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const dash = (v) => (v === 0 || v ? esc(v) : "—");
 
 const EVENTOS = [

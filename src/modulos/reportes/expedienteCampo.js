@@ -1,7 +1,7 @@
 import { INSP_VEHICULO, INSP_PRODUCTO } from "../../store/datos";
 import { calcQCI } from "../helpers/calidad";
+import { esc } from "../../utils/esc";
 
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
 const dash = (v) => (v === 0 || v ? esc(v) : "—");
 
