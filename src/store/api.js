@@ -16,8 +16,9 @@ export const setToken = (t) => { try { t ? localStorage.setItem(tokenKey, t) : l
 
 // Timeouts: sin esto, un backend colgado deja la app esperando para siempre
 // ("Conectando…"/"Verificando sesión…" infinito). Abortamos con AbortController.
-const TIMEOUT_MS = 15000;        // peticiones normales
-const TIMEOUT_HEALTH_MS = 8000;  // health/login: más cortos
+const TIMEOUT_MS = 15000;         // peticiones normales
+const TIMEOUT_HEALTH_MS = 8000;   // health/login: más cortos
+const TIMEOUT_SAP_WRITE = 120000; // escrituras a SAP (OC, recibo): lentas (varios round-trips)
 
 async function fetchConTimeout(url, opts = {}, ms = TIMEOUT_MS) {
   const ctrl = new AbortController();
@@ -29,7 +30,7 @@ async function fetchConTimeout(url, opts = {}, ms = TIMEOUT_MS) {
   }
 }
 
-async function req(method, path, body) {
+async function req(method, path, body, timeoutMs) {
   const headers = { "Content-Type": "application/json" };
   const tok = getToken();
   if (tok) headers.Authorization = `Bearer ${tok}`;
@@ -37,7 +38,7 @@ async function req(method, path, body) {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  }, timeoutMs);   // timeout opcional (las escrituras a SAP son lentas → más largo)
   if (!res.ok) {
     if (res.status === 401) {
       // Token vencido/ausente → limpiar y avisar a la app para mostrar el login.
@@ -109,7 +110,7 @@ export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
 export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalogo${qs({ project })}`);
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
 // body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
-export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body);
+export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body, TIMEOUT_SAP_WRITE);
 
 // ── SAP · Orden de compra de flete (Paso 4) ──
 export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-flete${qs({ q })}`);
@@ -121,4 +122,4 @@ export const getLotesSAP = () => req("GET", "/api/sap/lotes");
 export const getProyectosSAPlist = () => req("GET", "/api/sap/proyectos-sap");
 export const getEstadoOCSAP = (pedidoEntry) => req("GET", `/api/sap/oc-estado${qs({ pedido_entry: pedidoEntry })}`);
 // ESCRITURA: crea Solicitud de Pedido + Pedido de flete. body: { cardCode, item, precio, taxCode, proyecto, cultivo, lote, departamento, comentario }.
-export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body);
+export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body, TIMEOUT_SAP_WRITE);
