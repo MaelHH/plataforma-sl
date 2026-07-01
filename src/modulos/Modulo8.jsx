@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, X, AlertTriangle, MapPin, Sprout, Boxes, Inbox, Package } from "lucide-react";
 import { useDatos, nuevoId } from "../store/datos";
@@ -193,18 +193,54 @@ export default function Modulo8() {
 
   // ── Estado de la OC en SAP (SOLO LECTURA): ¿ya tiene factura de proveedor? ──
   const [ocChkId, setOcChkId] = useState(null);
+  // Estado de factura por movimiento, EFÍMERO (no persiste al backend) → auto-refresco sin churn.
+  const [estadosOC, setEstadosOC] = useState({});   // { [movId]: { factura, estado } }
+  const estadosOCRef = useRef(estadosOC);
+  useEffect(() => { estadosOCRef.current = estadosOC; }, [estadosOC]);
+
   const verificarFacturaOC = async (m) => {
     const entry = m.ocSAP?.pedido?.docEntry;
     if (!entry) return;
     setOcChkId(m.id);
     try {
       const est = await getEstadoOCSAP(entry);
+      setEstadosOC((prev) => ({ ...prev, [m.id]: { factura: est.factura, estado: est.pedido } }));
       setMovimientos((prev) => prev.map((x) => x.id === m.id
         ? { ...x, ocSAP: { ...x.ocSAP, estado: est.pedido, factura: est.factura, chkTs: new Date().toISOString() } }
         : x));
     } catch { /* noop: deja el chip como estaba */ }
     finally { setOcChkId(null); }
   };
+
+  // Auto-refresca en SAP el estado de factura de las OC (solo lectura): al abrir y cada 5 min.
+  // Una vez FACTURADO ya no cambia → se deja de consultar. Secuencial para ser gentil con SAP.
+  const movsRef = useRef(movimientos);
+  useEffect(() => { movsRef.current = movimientos; }, [movimientos]);
+  const refrescandoOCRef = useRef(false);
+  const refrescarEstadosOC = useCallback(async () => {
+    if (refrescandoOCRef.current) return;
+    refrescandoOCRef.current = true;
+    try {
+      const pendientes = (movsRef.current || []).filter((m) => {
+        if (!m.ocSAP?.pedido?.docEntry) return false;
+        const ya = estadosOCRef.current[m.id]?.factura ?? m.ocSAP?.factura;
+        return !ya?.existe;   // ya facturado → no re-consultar
+      });
+      for (const m of pendientes) {
+        try {
+          const est = await getEstadoOCSAP(m.ocSAP.pedido.docEntry);
+          setEstadosOC((prev) => ({ ...prev, [m.id]: { factura: est.factura, estado: est.pedido } }));
+        } catch { /* SAP no respondió: se deja como estaba */ }
+      }
+    } finally {
+      refrescandoOCRef.current = false;
+    }
+  }, []);
+  useEffect(() => {
+    refrescarEstadosOC();                                        // al abrir el módulo
+    const id = setInterval(refrescarEstadosOC, 5 * 60 * 1000);   // cada 5 min
+    return () => clearInterval(id);
+  }, [refrescarEstadosOC]);
 
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
   const upTemp = (fn) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).map(fn));
@@ -551,11 +587,14 @@ export default function Modulo8() {
                         {m.ocSAP ? (
                           <span className="inline-flex items-center gap-1 mr-1 align-middle">
                             <span title="Documentos creados en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={14} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
-                            {m.ocSAP.factura?.existe ? (
-                              <span title={`Factura de proveedor en SAP${m.ocSAP.factura.docNum ? " #" + m.ocSAP.factura.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={14} /> Facturado{m.ocSAP.factura.docNum ? ` #${m.ocSAP.factura.docNum}` : ""}</span>
-                            ) : m.ocSAP.factura ? (
-                              <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={14} /> Sin factura</span>
-                            ) : null}
+                            {(() => {
+                              const fac = estadosOC[m.id]?.factura ?? m.ocSAP.factura;
+                              return fac?.existe ? (
+                                <span title={`Factura de proveedor en SAP${fac.docNum ? " #" + fac.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={14} /> Facturado{fac.docNum ? ` #${fac.docNum}` : ""}</span>
+                              ) : fac ? (
+                                <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={14} /> Sin factura</span>
+                              ) : null;
+                            })()}
                             <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50 inline-flex items-center gap-1">{ocChkId === m.id ? "…" : <RefreshCw size={14} />}</button>
                           </span>
                         ) : (
