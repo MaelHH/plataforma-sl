@@ -236,11 +236,15 @@ export default function Modulo8() {
       refrescandoOCRef.current = false;
     }
   }, []);
+  // Firma del conjunto de OCs presentes: cambia cuando cargan los movimientos del backend
+  // o cuando se crea una OC nueva → así el refresco se dispara AL cargar (no solo al montar,
+  // cuando la lista aún venía vacía) y no espera 5 min.
+  const ocKey = (movimientos || []).filter((m) => m.ocSAP?.pedido?.docEntry).map((m) => m.id).join(",");
   useEffect(() => {
-    refrescarEstadosOC();                                        // al abrir el módulo
-    const id = setInterval(refrescarEstadosOC, 5 * 60 * 1000);   // cada 5 min
+    refrescarEstadosOC();                                        // al abrir / al cargar OCs / al crear una
+    const id = setInterval(refrescarEstadosOC, 5 * 60 * 1000);   // y cada 5 min
     return () => clearInterval(id);
-  }, [refrescarEstadosOC]);
+  }, [ocKey, refrescarEstadosOC]);
 
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
   const upTemp = (fn) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).map(fn));
