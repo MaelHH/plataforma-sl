@@ -192,25 +192,10 @@ export default function Modulo8() {
   };
 
   // ── Estado de la OC en SAP (SOLO LECTURA): ¿ya tiene factura de proveedor? ──
-  const [ocChkId, setOcChkId] = useState(null);
   // Estado de factura por movimiento, EFÍMERO (no persiste al backend) → auto-refresco sin churn.
   const [estadosOC, setEstadosOC] = useState({});   // { [movId]: { factura, estado } }
   const estadosOCRef = useRef(estadosOC);
   useEffect(() => { estadosOCRef.current = estadosOC; }, [estadosOC]);
-
-  const verificarFacturaOC = async (m) => {
-    const entry = m.ocSAP?.pedido?.docEntry;
-    if (!entry) return;
-    setOcChkId(m.id);
-    try {
-      const est = await getEstadoOCSAP(entry);
-      setEstadosOC((prev) => ({ ...prev, [m.id]: { factura: est.factura, estado: est.pedido } }));
-      setMovimientos((prev) => prev.map((x) => x.id === m.id
-        ? { ...x, ocSAP: { ...x.ocSAP, estado: est.pedido, factura: est.factura, chkTs: new Date().toISOString() } }
-        : x));
-    } catch { /* noop: deja el chip como estaba */ }
-    finally { setOcChkId(null); }
-  };
 
   // Auto-refresca en SAP el estado de factura de las OC (solo lectura): al abrir y cada 5 min.
   // Una vez FACTURADO ya no cambia → se deja de consultar. Secuencial para ser gentil con SAP.
@@ -599,7 +584,6 @@ export default function Modulo8() {
                                 <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={14} /> Sin factura</span>
                               ) : null;
                             })()}
-                            <button onClick={() => verificarFacturaOC(m)} disabled={ocChkId === m.id} title="Verificar en SAP si ya tiene factura de proveedor" className="text-xs px-1.5 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-500 disabled:opacity-50 inline-flex items-center gap-1">{ocChkId === m.id ? "…" : <RefreshCw size={14} />}</button>
                           </span>
                         ) : (
                           <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1 inline-flex items-center gap-1"><FileText size={14} /> OC</button>
