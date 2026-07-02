@@ -121,5 +121,7 @@ export const getDepartamentosSAP = () => req("GET", "/api/sap/departamentos");
 export const getLotesSAP = () => req("GET", "/api/sap/lotes");
 export const getProyectosSAPlist = () => req("GET", "/api/sap/proyectos-sap");
 export const getEstadoOCSAP = (pedidoEntry) => req("GET", `/api/sap/oc-estado${qs({ pedido_entry: pedidoEntry })}`);
+// Control de fletes de ACARREO por proyecto (solo lectura): Pedidos + Entradas + Facturas cruzadas + totales.
+export const getFletesSAP = (project, tipo) => req("GET", `/api/sap/fletes${qs({ project, tipo })}`, undefined, 60000);
 // ESCRITURA: crea Solicitud de Pedido + Pedido de flete. body: { cardCode, item, precio, taxCode, proyecto, cultivo, lote, departamento, comentario }.
 export const crearOrdenCompraSAP = (body) => req("POST", "/api/sap/orden-compra", body, TIMEOUT_SAP_WRITE);
