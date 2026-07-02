@@ -4,6 +4,7 @@ import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import { useDialog } from "../components/Dialog";
+import ControlFletesModal from "../components/ControlFletesModal";
 
 // FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
 const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
@@ -17,8 +18,9 @@ import { hoyISO } from "../utils/fecha";
 // ARRIBA del trailer. El catálogo de materiales se comparte con el master `materiales`
 // (a futuro se leerá de SAP).
 export default function Modulo13() {
-  const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores } = useDatos();
+  const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores, proyectos } = useDatos();
   const dlg = useDialog();
+  const [verFletes, setVerFletes] = useState(false);   // modal Control de fletes · MATERIAL (SAP)
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se edita (null = nuevo)
@@ -330,6 +332,7 @@ export default function Modulo13() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setCatMat(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Package size={14} /> Catálogo de materiales</button>
+          <button onClick={() => setVerFletes(true)} className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 inline-flex items-center gap-1"><Receipt size={14} /> Control fletes</button>
           <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
         </div>
       </div>
@@ -744,6 +747,8 @@ export default function Modulo13() {
       })()}
 
       {/* ── Modal catálogo de materiales (master compartido) ── */}
+      {verFletes && <ControlFletesModal tipo="material" proyectos={proyectos} onClose={() => setVerFletes(false)} />}
+
       {catMat && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
