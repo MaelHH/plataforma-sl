@@ -185,22 +185,36 @@ export default function Modulo9() {
   const [usuarioActual, setUsuarioActual] = useState(null);   // quién está logueado (para auditar la aprobación)
   useEffect(() => { let vivo = true; me().then((u) => { if (vivo) setUsuarioActual(u); }).catch(() => {}); return () => { vivo = false; }; }, []);
 
+  // CANDADO POR ROL — apartado delicado (envío a SAP): SOLO la encargada de "estatus mayor"
+  // (gerente/admin) puede APROBAR el cálculo. La capturista (usuario) mete kilos y cierra la
+  // hora, pero NO puede aprobarse sola; una vez aprobado por la encargada, cualquiera (incluida
+  // la capturista) puede mandar esa hora a SAP. La aprobación se guarda en BD con el nombre del
+  // usuario que aprobó (es responsable de esa hora). Ver [[sap-reglas-garantia]].
+  const ROLES_APRUEBAN = ["gerente", "admin"];
+  const rolActual = (usuarioActual?.tipo_nombre || "").toLowerCase();
+  const puedeAprobar = ROLES_APRUEBAN.includes(rolActual);
+
   // Aprobación del cálculo (2ª persona): la encargada revisa y confirma que el cálculo es
   // correcto ANTES de habilitar el envío a SAP. Se registra quién aprobó y cuándo.
   const aprobarHora = async (m, hora) => {
+    if (!puedeAprobar) {   // defensa: el botón ya sale deshabilitado para la capturista
+      await dlg.alerta({ title: "No puedes aprobar", message: "Solo la encargada (gerente o admin) puede aprobar el cálculo y habilitar el envío a SAP. Pídele que revise y apruebe desde su cuenta." });
+      return;
+    }
     const ord = ordenSAPde(m);
     const neto = netoHora(hora);
     const cub = cubetasDe(neto);
     const ok = await dlg.confirm({
       title: "Aprobar el cálculo antes de SAP",
-      message: `¿Segura que el cálculo es correcto? Se enviarán ${cub} cubetas (${Math.round(neto)} kg ÷ 6) a la orden #${ord?.absoluteEntry ?? "—"}. Revisa bien: al aprobar se habilita el botón de mandar a SAP.`,
+      message: `¿Segura que el cálculo es correcto? Se enviarán ${cub} cubetas (${Math.round(neto)} kg ÷ 6) a la orden #${ord?.absoluteEntry ?? "—"}. Quedará registrado a TU nombre como responsable de esta hora. Al aprobar se habilita el botón de mandar a SAP.`,
       confirmText: "Sí, es correcto — aprobar",
     });
     if (!ok) return;
     const por = usuarioActual?.full_name || usuarioActual?.email || "encargado";
-    setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id ? { ...h, aprobacion: { por, ts: new Date().toISOString() } } : h)));
+    const aprobacion = { por, porId: usuarioActual?.id ?? null, tipo: usuarioActual?.tipo_nombre ?? null, ts: new Date().toISOString() };
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id ? { ...h, aprobacion } : h)));
     registrarEvento?.({ evento: "vaciado_hora_aprobado", modulo: "M9", actor: por, destino: m.folio, ref: m.id,
-      detalle: `${hora.etiqueta}: cálculo aprobado (${cub} cub) — habilita envío a SAP`, meta: { horaId: hora.id, cubetas: cub } });
+      detalle: `${hora.etiqueta}: cálculo aprobado (${cub} cub) por ${por} [${aprobacion.tipo || "?"}] — habilita envío a SAP`, meta: { horaId: hora.id, cubetas: cub, porId: aprobacion.porId } });
   };
 
   // Catálogo de contenedores (persiste en BD): agregar / editar peso (tara) / quitar.
@@ -255,7 +269,8 @@ export default function Modulo9() {
     setHoraEnviando(true); setHoraSapError("");
     try {
       // claveEnvio ÚNICA por hora → idempotencia server-side (no doble conteo aunque se reintente).
-      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id, claveEnvio: `${m.id}_${hora.id}` });
+      // aprobadoPor/Id → se guarda en el recibo (auditoría: quién aprobó esta hora que fue a SAP).
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id, claveEnvio: `${m.id}_${hora.id}`, aprobadoPor: hora.aprobacion?.por, aprobadoPorId: hora.aprobacion?.porId != null ? String(hora.aprobacion.porId) : undefined });
       setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id
         ? { ...h, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
         : h)));
@@ -1791,7 +1806,11 @@ export default function Modulo9() {
                                 <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
                               ) : (
                                 <>
-                                  <button onClick={() => aprobarHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Aprobar cálculo</button>
+                                  {puedeAprobar ? (
+                                    <button onClick={() => aprobarHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Aprobar cálculo</button>
+                                  ) : (
+                                    <span title="Solo la encargada (gerente o admin) puede aprobar y habilitar el envío a SAP" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Ban size={13} /> Solo la encargada puede aprobar</span>
+                                  )}
                                   <span title="Falta que la encargada apruebe el cálculo para habilitar el envío a SAP" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP</span>
                                 </>
                               )}
