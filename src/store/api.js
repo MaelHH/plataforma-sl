@@ -94,6 +94,7 @@ export const cambiarActivoUsuario = (id, esActivo) => req("PATCH", `/api/usuario
 // ── Roles y permisos (RBAC) ──
 export const crearTipoUsuario = (body) => req("POST", "/api/tipos-usuario", body);
 export const actualizarTipoUsuario = (id, body) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}`, body);
+export const borrarTipoUsuario = (id) => req("DELETE", `/api/tipos-usuario/${encodeURIComponent(id)}`);
 export const getPermisos = () => req("GET", "/api/permisos");
 export const getRolPermisos = (id) => req("GET", `/api/tipos-usuario/${encodeURIComponent(id)}/permisos`);
 export const putRolPermisos = (id, codigos) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}/permisos`, { codigos });

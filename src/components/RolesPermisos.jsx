@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
-import { ShieldCheck, Plus, Save, Loader2, Check } from "lucide-react";
+import { ShieldCheck, Plus, Save, Loader2, Check, Pencil, Trash2, X } from "lucide-react";
 import {
   getTiposUsuario, getPermisos, getRolPermisos, putRolPermisos, crearTipoUsuario,
+  actualizarTipoUsuario, borrarTipoUsuario,
 } from "../store/api";
+import { useDialog } from "./Dialog";
+
+const ROLES_BASE = ["admin", "gerente", "usuario"];   // no se renombran ni se borran
 
 function msgError(e) {
   const s = String(e?.message || e);
@@ -37,6 +41,8 @@ export default function RolesPermisos() {
   const [error, setError] = useState("");
   const [ok, setOk] = useState("");
   const [nuevo, setNuevo] = useState(null);           // { nombre } | null
+  const [editRol, setEditRol] = useState(null);       // { id, nombre } en edición | null
+  const dlg = useDialog();
 
   useEffect(() => {
     let vivo = true;
@@ -92,6 +98,31 @@ export default function RolesPermisos() {
     } catch (e) { setError(msgError(e)); }
   };
 
+  const renombrarRol = async () => {
+    const nombre = (editRol?.nombre || "").trim();
+    if (!nombre) return setError("El nombre del rol es obligatorio.");
+    setError(""); setOk("");
+    try {
+      await actualizarTipoUsuario(editRol.id, { nombre });
+      const rs = await getTiposUsuario();
+      setRoles(rs);
+      if (rolSel?.id === editRol.id) setRolSel({ ...rolSel, nombre });
+      setEditRol(null);
+    } catch (e) { setError(msgError(e)); }
+  };
+
+  const eliminarRol = async (r) => {
+    setError(""); setOk("");
+    if (!(await dlg.confirm({ title: "Eliminar rol", message: `¿Eliminar el rol "${r.nombre}"? Se borrarán sus permisos. (No se puede si tiene usuarios asignados.)`, confirmText: "Eliminar", danger: true }))) return;
+    try {
+      await borrarTipoUsuario(r.id);
+      const rs = await getTiposUsuario();
+      setRoles(rs);
+      if (rolSel?.id === r.id) { setRolSel(null); setSel(new Set()); }
+      setOk(`Rol "${r.nombre}" eliminado.`);
+    } catch (e) { setError(msgError(e)); }
+  };
+
   const grupos = agrupar(cat.permisos);
   const labelModulo = (mod) => cat.modulos?.[mod] || EXTRA_MODULOS[mod] || mod;
 
@@ -112,10 +143,28 @@ export default function RolesPermisos() {
         <div className="border border-gray-200 rounded-xl p-2 h-fit">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-2 py-1.5">Roles</div>
           {roles.map((r) => (
-            <button key={r.id} onClick={() => elegirRol(r)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-0.5 ${rolSel?.id === r.id ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-600 hover:bg-gray-50"}`}>
-              {r.nombre}{r.nombre === "admin" && <span className="text-[10px] text-indigo-500 ml-1">(super)</span>}
-            </button>
+            editRol?.id === r.id ? (
+              <div key={r.id} className="flex items-center gap-1 mb-0.5">
+                <input autoFocus value={editRol.nombre} onChange={(e) => setEditRol({ id: r.id, nombre: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" ? renombrarRol() : e.key === "Escape" && setEditRol(null)}
+                  className="flex-1 min-w-0 text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+                <button onClick={renombrarRol} title="Guardar" className="p-1 text-green-600 hover:bg-green-50 rounded"><Check size={15} /></button>
+                <button onClick={() => setEditRol(null)} title="Cancelar" className="p-1 text-gray-400 hover:bg-gray-50 rounded"><X size={15} /></button>
+              </div>
+            ) : (
+              <div key={r.id} className={`group flex items-center rounded-lg mb-0.5 ${rolSel?.id === r.id ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                <button onClick={() => elegirRol(r)}
+                  className={`flex-1 min-w-0 text-left px-3 py-2 text-sm truncate ${rolSel?.id === r.id ? "text-blue-700 font-semibold" : "text-gray-600"}`}>
+                  {r.nombre}{r.nombre === "admin" && <span className="text-[10px] text-indigo-500 ml-1">(super)</span>}
+                </button>
+                {!ROLES_BASE.includes(r.nombre) && (
+                  <div className="flex items-center pr-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => { setEditRol({ id: r.id, nombre: r.nombre }); setError(""); setOk(""); }} title="Renombrar rol" className="p-1 text-gray-400 hover:text-blue-600"><Pencil size={13} /></button>
+                    <button onClick={() => eliminarRol(r)} title="Eliminar rol" className="p-1 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                  </div>
+                )}
+              </div>
+            )
           ))}
           {nuevo ? (
             <div className="p-2 border-t border-gray-100 mt-1 space-y-2">
