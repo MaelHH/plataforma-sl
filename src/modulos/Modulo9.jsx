@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
-import { reciboProduccionSAP } from "../store/api";
+import { reciboProduccionSAP, me } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
@@ -181,6 +181,26 @@ export default function Modulo9() {
   const [horaEnviando, setHoraEnviando] = useState(false);
   const [horaSapError, setHoraSapError] = useState("");
   const [editCont, setEditCont] = useState(false);     // editor del catálogo de contenedores
+  const [usuarioActual, setUsuarioActual] = useState(null);   // quién está logueado (para auditar la aprobación)
+  useEffect(() => { let vivo = true; me().then((u) => { if (vivo) setUsuarioActual(u); }).catch(() => {}); return () => { vivo = false; }; }, []);
+
+  // Aprobación del cálculo (2ª persona): la encargada revisa y confirma que el cálculo es
+  // correcto ANTES de habilitar el envío a SAP. Se registra quién aprobó y cuándo.
+  const aprobarHora = async (m, hora) => {
+    const ord = ordenSAPde(m);
+    const neto = netoHora(hora);
+    const cub = cubetasDe(neto);
+    const ok = await dlg.confirm({
+      title: "Aprobar el cálculo antes de SAP",
+      message: `¿Segura que el cálculo es correcto? Se enviarán ${cub} cubetas (${Math.round(neto)} kg ÷ 6) a la orden #${ord?.absoluteEntry ?? "—"}. Revisa bien: al aprobar se habilita el botón de mandar a SAP.`,
+      confirmText: "Sí, es correcto — aprobar",
+    });
+    if (!ok) return;
+    const por = usuarioActual?.full_name || usuarioActual?.email || "encargado";
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id ? { ...h, aprobacion: { por, ts: new Date().toISOString() } } : h)));
+    registrarEvento?.({ evento: "vaciado_hora_aprobado", modulo: "M9", actor: por, destino: m.folio, ref: m.id,
+      detalle: `${hora.etiqueta}: cálculo aprobado (${cub} cub) — habilita envío a SAP`, meta: { horaId: hora.id, cubetas: cub } });
+  };
 
   // Catálogo de contenedores (persiste en BD): agregar / editar peso (tara) / quitar.
   const addCont = () => setContenedores((prev) => [...(Array.isArray(prev) ? prev : []), { id: nuevoId("CONT"), label: "Nuevo", tara: 0 }]);
@@ -218,7 +238,7 @@ export default function Modulo9() {
     setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, estado: "cerrada", cerradaEn: new Date().toISOString() } : h)));
   };
   const reabrirHoraFn = (m, horaId) =>
-    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId && h.estado === "cerrada" ? { ...h, estado: "abierta", cerradaEn: undefined } : h)));
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId && h.estado === "cerrada" ? { ...h, estado: "abierta", cerradaEn: undefined, aprobacion: undefined } : h)));
 
   const abrirEnvioHora = (m, hora) => { setHoraSapError(""); setHoraKgCub(6); setHoraSap({ m, hora }); };
   const confirmarEnvioHora = async () => {
@@ -228,6 +248,7 @@ export default function Modulo9() {
     const neto = netoHora(hora);
     const kgc = parseFloat(horaKgCub) || 6;
     const cubetas = cubetasDe(neto, kgc);
+    if (!hora.aprobacion) { setHoraSapError("Falta APROBAR el cálculo antes de mandar a SAP."); return; }
     if (!ord) { setHoraSapError("Este folio no tiene orden de fabricación en SAP."); return; }
     if (!(cubetas > 0)) { setHoraSapError("La cantidad calculada es 0."); return; }
     setHoraEnviando(true); setHoraSapError("");
@@ -1759,8 +1780,16 @@ export default function Modulo9() {
                           {h.estado === "abierta" && <button onClick={() => cerrarHoraFn(m, h.id)} disabled={(h.pesadas || []).length === 0} className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Cerrar hora</button>}
                           {h.estado === "cerrada" && (
                             <>
+                              {h.aprobacion && <span className="text-[11px] text-green-700 inline-flex items-center gap-1 mr-auto"><Check size={13} /> Aprobado por {h.aprobacion.por}</span>}
                               <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
-                              <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
+                              {h.aprobacion ? (
+                                <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
+                              ) : (
+                                <>
+                                  <button onClick={() => aprobarHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Aprobar cálculo</button>
+                                  <span title="Falta que la encargada apruebe el cálculo para habilitar el envío a SAP" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP</span>
+                                </>
+                              )}
                             </>
                           )}
                           {h.estado === "enviada" && <span className="text-xs px-3 py-1.5 border border-green-200 bg-green-50 text-green-700 rounded-lg font-semibold inline-flex items-center gap-1"><Check size={14} /> SAP #{h.sapEnvio?.docNum} · {h.sapEnvio?.cubetas} cub</span>}
@@ -1803,6 +1832,7 @@ export default function Modulo9() {
                   <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{ord?.absoluteEntry ?? "—"}</div></div>
                   <div><div className="text-gray-400">Ejote neto de la hora</div><div className="font-semibold">{fmt(neto)} kg</div></div>
                 </div>
+                {hora.aprobacion && <div className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Cálculo aprobado por {hora.aprobacion.por}</div>}
                 <div className="bg-gray-50 rounded-lg p-3">
                   <div className="flex items-center justify-between text-xs mb-1"><span className="text-gray-500">kg por cubeta</span><input type="number" value={horaKgCub} onChange={(e) => setHoraKgCub(e.target.value)} className="w-20 text-sm px-2 py-1 border border-gray-200 rounded text-right" /></div>
                   <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-2xl font-bold text-indigo-700">{cubetas.toLocaleString()}</span></div>
