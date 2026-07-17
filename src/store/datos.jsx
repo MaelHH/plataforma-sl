@@ -227,6 +227,16 @@ export const MATERIALES_INICIAL = [
   { id: "MAT5", codigo: "RPC-6419", descripcion: "Contenedor plástico retornable RPC 6419 (60×40×19 cm)", unidad: "Pieza", fraccion: "3923.10.01", diasSalida: 540 },
 ];
 
+// Catálogo EDITABLE de CONTENEDORES para el vaciado por hora (Empaque). Cada uno tiene su
+// TARA (peso vacío en kg) que se resta al pesar el ejote con el contenedor puesto. Se guarda
+// en la BD; el usuario puede editar el peso o agregar nuevos (ej. Cubeta 7 kg).
+export const CONTENEDORES_INICIAL = [
+  { id: "bin", label: "Bin", tara: 36 },
+  { id: "tara", label: "Tara", tara: 2 },
+  { id: "caja", label: "Caja", tara: 0.85 },
+  { id: "cubeta", label: "Cubeta", tara: 7 },
+];
+
 // Estados del trámite de importación
 export const IMPORT_ESTADOS = {
   borrador: { label: "Borrador", color: "bg-gray-100 text-gray-600 border-gray-200" },
@@ -383,6 +393,7 @@ const CONFIG = {
   ubicaciones: { tipo: "kv", seed: UBICACIONES_INICIAL },
   bitacora: { tipo: "col", seed: null },
   materiales: { tipo: "col", seed: MATERIALES_INICIAL },
+  contenedores: { tipo: "col", seed: CONTENEDORES_INICIAL }, // catálogo de contenedores (tara) para vaciado por hora
   importaciones: { tipo: "col", seed: null },
   defectosCalidad: { tipo: "kv", seed: DEFECTOS_POR_CULTIVO_INICIAL },
   inspectoresCalidad: { tipo: "kv", seed: INSPECTORES_QC_INICIAL },
@@ -454,6 +465,7 @@ export function DatosProvider({ children }) {
   const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
   const [bitacora, setBitacora] = useState(guardado.bitacora ?? []); // registro de eventos con timestamp (backend-ready)
   const [materiales, setMateriales] = useState(guardado.materiales ?? MATERIALES_INICIAL); // catálogo de materiales importables
+  const [contenedores, setContenedores] = useState(guardado.contenedores ?? CONTENEDORES_INICIAL); // catálogo de contenedores (tara) para vaciado por hora
   const [importaciones, setImportaciones] = useState(guardado.importaciones ?? []); // importaciones de materiales documentadas
   const [defectosCalidad, setDefectosCalidad] = useState(guardado.defectosCalidad ?? DEFECTOS_POR_CULTIVO_INICIAL); // catálogo editable: producto → defectos
   const [inspectoresCalidad, setInspectoresCalidad] = useState(guardado.inspectoresCalidad ?? INSPECTORES_QC_INICIAL); // inspectores de calidad
@@ -474,11 +486,11 @@ export function DatosProvider({ children }) {
     responsables: setResponsables, lineas: setLineas, movimientos: setMovimientos,
     movMateriales: setMovMateriales,
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
-    materiales: setMateriales, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
+    materiales: setMateriales, contenedores: setContenedores, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
     inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
     zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -542,7 +554,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -562,7 +574,7 @@ export function DatosProvider({ children }) {
     proyectos: Array.isArray(proyectos) ? proyectos : [], setProyectos, // coerción defensiva a array
     proveedores: Array.isArray(proveedores) ? proveedores : [], setProveedores,
     bitacora, setBitacora, registrarEvento,
-    materiales, setMateriales, importaciones, setImportaciones,
+    materiales, setMateriales, contenedores: Array.isArray(contenedores) ? contenedores : CONTENEDORES_INICIAL, setContenedores, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
     fuente, cargando, // estado de conexión al backend
   };

@@ -61,14 +61,9 @@ const kgRecibidosDe = (m) => {
   if (m.recepcion?.destareAplicar) return destareDe(m).neto;
   return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
 };
-// ── Vaciado POR HORA ── contenedores (tara editable) + neto por pesada/hora.
+// ── Vaciado POR HORA ── El catálogo de CONTENEDORES (tara editable) vive en el store
+// (`contenedores`), así el usuario le pone el peso que quiera y se guarda en la BD.
 // Cada pesada se pesa CON el contenedor: neto = bruto − (Nº contenedores × tara).
-const CONTENEDORES = [
-  { tipo: "bin", label: "Bin", tara: 36 },
-  { tipo: "tara", label: "Tara", tara: 2 },
-  { tipo: "caja", label: "Caja", tara: 0.85 },
-  { tipo: "cubeta", label: "Cubeta", tara: 1 },
-];
 const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((parseFloat(p.num) || 1) * (parseFloat(p.tara) || 0)));
 const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
 const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
@@ -109,7 +104,8 @@ const inspeccionConHallazgo = (insp) =>
     INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
-  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, registrarEvento } = useDatos();
+  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, contenedores, setContenedores, registrarEvento } = useDatos();
+  const CONTS = Array.isArray(contenedores) && contenedores.length ? contenedores : [{ id: "bin", label: "Bin", tara: 36 }];
   const dlg = useDialog();
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
@@ -179,23 +175,29 @@ export default function Modulo9() {
 
   // ── Vaciado POR HORA (envío a SAP por hora, anidado al folio) ──
   const [horasMov, setHorasMov] = useState(null);       // folio cuyo panel de horas está abierto
-  const [pesForm, setPesForm] = useState({ bruto: "", tipo: "bin", tara: 36, num: "1" });  // form de pesada
+  const [pesForm, setPesForm] = useState({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1" });  // form de pesada
   const [horaSap, setHoraSap] = useState(null);         // { m, hora } que se manda a SAP
   const [horaKgCub, setHoraKgCub] = useState(6);
   const [horaEnviando, setHoraEnviando] = useState(false);
   const [horaSapError, setHoraSapError] = useState("");
+  const [editCont, setEditCont] = useState(false);     // editor del catálogo de contenedores
+
+  // Catálogo de contenedores (persiste en BD): agregar / editar peso (tara) / quitar.
+  const addCont = () => setContenedores((prev) => [...(Array.isArray(prev) ? prev : []), { id: nuevoId("CONT"), label: "Nuevo", tara: 0 }]);
+  const updCont = (id, campo, val) => setContenedores((prev) => (Array.isArray(prev) ? prev : []).map((c) => (c.id === id ? { ...c, [campo]: val } : c)));
+  const delCont = (id) => setContenedores((prev) => { const arr = (Array.isArray(prev) ? prev : []).filter((c) => c.id !== id); return arr.length ? arr : prev; });
 
   // Actualiza el array de horas de un movimiento (conserva el resto del vaciado).
   const setHoras = (movId, fn) => setMovimientos((prev) => prev.map((m) => (m.id === movId
     ? { ...m, vaciado: { ...baseVac(m), horas: fn(m.vaciado?.horas || []) } } : m)));
 
-  const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: "bin", tara: 36, num: "1" }); };
+  const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1" }); };
   const cerrarPanelHoras = () => setHorasMov(null);
 
   const nuevaHora = (m) => {
-    const cont = CONTENEDORES.find((c) => c.tipo === pesForm.tipo) || CONTENEDORES[0];
+    const cont = CONTS.find((c) => c.id === pesForm.tipo) || CONTS[0];
     const n = (m.vaciado?.horas || []).length + 1;
-    const hora = { id: nuevoId("H"), etiqueta: `Hora ${n}`, contenedorDefault: { tipo: cont.tipo, tara: cont.tara }, pesadas: [], estado: "abierta", creada: new Date().toISOString() };
+    const hora = { id: nuevoId("H"), etiqueta: `Hora ${n}`, contenedorDefault: { tipo: cont.id, tara: cont.tara }, pesadas: [], estado: "abierta", creada: new Date().toISOString() };
     setHoras(m.id, (hs) => [...hs, hora]);
   };
 
@@ -1733,7 +1735,7 @@ export default function Modulo9() {
                           <div className="space-y-1 mb-2">
                             {h.pesadas.map((p) => (
                               <div key={p.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
-                                <span className="text-gray-600 min-w-0">{p.num}× {CONTENEDORES.find((c) => c.tipo === p.tipo)?.label || p.tipo} · bruto {fmt(p.bruto)} − tara {fmt(p.num * p.tara)} = <b className="text-gray-800">{fmt(netoPesada(p))} kg</b> <span className="text-gray-400">({p.hora})</span></span>
+                                <span className="text-gray-600 min-w-0">{p.num}× {CONTS.find((c) => c.id === p.tipo)?.label || p.tipo} · bruto {fmt(p.bruto)} − tara {fmt(p.num * p.tara)} = <b className="text-gray-800">{fmt(netoPesada(p))} kg</b> <span className="text-gray-400">({p.hora})</span></span>
                                 {h.estado !== "enviada" && <button onClick={() => delPesada(m, h.id, p.id)} title="Quitar pesada" className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>}
                               </div>
                             ))}
@@ -1743,8 +1745,8 @@ export default function Modulo9() {
                           <div className="flex items-end gap-2 flex-wrap bg-indigo-50/40 rounded-lg p-2">
                             <div className="flex-1 min-w-[80px]"><label className="text-[10px] text-gray-500 block">Bruto (kg)</label><input type="number" value={pesForm.bruto} onChange={(e) => setPesForm((f) => ({ ...f, bruto: e.target.value }))} className="w-full text-sm px-2 py-1 border border-gray-200 rounded" placeholder="kg" /></div>
                             <div className="w-24"><label className="text-[10px] text-gray-500 block">Contenedor</label>
-                              <select value={pesForm.tipo} onChange={(e) => { const c = CONTENEDORES.find((x) => x.tipo === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="w-full text-sm px-1 py-1 border border-gray-200 rounded bg-white">
-                                {CONTENEDORES.map((c) => <option key={c.tipo} value={c.tipo}>{c.label}</option>)}
+                              <select value={pesForm.tipo} onChange={(e) => { const c = CONTS.find((x) => x.id === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="w-full text-sm px-1 py-1 border border-gray-200 rounded bg-white">
+                                {CONTS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
                               </select>
                             </div>
                             <div className="w-16"><label className="text-[10px] text-gray-500 block">Tara c/u</label><input type="number" value={pesForm.tara} onChange={(e) => setPesForm((f) => ({ ...f, tara: e.target.value }))} className="w-full text-sm px-1 py-1 border border-gray-200 rounded" /></div>
@@ -1771,8 +1773,9 @@ export default function Modulo9() {
               {/* Abrir hora */}
               <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
                 <div className="text-xs text-gray-500">{hayAbierta ? "Cierra la hora abierta para abrir otra." : "Puedes abrir varias horas (incluso en días distintos) hasta acabar el piso."}</div>
-                <div className="flex items-center gap-2">
-                  <select value={pesForm.tipo} onChange={(e) => { const c = CONTENEDORES.find((x) => x.tipo === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="text-xs px-2 py-1.5 border border-gray-200 rounded bg-white">{CONTENEDORES.map((c) => <option key={c.tipo} value={c.tipo}>{c.label} ({c.tara}kg)</option>)}</select>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => setEditCont(true)} title="Editar los pesos (tara) de los contenedores" className="text-xs px-2 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 inline-flex items-center gap-1"><Save size={13} /> Pesos</button>
+                  <select value={pesForm.tipo} onChange={(e) => { const c = CONTS.find((x) => x.id === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="text-xs px-2 py-1.5 border border-gray-200 rounded bg-white">{CONTS.map((c) => <option key={c.id} value={c.id}>{c.label} ({c.tara}kg)</option>)}</select>
                   <button onClick={() => nuevaHora(m)} disabled={hayAbierta} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Abrir hora</button>
                 </div>
               </div>
@@ -1816,6 +1819,32 @@ export default function Modulo9() {
           </div>
         );
       })()}
+
+      {/* ── Editor del catálogo de contenedores (peso/tara editable, se guarda en BD) ── */}
+      {editCont && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4" onClick={() => setEditCont(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[85vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <span className="text-sm font-semibold text-gray-900">Contenedores y su peso (tara)</span>
+              <button onClick={() => setEditCont(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-2 text-xs text-gray-400 border-b border-gray-100">El peso vacío (tara) se resta al pesar el ejote. Ej. Cubeta = 7 kg. Se guarda en tu BD.</div>
+            <div className="px-5 py-3 overflow-y-auto space-y-2">
+              {CONTS.map((c) => (
+                <div key={c.id} className="flex items-center gap-2">
+                  <input value={c.label} onChange={(e) => updCont(c.id, "label", e.target.value)} className="flex-1 min-w-0 text-sm px-2 py-1.5 border border-gray-200 rounded" placeholder="Nombre" />
+                  <div className="inline-flex items-center gap-1"><input type="number" value={c.tara} onChange={(e) => updCont(c.id, "tara", e.target.value)} className="w-20 text-sm px-2 py-1.5 border border-gray-200 rounded text-right" /><span className="text-xs text-gray-400">kg</span></div>
+                  <button onClick={() => delCont(c.id)} disabled={CONTS.length <= 1} title="Quitar" className="text-red-400 hover:text-red-600 disabled:opacity-30 shrink-0"><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+              <button onClick={addCont} className="text-xs px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50 inline-flex items-center gap-1"><Plus size={14} /> Agregar contenedor</button>
+              <button onClick={() => setEditCont(false)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">Listo</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
