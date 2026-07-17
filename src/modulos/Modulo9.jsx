@@ -61,7 +61,23 @@ const kgRecibidosDe = (m) => {
   if (m.recepcion?.destareAplicar) return destareDe(m).neto;
   return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
 };
-const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
+// ── Vaciado POR HORA ── contenedores (tara editable) + neto por pesada/hora.
+// Cada pesada se pesa CON el contenedor: neto = bruto − (Nº contenedores × tara).
+const CONTENEDORES = [
+  { tipo: "bin", label: "Bin", tara: 36 },
+  { tipo: "tara", label: "Tara", tara: 2 },
+  { tipo: "caja", label: "Caja", tara: 0.85 },
+  { tipo: "cubeta", label: "Cubeta", tara: 1 },
+];
+const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((parseFloat(p.num) || 1) * (parseFloat(p.tara) || 0)));
+const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
+const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
+const cubetasDe = (kg, kgPorCubeta = 6) => Math.round((kg || 0) / (kgPorCubeta || 6));
+// Vaciado total = eventos legacy (vaciado simple) + neto de todas las pesadas de todas las horas.
+const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0) + kgHorasDe(m);
+// Modo del folio: si ya tiene horas → "hora"; si ya se mandó el total a SAP → "total". Candado mutuo.
+const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
+const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
 const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
@@ -159,6 +175,72 @@ export default function Modulo9() {
     } finally {
       setSapCargando(false);
     }
+  };
+
+  // ── Vaciado POR HORA (envío a SAP por hora, anidado al folio) ──
+  const [horasMov, setHorasMov] = useState(null);       // folio cuyo panel de horas está abierto
+  const [pesForm, setPesForm] = useState({ bruto: "", tipo: "bin", tara: 36, num: "1" });  // form de pesada
+  const [horaSap, setHoraSap] = useState(null);         // { m, hora } que se manda a SAP
+  const [horaKgCub, setHoraKgCub] = useState(6);
+  const [horaEnviando, setHoraEnviando] = useState(false);
+  const [horaSapError, setHoraSapError] = useState("");
+
+  // Actualiza el array de horas de un movimiento (conserva el resto del vaciado).
+  const setHoras = (movId, fn) => setMovimientos((prev) => prev.map((m) => (m.id === movId
+    ? { ...m, vaciado: { ...baseVac(m), horas: fn(m.vaciado?.horas || []) } } : m)));
+
+  const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: "bin", tara: 36, num: "1" }); };
+  const cerrarPanelHoras = () => setHorasMov(null);
+
+  const nuevaHora = (m) => {
+    const cont = CONTENEDORES.find((c) => c.tipo === pesForm.tipo) || CONTENEDORES[0];
+    const n = (m.vaciado?.horas || []).length + 1;
+    const hora = { id: nuevoId("H"), etiqueta: `Hora ${n}`, contenedorDefault: { tipo: cont.tipo, tara: cont.tara }, pesadas: [], estado: "abierta", creada: new Date().toISOString() };
+    setHoras(m.id, (hs) => [...hs, hora]);
+  };
+
+  const addPesada = (m, horaId) => {
+    const bruto = parseFloat(pesForm.bruto) || 0;
+    if (bruto <= 0) return;
+    const num = parseInt(pesForm.num, 10) || 1;
+    const tara = parseFloat(pesForm.tara) || 0;
+    const pes = { id: nuevoId("P"), bruto, tipo: pesForm.tipo, tara, num, neto: Math.max(0, bruto - num * tara), fecha: hoyISO(), hora: ahoraHM() };
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, pesadas: [...(h.pesadas || []), pes] } : h)));
+    setPesForm((f) => ({ ...f, bruto: "" }));   // limpia el bruto, mantiene tipo/tara/num para la siguiente
+  };
+  const delPesada = (m, horaId, pesId) =>
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, pesadas: (h.pesadas || []).filter((p) => p.id !== pesId) } : h)));
+
+  const cerrarHoraFn = async (m, horaId) => {
+    if (!(await dlg.confirm({ title: "Cerrar la hora", message: "¿Seguro que quieres terminar esta hora? Ya no podrás agregar más pesadas (sí podrás corregir antes de mandar a SAP).", confirmText: "Cerrar hora" }))) return;
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, estado: "cerrada", cerradaEn: new Date().toISOString() } : h)));
+  };
+  const reabrirHoraFn = (m, horaId) =>
+    setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId && h.estado === "cerrada" ? { ...h, estado: "abierta", cerradaEn: undefined } : h)));
+
+  const abrirEnvioHora = (m, hora) => { setHoraSapError(""); setHoraKgCub(6); setHoraSap({ m, hora }); };
+  const confirmarEnvioHora = async () => {
+    const m = movimientos.find((x) => x.id === horaSap.m.id) || horaSap.m;         // datos vivos
+    const hora = (m.vaciado?.horas || []).find((h) => h.id === horaSap.hora.id) || horaSap.hora;
+    const ord = ordenSAPde(m);
+    const neto = netoHora(hora);
+    const kgc = parseFloat(horaKgCub) || 6;
+    const cubetas = cubetasDe(neto, kgc);
+    if (!ord) { setHoraSapError("Este folio no tiene orden de fabricación en SAP."); return; }
+    if (!(cubetas > 0)) { setHoraSapError("La cantidad calculada es 0."); return; }
+    setHoraEnviando(true); setHoraSapError("");
+    try {
+      // claveEnvio ÚNICA por hora → idempotencia server-side (no doble conteo aunque se reintente).
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id, claveEnvio: `${m.id}_${hora.id}` });
+      setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id
+        ? { ...h, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
+        : h)));
+      registrarEvento?.({ evento: "recibo_produccion_hora_sap", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+        detalle: `${hora.etiqueta}: ${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden ${ord.absoluteEntry} · SAP #${res.docNum}`,
+        meta: { horaId: hora.id, cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
+      setHoraSap(null);
+    } catch (e) { setHoraSapError(String(e?.message || e)); }
+    finally { setHoraEnviando(false); }
   };
 
   // ── Muestreo de calidad ──
@@ -818,8 +900,13 @@ export default function Modulo9() {
                         </td>
                         <td className="px-3 py-2 text-center align-top">
                           {recK > 0 && !completo && (
-                            <div className="flex flex-col gap-1 items-stretch min-w-[96px]">
-                              <button onClick={() => abrirVaciar(m)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={14} /> Vaciar</span></button>
+                            <div className="flex flex-col gap-1 items-stretch min-w-[110px]">
+                              {usoTotalSAP(m) ? (
+                                <span title="Ya se mandó el TOTAL a SAP — no se puede vaciar por hora (evita doble conteo)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Clock size={14} /> Vaciar por hora</span>
+                              ) : (
+                                <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${(m.vaciado?.horas || []).length})` : ""}</span></button>
+                              )}
+                              <button onClick={() => abrirVaciar(m)} title="Vaciado simple (solo inventario, no manda a SAP)" className="text-xs px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={14} /> Vaciar</span></button>
                               <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                             </div>
                           )}
@@ -1027,6 +1114,8 @@ export default function Modulo9() {
                               <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> Ver</button>
                               {m.recepcion?.sapEnvio ? (
                                 <span title="Recibo de producción enviado a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium"><Check size={14} /> SAP #{m.recepcion.sapEnvio.docNum}</span>
+                              ) : usaHoras(m) ? (
+                                <span title="Este folio se está vaciando POR HORA — el envío del total está bloqueado para no mandar doble a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 text-center"><Clock size={14} /> Por hora</span>
                               ) : ordenSAPde(m) ? (
                                 <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
                               ) : null}
@@ -1584,6 +1673,144 @@ export default function Modulo9() {
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
                 <button onClick={() => setSapMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
                 <button onClick={confirmarEnvioSAP} disabled={sapCargando || !ord || !(cubetas > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{sapCargando ? "Enviando…" : "Confirmar envío a SAP"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Panel: Vaciado POR HORA de un folio ── */}
+      {horasMov && (() => {
+        const m = movimientos.find((x) => x.id === horasMov.id) || horasMov;
+        const horas = m.vaciado?.horas || [];
+        const recibido = kgRecibidosDe(m);
+        const vaciado = kgVaciadosDe(m);
+        const enPiso = kgEnPisoDe(m);
+        const pct = recibido > 0 ? Math.round((vaciado / recibido) * 100) : 0;
+        const excede = recibido > 0 && vaciado > recibido;
+        const cubTot = horas.reduce((a, h) => a + cubetasDe(netoHora(h)), 0);
+        const hayAbierta = horas.some((h) => h.estado === "abierta");
+        const ord = ordenSAPde(m);
+        const netoPreview = Math.max(0, (parseFloat(pesForm.bruto) || 0) - ((parseInt(pesForm.num, 10) || 1) * (parseFloat(pesForm.tara) || 0)));
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={cerrarPanelHoras}>
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Clock size={16} /> Vaciado por hora — Folio {m.folio || m.remision || "—"}</div>
+                  <div className="text-xs text-gray-400 truncate">{ord?.temporada || m.proyecto || ""}{loteDe(m) !== "—" ? ` · ${loteDe(m)}` : ""} · orden SAP {ord?.absoluteEntry ?? "—"}</div>
+                </div>
+                <button onClick={cerrarPanelHoras} className="text-gray-400 hover:text-gray-700 shrink-0"><X size={18} /></button>
+              </div>
+              {/* Avance vs recibido */}
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center justify-between text-xs mb-1 flex-wrap gap-1">
+                  <span className="font-semibold text-gray-700">Vaciado {fmt(vaciado)} / {fmt(recibido)} kg ({pct}%)</span>
+                  <span className="text-gray-500">{cubTot.toLocaleString()} cubetas · en piso {fmt(enPiso)} kg</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                  <div className={`h-full rounded-full ${excede ? "bg-amber-500" : pct >= 100 ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
+                </div>
+                {excede && <div className="text-[11px] text-amber-600 mt-1 inline-flex items-center gap-1"><AlertTriangle size={13} /> Llevas {fmt(vaciado - recibido)} kg MÁS de lo recibido — revisa (a veces llega más; no bloquea).</div>}
+              </div>
+              {/* Horas */}
+              <div className="px-5 py-4 overflow-y-auto space-y-3">
+                {horas.length === 0 && <div className="text-center text-sm text-gray-400 py-6">Aún no hay horas. Abre la primera abajo. ↓</div>}
+                {horas.map((h) => {
+                  const neto = netoHora(h);
+                  const cub = cubetasDe(neto);
+                  const borde = h.estado === "enviada" ? "border-green-200" : h.estado === "cerrada" ? "border-amber-200" : "border-indigo-200";
+                  return (
+                    <div key={h.id} className={`border rounded-xl ${borde}`}>
+                      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-wrap gap-2">
+                        <span className="text-sm font-semibold text-gray-800 inline-flex items-center gap-2">{h.etiqueta}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${h.estado === "enviada" ? "bg-green-50 text-green-700 border-green-200" : h.estado === "cerrada" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>{h.estado === "enviada" ? "Enviada" : h.estado === "cerrada" ? "Cerrada" : "Abierta"}</span>
+                        </span>
+                        <span className="text-xs text-gray-600"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub</span>
+                      </div>
+                      <div className="p-3">
+                        {(h.pesadas || []).length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {h.pesadas.map((p) => (
+                              <div key={p.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
+                                <span className="text-gray-600 min-w-0">{p.num}× {CONTENEDORES.find((c) => c.tipo === p.tipo)?.label || p.tipo} · bruto {fmt(p.bruto)} − tara {fmt(p.num * p.tara)} = <b className="text-gray-800">{fmt(netoPesada(p))} kg</b> <span className="text-gray-400">({p.hora})</span></span>
+                                {h.estado !== "enviada" && <button onClick={() => delPesada(m, h.id, p.id)} title="Quitar pesada" className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {h.estado === "abierta" && (
+                          <div className="flex items-end gap-2 flex-wrap bg-indigo-50/40 rounded-lg p-2">
+                            <div className="flex-1 min-w-[80px]"><label className="text-[10px] text-gray-500 block">Bruto (kg)</label><input type="number" value={pesForm.bruto} onChange={(e) => setPesForm((f) => ({ ...f, bruto: e.target.value }))} className="w-full text-sm px-2 py-1 border border-gray-200 rounded" placeholder="kg" /></div>
+                            <div className="w-24"><label className="text-[10px] text-gray-500 block">Contenedor</label>
+                              <select value={pesForm.tipo} onChange={(e) => { const c = CONTENEDORES.find((x) => x.tipo === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="w-full text-sm px-1 py-1 border border-gray-200 rounded bg-white">
+                                {CONTENEDORES.map((c) => <option key={c.tipo} value={c.tipo}>{c.label}</option>)}
+                              </select>
+                            </div>
+                            <div className="w-16"><label className="text-[10px] text-gray-500 block">Tara c/u</label><input type="number" value={pesForm.tara} onChange={(e) => setPesForm((f) => ({ ...f, tara: e.target.value }))} className="w-full text-sm px-1 py-1 border border-gray-200 rounded" /></div>
+                            <div className="w-12"><label className="text-[10px] text-gray-500 block">Nº</label><input type="number" min="1" value={pesForm.num} onChange={(e) => setPesForm((f) => ({ ...f, num: e.target.value }))} className="w-full text-sm px-1 py-1 border border-gray-200 rounded" /></div>
+                            <div className="text-xs text-gray-600 pb-1.5">= <b className="text-green-700">{fmt(netoPreview)} kg</b></div>
+                            <button onClick={() => addPesada(m, h.id)} disabled={!(parseFloat(pesForm.bruto) > 0)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Agregar</button>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap mt-2 justify-end">
+                          {h.estado === "abierta" && <button onClick={() => cerrarHoraFn(m, h.id)} disabled={(h.pesadas || []).length === 0} className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Cerrar hora</button>}
+                          {h.estado === "cerrada" && (
+                            <>
+                              <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
+                              <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
+                            </>
+                          )}
+                          {h.estado === "enviada" && <span className="text-xs px-3 py-1.5 border border-green-200 bg-green-50 text-green-700 rounded-lg font-semibold inline-flex items-center gap-1"><Check size={14} /> SAP #{h.sapEnvio?.docNum} · {h.sapEnvio?.cubetas} cub</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Abrir hora */}
+              <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-xs text-gray-500">{hayAbierta ? "Cierra la hora abierta para abrir otra." : "Puedes abrir varias horas (incluso en días distintos) hasta acabar el piso."}</div>
+                <div className="flex items-center gap-2">
+                  <select value={pesForm.tipo} onChange={(e) => { const c = CONTENEDORES.find((x) => x.tipo === e.target.value); setPesForm((f) => ({ ...f, tipo: e.target.value, tara: c ? c.tara : f.tara })); }} className="text-xs px-2 py-1.5 border border-gray-200 rounded bg-white">{CONTENEDORES.map((c) => <option key={c.tipo} value={c.tipo}>{c.label} ({c.tara}kg)</option>)}</select>
+                  <button onClick={() => nuevaHora(m)} disabled={hayAbierta} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Abrir hora</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Confirmación: mandar UNA hora a SAP ── */}
+      {horaSap && (() => {
+        const m = movimientos.find((x) => x.id === horaSap.m.id) || horaSap.m;
+        const hora = (m.vaciado?.horas || []).find((h) => h.id === horaSap.hora.id) || horaSap.hora;
+        const ord = ordenSAPde(m);
+        const neto = netoHora(hora);
+        const kgc = parseFloat(horaKgCub) || 6;
+        const cubetas = cubetasDe(neto, kgc);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setHoraSap(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-gray-100 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900 w-full"><Send size={16} /> Mandar {hora.etiqueta} a SAP — Folio {m.folio || "—"}</div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><div className="text-gray-400">Temporada</div><div className="font-semibold">{ord?.temporada || "—"}</div></div>
+                  <div><div className="text-gray-400">Rancho</div><div className="font-semibold">{ord?.rancho || "—"}</div></div>
+                  <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{ord?.absoluteEntry ?? "—"}</div></div>
+                  <div><div className="text-gray-400">Ejote neto de la hora</div><div className="font-semibold">{fmt(neto)} kg</div></div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs mb-1"><span className="text-gray-500">kg por cubeta</span><input type="number" value={horaKgCub} onChange={(e) => setHoraKgCub(e.target.value)} className="w-20 text-sm px-2 py-1 border border-gray-200 rounded text-right" /></div>
+                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-2xl font-bold text-indigo-700">{cubetas.toLocaleString()}</span></div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{fmt(neto)} kg ÷ {kgc} = {cubetas} cubetas → suma a "Cantidad completada".</div>
+                </div>
+                {!ord && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este folio no tiene orden de fabricación en SAP.</div>}
+                {horaSapError && <div className="text-[11px] text-red-600">No se pudo enviar: {horaSapError}</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setHoraSap(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={confirmarEnvioHora} disabled={horaEnviando || !ord || !(cubetas > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{horaEnviando ? "Enviando…" : "Confirmar envío a SAP"}</button>
               </div>
             </div>
           </div>
