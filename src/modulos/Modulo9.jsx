@@ -4,6 +4,7 @@ import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban,
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP, me } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
+import InfoTip from "../components/InfoTip";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
 import ColaTabs from "../components/ColaTabs";
@@ -1735,6 +1736,10 @@ export default function Modulo9() {
                   <div className={`h-full rounded-full ${excede ? "bg-amber-500" : pct >= 100 ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
                 </div>
                 {excede && <div className="text-[11px] text-amber-600 mt-1 inline-flex items-center gap-1"><AlertTriangle size={13} /> Llevas {fmt(vaciado - recibido)} kg MÁS de lo recibido — revisa (a veces llega más; no bloquea).</div>}
+                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-gray-500 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
+                  <InfoTip className="text-indigo-400 mt-0.5" width="w-64"><b>¿Cómo se sacan las cubetas?</b><br />1) De cada pesada: <b>neto = bruto − (Nº × peso del contenedor)</b>.<br />2) Cubetas de la hora = <b>neto total ÷ 6 kg</b> (redondeado).<br />Eso es lo que suma a "Cantidad completada" en SAP.</InfoTip>
+                  <span className="leading-snug"><b className="text-gray-700">Fórmula:</b> neto = bruto − (Nº × tara) &nbsp;·&nbsp; <b className="text-gray-700">cubetas = neto ÷ 6 kg</b> (redondeado). Cambia los 6 kg/cubeta al mandar a SAP.</span>
+                </div>
               </div>
               {/* Horas */}
               <div className="px-5 py-4 overflow-y-auto space-y-3">
@@ -1749,7 +1754,7 @@ export default function Modulo9() {
                         <span className="text-sm font-semibold text-gray-800 inline-flex items-center gap-2">{h.etiqueta}
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${h.estado === "enviada" ? "bg-green-50 text-green-700 border-green-200" : h.estado === "cerrada" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>{h.estado === "enviada" ? "Enviada" : h.estado === "cerrada" ? "Cerrada" : "Abierta"}</span>
                         </span>
-                        <span className="text-xs text-gray-600"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub</span>
+                        <span className="text-xs text-gray-600 inline-flex items-center gap-1"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub<InfoTip>{fmt(neto)} kg ÷ 6 kg/cubeta = <b>{cub} cubetas</b> (redondeado). Es lo que se manda a SAP.</InfoTip></span>
                       </div>
                       <div className="p-3">
                         {(h.pesadas || []).length > 0 && (
