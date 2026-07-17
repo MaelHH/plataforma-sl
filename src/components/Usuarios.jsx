@@ -58,8 +58,10 @@ export default function Usuarios({ onClose }) {
     return () => { vivo = false; };
   }, []);
 
-  const abrirNuevo = () => { setError(""); setForm({ modo: "nuevo", id: null, email: "", full_name: "", telefono: "", tipo_usuario_id: tipoDefault(), password: "", confirm: "" }); };
-  const abrirEditar = (u) => { setError(""); setForm({ modo: "editar", id: u.id, email: u.email, full_name: u.full_name || "", telefono: u.telefono || "", tipo_usuario_id: u.tipo_usuario_id || tipoDefault(), password: "", confirm: "" }); };
+  // Refresca los roles (pueden haber cambiado en la pestaña "Roles y permisos").
+  const refrescarTipos = () => getTiposUsuario().then(setTipos).catch(() => {});
+  const abrirNuevo = () => { setError(""); refrescarTipos(); setForm({ modo: "nuevo", id: null, email: "", full_name: "", telefono: "", tipo_usuario_id: tipoDefault(), password: "", confirm: "" }); };
+  const abrirEditar = (u) => { setError(""); refrescarTipos(); setForm({ modo: "editar", id: u.id, email: u.email, full_name: u.full_name || "", telefono: u.telefono || "", tipo_usuario_id: u.tipo_usuario_id || tipoDefault(), password: "", confirm: "" }); };
 
   const guardar = async () => {
     const f = form;
@@ -116,7 +118,7 @@ export default function Usuarios({ onClose }) {
 
         {/* Pestañas: Usuarios / Roles y permisos */}
         <div className="px-6 pt-3 flex gap-1 border-b border-gray-100">
-          <button onClick={() => setVista("usuarios")} className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 border-b-2 -mb-px ${vista === "usuarios" ? "border-blue-600 text-blue-700 font-semibold" : "border-transparent text-gray-500 hover:text-gray-700"}`}><Users size={15} /> Usuarios</button>
+          <button onClick={() => { setVista("usuarios"); refrescarTipos(); }} className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 border-b-2 -mb-px ${vista === "usuarios" ? "border-blue-600 text-blue-700 font-semibold" : "border-transparent text-gray-500 hover:text-gray-700"}`}><Users size={15} /> Usuarios</button>
           <button onClick={() => setVista("roles")} className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 border-b-2 -mb-px ${vista === "roles" ? "border-blue-600 text-blue-700 font-semibold" : "border-transparent text-gray-500 hover:text-gray-700"}`}><ShieldCheck size={15} /> Roles y permisos</button>
         </div>
 
