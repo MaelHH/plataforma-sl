@@ -90,6 +90,13 @@ export const getTiposUsuario = () => req("GET", "/api/tipos-usuario");
 export const crearUsuario = (body) => req("POST", "/api/usuarios", body);
 export const actualizarUsuario = (id, body) => req("PUT", `/api/usuarios/${encodeURIComponent(id)}`, body);
 export const cambiarActivoUsuario = (id, esActivo) => req("PATCH", `/api/usuarios/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
+
+// ── Roles y permisos (RBAC) ──
+export const crearTipoUsuario = (body) => req("POST", "/api/tipos-usuario", body);
+export const actualizarTipoUsuario = (id, body) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}`, body);
+export const getPermisos = () => req("GET", "/api/permisos");
+export const getRolPermisos = (id) => req("GET", `/api/tipos-usuario/${encodeURIComponent(id)}/permisos`);
+export const putRolPermisos = (id, codigos) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}/permisos`, { codigos });
 // El endpoint /api/auth/token suele esperar form-urlencoded (OAuth2PasswordRequestForm).
 export async function login(username, password) {
   const body = new URLSearchParams({ username, password });

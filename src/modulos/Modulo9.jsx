@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
-import { reciboProduccionSAP, me } from "../store/api";
+import { reciboProduccionSAP } from "../store/api";
+import { useAuth } from "../store/auth";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
@@ -182,17 +183,16 @@ export default function Modulo9() {
   const [horaEnviando, setHoraEnviando] = useState(false);
   const [horaSapError, setHoraSapError] = useState("");
   const [editCont, setEditCont] = useState(false);     // editor del catálogo de contenedores
-  const [usuarioActual, setUsuarioActual] = useState(null);   // quién está logueado (para auditar la aprobación)
-  useEffect(() => { let vivo = true; me().then((u) => { if (vivo) setUsuarioActual(u); }).catch(() => {}); return () => { vivo = false; }; }, []);
-
-  // CANDADO POR ROL — apartado delicado (envío a SAP): SOLO la encargada de "estatus mayor"
-  // (gerente/admin) puede APROBAR el cálculo. La capturista (usuario) mete kilos y cierra la
-  // hora, pero NO puede aprobarse sola; una vez aprobado por la encargada, cualquiera (incluida
-  // la capturista) puede mandar esa hora a SAP. La aprobación se guarda en BD con el nombre del
-  // usuario que aprobó (es responsable de esa hora). Ver [[sap-reglas-garantia]].
-  const ROLES_APRUEBAN = ["gerente", "admin"];
-  const rolActual = (usuarioActual?.tipo_nombre || "").toLowerCase();
-  const puedeAprobar = ROLES_APRUEBAN.includes(rolActual);
+  // CANDADO POR PERMISO (RBAC) — apartado delicado (envío a SAP):
+  //  - APROBAR el cálculo → solo quien tenga `empaque.vaciado.aprobar` (la encargada). La
+  //    capturista mete kilos y cierra la hora, pero NO puede aprobarse sola.
+  //  - MANDAR a SAP → `empaque.vaciado.enviar_sap` (la capturista puede, pero solo tras aprobar).
+  //  - CAPTURAR el vaciado → `empaque.vaciado.editar`.
+  // La aprobación se guarda en BD con el nombre del usuario que aprobó. Ver [[sap-reglas-garantia]].
+  const { usuario: usuarioActual, can } = useAuth();
+  const puedeAprobar = can("empaque.vaciado.aprobar");
+  const puedeEnviarSap = can("empaque.vaciado.enviar_sap");
+  const puedeEditarVaciado = can("empaque.vaciado.editar");
 
   // Aprobación del cálculo (2ª persona): la encargada revisa y confirma que el cálculo es
   // correcto ANTES de habilitar el envío a SAP. Se registra quién aprobó y cuándo.
@@ -940,6 +940,9 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-center align-top">
                           {recK > 0 && !completo && (
                             <div className="flex flex-col gap-1 items-stretch min-w-[110px]">
+                              {!puedeEditarVaciado ? (
+                                <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
+                              ) : (<>
                               {usoTotalSAP(m) ? (
                                 <span title="Ya se mandó el TOTAL a SAP — no se puede vaciar por hora (evita doble conteo)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Clock size={14} /> Vaciar por hora</span>
                               ) : (
@@ -947,6 +950,7 @@ export default function Modulo9() {
                               )}
                               <button onClick={() => abrirVaciar(m)} title="Vaciado simple (solo inventario, no manda a SAP)" className="text-xs px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={14} /> Vaciar</span></button>
                               <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
+                              </>)}
                             </div>
                           )}
                           {completo && (
@@ -1156,7 +1160,11 @@ export default function Modulo9() {
                               ) : usaHoras(m) ? (
                                 <span title="Este folio se está vaciando POR HORA — el envío del total está bloqueado para no mandar doble a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 text-center"><Clock size={14} /> Por hora</span>
                               ) : ordenSAPde(m) ? (
-                                <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
+                                puedeEnviarSap ? (
+                                  <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
+                                ) : (
+                                  <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"><Ban size={14} /> Sin permiso SAP</span>
+                                )
                               ) : null}
                               {m.recepcion?.sapEnvio ? (
                                 <span title="No se puede reabrir: el recibo ya está en SAP" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
@@ -1803,7 +1811,11 @@ export default function Modulo9() {
                               {h.aprobacion && <span className="text-[11px] text-green-700 inline-flex items-center gap-1 mr-auto"><Check size={13} /> Aprobado por {h.aprobacion.por}</span>}
                               <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
                               {h.aprobacion ? (
-                                <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
+                                puedeEnviarSap ? (
+                                  <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
+                                ) : (
+                                  <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Ban size={13} /> Sin permiso para enviar a SAP</span>
+                                )
                               ) : (
                                 <>
                                   {puedeAprobar ? (

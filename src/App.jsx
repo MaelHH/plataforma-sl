@@ -9,6 +9,7 @@ import {
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
 import { DialogProvider, useDialog } from "./components/Dialog";
+import { AuthProvider, useAuth } from "./store/auth";
 import { getToken, setToken, me } from "./store/api";
 
 // Indicador de conexión al backend (verde = backend, ámbar = modo local).
@@ -39,22 +40,24 @@ const Modulo14 = lazy(() => import("./modulos/Modulo14"));
 
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
+// `key`: clave estable del módulo para permisos (empata con MODULOS en el backend
+// src/auth/catalogo_permisos.py). El menú se filtra por el permiso `<key>.ver`.
 const MODULOS = [
-  { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: LayoutDashboard, desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
-  { id: 14, nombre: "Solicitud de Trailer", sub: "Encargado de Campo", icono: Megaphone, desc: "El encargado de campo levanta la necesidad de trailer: responsable, fecha de corte, temporada/rancho (de SAP), taras cortadas, cantidad de trailers y hora estimada. Se marca 'cumplida' cuando se atiende." },
-  { id: 13, nombre: "Movimiento Materiales", sub: "Materiales", icono: Boxes, desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
-  { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: Sprout, desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
-  { id: 9, nombre: "Empaque", sub: "Empaque", icono: PackageOpen, desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
-  { id: 1, nombre: "Programa Semanal", sub: "José Carlos", icono: ClipboardList, desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
-  { id: 2, nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: Truck, desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
-  { id: 3, nombre: "Tablero de Tráfico", sub: "Mónica", icono: LayoutGrid, desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
-  { id: 4, nombre: "Evidencias de Carga", sub: "Francisco", icono: Camera, desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
-  { id: 5, nombre: "Embarques", sub: "Daniel / Cristina", icono: PackageCheck, desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
-  { id: 6, nombre: "Consolidado y Fletes", sub: "Cristina", icono: DollarSign, desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
-  { id: 7, nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: Radar, desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
-  { id: 12, nombre: "QC - Bodegas", sub: "Control de Calidad", icono: FlaskConical, desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
-  { id: 10, nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: Container, desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
-  { id: 11, nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: FileText, desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
+  { id: 0, key: "dashboard", nombre: "Dashboard", sub: "Dirección / Gerencia", icono: LayoutDashboard, desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
+  { id: 14, key: "trailer", nombre: "Solicitud de Trailer", sub: "Encargado de Campo", icono: Megaphone, desc: "El encargado de campo levanta la necesidad de trailer: responsable, fecha de corte, temporada/rancho (de SAP), taras cortadas, cantidad de trailers y hora estimada. Se marca 'cumplida' cuando se atiende." },
+  { id: 13, key: "materiales", nombre: "Movimiento Materiales", sub: "Materiales", icono: Boxes, desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
+  { id: 8, key: "campo", nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: Sprout, desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
+  { id: 9, key: "empaque", nombre: "Empaque", sub: "Empaque", icono: PackageOpen, desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
+  { id: 1, key: "programa", nombre: "Programa Semanal", sub: "José Carlos", icono: ClipboardList, desc: "Planeación semanal: presentaciones por cultivo y cajas por día." },
+  { id: 2, key: "calculo", nombre: "Cálculo de Trailers", sub: "Kiko / Alfonso", icono: Truck, desc: "Calcula cuántos trailers se necesitan (contratos + mercado abierto) y genera el requerimiento que recibe Mónica." },
+  { id: 3, key: "trafico", nombre: "Tablero de Tráfico", sub: "Mónica", icono: LayoutGrid, desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
+  { id: 4, key: "evidencias", nombre: "Evidencias de Carga", sub: "Francisco", icono: Camera, desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
+  { id: 5, key: "embarques", nombre: "Embarques", sub: "Daniel / Cristina", icono: PackageCheck, desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
+  { id: 6, key: "fletes", nombre: "Consolidado y Fletes", sub: "Cristina", icono: DollarSign, desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
+  { id: 7, key: "monitoreo", nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: Radar, desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
+  { id: 12, key: "qc", nombre: "QC - Bodegas", sub: "Control de Calidad", icono: FlaskConical, desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
+  { id: 10, key: "importaciones", nombre: "Importaciones de Materiales", sub: "Comercio Exterior", icono: Container, desc: "Documenta la importación temporal de materiales y controla la fecha límite de salida (sin impuesto/multa)." },
+  { id: 11, key: "documentos", nombre: "Documentos / Impresiones", sub: "Expedientes en PDF", icono: FileText, desc: "Centro de impresión de expedientes en PDF: por Remisión (campo) y por Flete (exportación)." },
 ];
 
 // Red de seguridad: si un módulo truena, muestra el error y deja seguir navegando.
@@ -80,8 +83,16 @@ function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
   const [verUsuarios, setVerUsuarios] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);   // drawer del menú en móvil
-  const modActivo = MODULOS.find((m) => m.id === moduloActivo);
+  const { can, cargando: cargandoAuth } = useAuth();
   const dlg = useDialog();
+
+  // Solo los módulos que el usuario puede VER (permiso `<key>.ver`).
+  const modulosVisibles = MODULOS.filter((m) => can(`${m.key}.ver`));
+  // Módulo mostrado: el activo si es visible; si no, el primero permitido (derivado, sin tocar
+  // estado → evita set-state-in-effect). -1 = ninguno visible.
+  const activoVisible = modulosVisibles.some((m) => m.id === moduloActivo);
+  const idActivo = activoVisible ? moduloActivo : (modulosVisibles[0]?.id ?? -1);
+  const modActivo = MODULOS.find((m) => m.id === idActivo);
 
   const confirmarSalir = async () => {
     if (await dlg.confirm({ title: "Cerrar sesión", message: "¿Seguro que quieres cerrar la sesión?", confirmText: "Cerrar sesión", danger: true })) onLogout();
@@ -106,12 +117,12 @@ function AppAutenticada({ onLogout }) {
             <button onClick={() => setMenuAbierto(false)} className="md:hidden text-gray-400 hover:text-gray-700 shrink-0" aria-label="Cerrar menú"><X size={18} /></button>
           </div>
           <nav className="flex-1 p-2 overflow-y-auto">
-            {MODULOS.map((m) => (
+            {modulosVisibles.map((m) => (
               <button
                 key={m.id}
                 onClick={() => seleccionar(m.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-1 transition-colors ${
-                  moduloActivo === m.id
+                  idActivo === m.id
                     ? "bg-blue-50 text-blue-700 font-semibold"
                     : "text-gray-600 hover:bg-gray-50"
                 }`}
@@ -119,7 +130,7 @@ function AppAutenticada({ onLogout }) {
                 <m.icono size={18} className="shrink-0" />
                 <div className="text-left leading-tight min-w-0">
                   <div className="truncate">{m.nombre}</div>
-                  <div className={`text-xs font-normal truncate ${moduloActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
+                  <div className={`text-xs font-normal truncate ${idActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
                 </div>
               </button>
             ))}
@@ -128,7 +139,7 @@ function AppAutenticada({ onLogout }) {
             <EstadoConexion />
             <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
-              <button onClick={() => { setVerUsuarios(true); setMenuAbierto(false); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
+              {can("usuarios.administrar") && <button onClick={() => { setVerUsuarios(true); setMenuAbierto(false); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>}
               <button onClick={confirmarSalir} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
@@ -144,31 +155,43 @@ function AppAutenticada({ onLogout }) {
           </div>
 
           <div className="p-4 md:p-8 w-full max-w-6xl mx-auto">
-            {modActivo?.desc && (
-              <div className="mb-4 flex items-start gap-2 text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
-                <modActivo.icono size={16} className="shrink-0 mt-0.5 text-gray-700" />
-                <span><b className="text-gray-900">{modActivo.nombre}.</b> {modActivo.desc}</span>
+            {cargandoAuth ? (
+              <div className="text-sm text-gray-400 py-10 text-center">Cargando permisos…</div>
+            ) : modulosVisibles.length === 0 ? (
+              <div className="max-w-md mx-auto mt-10 text-center bg-white border border-gray-200 rounded-2xl p-8">
+                <AlertTriangle size={28} className="mx-auto text-amber-500 mb-2" />
+                <div className="text-base font-semibold text-gray-900 mb-1">Sin módulos asignados</div>
+                <div className="text-sm text-gray-500">Tu usuario aún no tiene acceso a ningún módulo. Contacta al administrador para que te asigne un rol con permisos.</div>
               </div>
-            )}
-            <ErrorBoundary key={moduloActivo}>
-              <Suspense fallback={<div className="text-sm text-gray-400 py-10 text-center">Cargando módulo…</div>}>
-                {moduloActivo === 0 && <Dashboard />}
-                {moduloActivo === 1 && <Modulo1 />}
-                {moduloActivo === 2 && <Modulo2 />}
-                {moduloActivo === 3 && <Modulo3 />}
-                {moduloActivo === 4 && <Modulo4 />}
-                {moduloActivo === 5 && <Modulo5 />}
-                {moduloActivo === 6 && <Modulo6 />}
-                {moduloActivo === 7 && <Modulo7 />}
-                {moduloActivo === 8 && <Modulo8 />}
-                {moduloActivo === 9 && <Modulo9 />}
-                {moduloActivo === 10 && <Modulo10 />}
-                {moduloActivo === 11 && <Modulo11 />}
-                {moduloActivo === 12 && <Modulo12 />}
-                {moduloActivo === 13 && <Modulo13 />}
-                {moduloActivo === 14 && <Modulo14 />}
-              </Suspense>
-            </ErrorBoundary>
+            ) : modActivo ? (
+              <>
+                {modActivo?.desc && (
+                  <div className="mb-4 flex items-start gap-2 text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                    <modActivo.icono size={16} className="shrink-0 mt-0.5 text-gray-700" />
+                    <span><b className="text-gray-900">{modActivo.nombre}.</b> {modActivo.desc}</span>
+                  </div>
+                )}
+                <ErrorBoundary key={idActivo}>
+                  <Suspense fallback={<div className="text-sm text-gray-400 py-10 text-center">Cargando módulo…</div>}>
+                    {idActivo === 0 && <Dashboard />}
+                    {idActivo === 1 && <Modulo1 />}
+                    {idActivo === 2 && <Modulo2 />}
+                    {idActivo === 3 && <Modulo3 />}
+                    {idActivo === 4 && <Modulo4 />}
+                    {idActivo === 5 && <Modulo5 />}
+                    {idActivo === 6 && <Modulo6 />}
+                    {idActivo === 7 && <Modulo7 />}
+                    {idActivo === 8 && <Modulo8 />}
+                    {idActivo === 9 && <Modulo9 />}
+                    {idActivo === 10 && <Modulo10 />}
+                    {idActivo === 11 && <Modulo11 />}
+                    {idActivo === 12 && <Modulo12 />}
+                    {idActivo === 13 && <Modulo13 />}
+                    {idActivo === 14 && <Modulo14 />}
+                  </Suspense>
+                </ErrorBoundary>
+              </>
+            ) : null}
           </div>
         </div>
       </div>
@@ -207,7 +230,11 @@ function AppGate() {
     );
   }
   if (!auth) return <Login onOk={() => setAuth(true)} />;
-  return <AppAutenticada onLogout={cerrarSesion} />;
+  return (
+    <AuthProvider>
+      <AppAutenticada onLogout={cerrarSesion} />
+    </AuthProvider>
+  );
 }
 
 export default function App() {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, Pencil, Ban, CircleCheck, Eye, EyeOff, X, Loader2 } from "lucide-react";
+import { Users, UserPlus, Pencil, Ban, CircleCheck, Eye, EyeOff, X, Loader2, ShieldCheck } from "lucide-react";
 import { getUsuarios, getTiposUsuario, crearUsuario, actualizarUsuario, cambiarActivoUsuario } from "../store/api";
+import RolesPermisos from "./RolesPermisos";
 
 function msgError(e) {
   const s = String(e?.message || e);
@@ -37,6 +38,7 @@ export default function Usuarios({ onClose }) {
   const [error, setError] = useState("");
   const [form, setForm] = useState(null);       // null = cerrado | { modo, id, ...campos }
   const [guardando, setGuardando] = useState(false);
+  const [vista, setVista] = useState("usuarios");  // "usuarios" | "roles"
 
   const tipoDefault = () => (tipos.find((t) => t.nombre === "usuario") || tipos[0])?.id ?? "";
 
@@ -103,13 +105,24 @@ export default function Usuarios({ onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={abrirNuevo} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              <UserPlus size={15} /> Nuevo usuario
-            </button>
+            {vista === "usuarios" && (
+              <button onClick={abrirNuevo} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <UserPlus size={15} /> Nuevo usuario
+              </button>
+            )}
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1"><X size={18} /></button>
           </div>
         </div>
 
+        {/* Pestañas: Usuarios / Roles y permisos */}
+        <div className="px-6 pt-3 flex gap-1 border-b border-gray-100">
+          <button onClick={() => setVista("usuarios")} className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 border-b-2 -mb-px ${vista === "usuarios" ? "border-blue-600 text-blue-700 font-semibold" : "border-transparent text-gray-500 hover:text-gray-700"}`}><Users size={15} /> Usuarios</button>
+          <button onClick={() => setVista("roles")} className={`inline-flex items-center gap-1.5 text-sm px-3 py-2 border-b-2 -mb-px ${vista === "roles" ? "border-blue-600 text-blue-700 font-semibold" : "border-transparent text-gray-500 hover:text-gray-700"}`}><ShieldCheck size={15} /> Roles y permisos</button>
+        </div>
+
+        {vista === "roles" ? (
+          <div className="px-6 py-4"><RolesPermisos /></div>
+        ) : (
         <div className="px-6 py-4">
           {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{error}</div>}
 
@@ -161,6 +174,7 @@ export default function Usuarios({ onClose }) {
             </div>
           </div>
         </div>
+        )}
 
         <div className="px-6 py-3 border-t border-gray-100 flex justify-end">
           <button onClick={onClose} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cerrar</button>
