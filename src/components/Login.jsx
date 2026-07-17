@@ -27,8 +27,7 @@ export default function Login({ onOk }) {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <form onSubmit={submit} className="bg-white border border-gray-200 rounded-2xl shadow-sm w-full max-w-sm p-6 space-y-4">
         <div className="text-center">
-          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold mx-auto mb-2">SL</div>
-          <h1 className="text-lg font-semibold text-gray-900">SL Logística</h1>
+          <img src="/logo/png/logo-apilado-light-640.png" alt="SL Logística" className="h-20 w-auto mx-auto mb-2 object-contain" />
           <p className="text-xs text-gray-500">Inicia sesión para continuar</p>
         </div>
         <div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Calculator, Check, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import * as XLSX from "xlsx";
+import { Calculator, Check, Send, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { useDatos, ORIGEN, TOTAL, calcularDias, etiquetaSemana, moverSemana, ahora } from "../store/datos";
 
 const PT = TOTAL;
@@ -160,6 +161,43 @@ export default function Modulo2() {
     setTimeout(() => setGenerado(false), 2500);
   };
 
+  // ── Exportar a Excel: el requerimiento visible (contratos + mercado abierto), respetando el filtro de día ──
+  const exportarExcel = () => {
+    const filas = [];
+    contratos.forEach((r) => {
+      filas.push({
+        Tipo: "Contrato",
+        Fecha: r.fecha || "",
+        Origen: ORIGEN,
+        Destino: r.dest || "",
+        Cultivo: labelCultivo(r.cultivo),
+        Parrillas: r.parrillas || 0,
+        Trailers: r.trailers || 0,
+      });
+    });
+    fechasMA.forEach((f) => {
+      DESTINOS_MA.forEach((d) => {
+        const sol = parseInt(maData[f + "||" + d]) || 0;
+        if (sol <= 0) return;
+        filas.push({
+          Tipo: "M. Abierto",
+          Fecha: f,
+          Origen: ORIGEN,
+          Destino: d,
+          Cultivo: "",
+          Parrillas: "",
+          Trailers: sol,
+        });
+      });
+    });
+    if (filas.length === 0) return; // sin filas: no truena, simplemente no exporta
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Trailers");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Calculo_Trailers_${hoy}.xlsx`);
+  };
+
   const TH = "text-xs font-medium px-2 py-2 border-b border-gray-100 text-left";
   const TD = "px-2 py-2 border-b border-gray-100 text-xs";
 
@@ -172,15 +210,18 @@ export default function Modulo2() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h1 className="text-base font-semibold text-gray-900">Cálculo de Trailers</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Kiko / Alfonso · convierte el programa en trailers necesarios</p>
+      <div className="mb-4 flex items-start justify-between flex-wrap gap-2 gap-y-3">
+        <div>
+          <h1 className="text-base font-semibold text-gray-900">Cálculo de Trailers</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Kiko / Alfonso · convierte el programa en trailers necesarios</p>
+        </div>
+        <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel</button>
       </div>
 
       {/* Selector de semana */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex flex-wrap items-center justify-center sm:justify-between gap-2">
         <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1"><ChevronLeft size={16} /> Anterior</span></button>
-        <div className="text-center">
+        <div className="text-center min-w-0 order-first w-full sm:order-none sm:w-auto">
           <div className="text-xs text-gray-400">Semana</div>
           <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
           <input type="date" value={semana} onChange={(e) => { if (e.target.value) setSemana(e.target.value); }}
@@ -295,7 +336,7 @@ export default function Modulo2() {
       </div>
 
       {/* Generar requerimiento a Mónica */}
-      <div className="mt-6 flex items-center justify-between bg-white border border-gray-200 rounded-xl p-4">
+      <div className="mt-6 flex items-center justify-between flex-wrap gap-2 gap-y-3 bg-white border border-gray-200 rounded-xl p-4">
         <div>
           <div className="text-sm font-semibold text-gray-800">Enviar requerimiento a Mónica</div>
           <div className="text-xs text-gray-500 mt-0.5">Junta contratos + mercado abierto de esta semana y los manda al Módulo 3</div>

@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { User, Users, Truck, DollarSign, Pencil, Thermometer, AlertTriangle, Check, Trash2, ClipboardList, Bell, Inbox, FileText, PackageOpen, X, Save, Plus, Package, Calendar, ChevronLeft, ChevronRight, Camera } from "lucide-react";
 import SearchSelect from "../components/SearchSelect";
+import { comprimirImagen } from "../utils/imagen";
+import { getFotosTrailer, subirFotoTrailer, borrarFotoTrailer, borrarFotosDeTrailer } from "../store/api";
 import ColaTabs from "../components/ColaTabs";
 import { useDialog } from "../components/Dialog";
 import { generarPrecargaPDF } from "./reportes/reportePrecarga";
@@ -16,6 +18,36 @@ export default function Modulo3() {
   const [diaFil, setDiaFil] = useState(dias[0]);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
+  const [fotoZoom, setFotoZoom] = useState(null);      // foto ampliada (lightbox)
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [fotoError, setFotoError] = useState("");
+  // Fotos de la ficha guardadas EN LA NUBE (Cloudinary): la BD solo guarda la URL.
+  // fotosFicha = [{ id, url, publicId }]. Se cargan al abrir la ficha del trailer.
+  const [fotosFicha, setFotosFicha] = useState([]);
+  const cargarFotosFicha = async (trailerId) => {
+    setFotoError("");
+    try { const fs = await getFotosTrailer(trailerId); setFotosFicha(Array.isArray(fs) ? fs : []); }
+    catch { setFotosFicha([]); }
+  };
+  // Sube fotos: comprime en el navegador → backend las sube a Cloudinary → guarda la URL.
+  const agregarFotos = async (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type && f.type.startsWith("image/"));
+    if (!files.length || !modal) return;
+    setSubiendoFoto(true); setFotoError("");
+    try {
+      for (const f of files) {
+        try {
+          const dataUrl = await comprimirImagen(f);
+          const foto = await subirFotoTrailer(modal, dataUrl);
+          setFotosFicha((prev) => [...prev, foto]);
+        } catch (e) { setFotoError(String(e?.message || e)); }
+      }
+    } finally { setSubiendoFoto(false); }
+  };
+  const quitarFoto = async (foto) => {
+    setFotosFicha((prev) => prev.filter((x) => x.id !== foto.id));   // optimista
+    try { await borrarFotoTrailer(foto.id); } catch { /* si falla, se recarga al reabrir */ }
+  };
   const [catLineas, setCatLineas] = useState(false);
   const [catChoferes, setCatChoferes] = useState(false);
   const [inspTrailer, setInspTrailer] = useState(null); // trailer al que se le hace inspección precarga
@@ -64,12 +96,14 @@ export default function Modulo3() {
     setTrailers((prev) => [...prev, t]);
     setForm({ ...t });
     resetModos();
+    setFotosFicha([]); setFotoError("");   // trailer nuevo: aún sin fotos
     setModal(t.id);
   };
-  const openModal = (t) => { setForm({ ...t }); resetModos(); setModal(t.id); };
+  const openModal = (t) => { setForm({ ...t }); resetModos(); setFotosFicha([]); setFotoError(""); cargarFotosFicha(t.id); setModal(t.id); };
   const delTrailer = async (id) => {
     if (await dlg.confirm({ title: "Eliminar trailer", message: "¿Eliminar este trailer? Esta acción no se puede deshacer.", confirmText: "Eliminar", danger: true })) {
       setTrailers((prev) => prev.filter((t) => t.id !== id));
+      borrarFotosDeTrailer(id).catch(() => {});   // limpia sus fotos de Cloudinary + BD (best-effort)
     }
   };
 
@@ -262,20 +296,20 @@ export default function Modulo3() {
     const has = t.chofer || t.placaTracto || t.linea;
     return (
       <div className={`rounded-xl border ${s.card} p-2.5`}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${s.dot}`}></div>
-            <span className="text-xs font-semibold text-gray-700">{s.label}</span>
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`}></div>
+            <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{s.label}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-400">{(t.origen || ORIGEN).split(",")[0]}</span>
-            <span className="text-gray-300 text-xs">→</span>
+          <div className="flex items-center gap-1 min-w-0 ml-auto">
+            <span className="text-xs text-gray-400 whitespace-nowrap truncate max-w-[90px]">{(t.origen || ORIGEN).split(",")[0]}</span>
+            <span className="text-gray-300 text-xs shrink-0">→</span>
             {showDestSel ? (
               <SearchSelect value={t.dest || "Sin asignar"} onChange={(v) => setDest(t.id, v)}
-                className={`min-w-[120px] text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}
+                className={`min-w-[110px] text-xs font-medium px-1.5 py-0.5 rounded-full border cursor-pointer ${dc}`}
                 options={DESTINOS_ALL.map((d) => ({ value: d, label: d }))} />
             ) : (
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${dc}`}>{t.dest}</span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${dc}`}>{t.dest}</span>
             )}
           </div>
         </div>
@@ -306,7 +340,7 @@ export default function Modulo3() {
             <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-green-100 border border-green-300 text-green-700 rounded-lg font-semibold"><Truck size={14} /> En ruta</span>
           ) : (
             <SearchSelect value={t.status} onChange={(v) => setStatus(t.id, v)}
-              className={`w-44 text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
+              className={`w-full sm:w-44 text-xs px-2 py-1 rounded-lg border font-medium ${t.status === "en_instalaciones" ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-gray-50 border-gray-200 text-gray-600"}`}
               options={[{ value: "esperando", label: "Esperando" }, { value: "en_instalaciones", label: "En instalaciones" }]} />
           )}
         </div>
@@ -322,12 +356,12 @@ export default function Modulo3() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Tablero de Tráfico</h1>
           <p className="text-sm text-gray-500 mt-0.5">Mónica · asignación y seguimiento de trailers</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setCatChoferes(true)} className="inline-flex items-center gap-1 text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200">
             <Users size={14} /> Choferes y unidades
           </button>
@@ -340,9 +374,9 @@ export default function Modulo3() {
       </div>
 
       {/* Selector de semana */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex flex-wrap items-center justify-center sm:justify-between gap-2">
         <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1"><ChevronLeft size={16} /> Anterior</span></button>
-        <div className="text-center">
+        <div className="text-center min-w-0 order-first w-full sm:order-none sm:w-auto">
           <div className="text-xs text-gray-400">Semana</div>
           <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
         </div>
@@ -432,7 +466,7 @@ export default function Modulo3() {
         ))}
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
         {[
           { l: "Solicitados (día)", v: totalSol, c: "text-gray-900" },
           { l: "Sin asignar", v: sinAsignar, c: "text-gray-500" },
@@ -448,9 +482,9 @@ export default function Modulo3() {
 
       {/* Pool */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100 bg-gray-50">
           <span className="text-sm font-semibold text-gray-900">Trailers registrados · {diaFil}</span>
-          <button onClick={addTrailer} className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700"><Plus size={14} /> Registrar trailer</button>
+          <button onClick={addTrailer} className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 whitespace-nowrap shrink-0"><Plus size={14} /> Registrar trailer</button>
         </div>
         {hoy.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-6 italic">Ningún trailer registrado este día</div>
@@ -463,7 +497,7 @@ export default function Modulo3() {
             {listaPool.length === 0 ? (
               <div className="text-xs text-gray-400 text-center py-4 italic">{tabPool === "activos" ? "Sin trailers activos este día." : "Ningún trailer en ruta este día."}</div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">{listaPool.map((t) => <MiniCard key={t.id} t={t} showDestSel={true} />)}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{listaPool.map((t) => <MiniCard key={t.id} t={t} showDestSel={true} />)}</div>
             )}
           </div>
         )}
@@ -500,7 +534,7 @@ export default function Modulo3() {
                   {tD.length === 0 ? (
                     <div className="text-xs text-gray-400 text-center py-3 italic">Sin trailers asignados</div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-2">{tD.map((t) => <MiniCard key={t.id} t={t} showDestSel={false} />)}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">{tD.map((t) => <MiniCard key={t.id} t={t} showDestSel={false} />)}</div>
                   )}
                 </div>
               </div>
@@ -520,7 +554,7 @@ export default function Modulo3() {
             <div className="px-5 py-4 space-y-4">
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Ruta</div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div><label className="text-xs text-gray-500 block mb-0.5">Origen</label>
                     <SearchSelect className={INP} value={form.origen || ORIGEN} onChange={(v) => setForm((f) => ({ ...f, origen: v }))}
                       options={ORIGENES.map((o) => ({ value: o, label: o }))} /></div>
@@ -543,7 +577,7 @@ export default function Modulo3() {
                     <Pencil size={14} /> Capturando línea nueva — se guardará en el catálogo al guardar la ficha
                   </div>
                 )}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className="text-xs text-gray-500 block mb-0.5">Línea</label>
                     <input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.linea || ""} readOnly={!lineaNueva}
                       onChange={(e) => setForm((f) => ({ ...f, linea: e.target.value }))} /></div>
@@ -574,7 +608,7 @@ export default function Modulo3() {
                       <SearchSelect className={INP} value={choferActualId} onChange={(v) => elegirChofer(v)}
                         placeholder="— Selecciona chofer —"
                         options={[...(lineaSel?.choferes || []).map((c) => ({ value: c.id, label: c.nombre })), { value: "__nuevo__", label: "+ Nuevo chofer" }]} />
-                      <div className="grid grid-cols-3 gap-2 mt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer || ""} readOnly={!choferNuevo} placeholder="Nombre"
                           onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.telefono || ""} readOnly={!choferNuevo} placeholder="Teléfono"
@@ -620,12 +654,39 @@ export default function Modulo3() {
                   </div>
                 )}
               </div>
+
+              {/* FOTOS de la ficha del trailer */}
+              <div>
+                <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Fotos</div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {fotosFicha.map((foto, i) => (
+                    <div key={foto.id} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                      <img src={foto.url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover cursor-pointer" onClick={() => setFotoZoom(foto.url)} />
+                      <button onClick={() => quitarFoto(foto)} title="Quitar foto" className="absolute top-0.5 right-0.5 bg-black/50 text-white rounded-full p-0.5 hover:bg-red-600 inline-flex"><X size={12} /></button>
+                    </div>
+                  ))}
+                  <label className="aspect-square rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 cursor-pointer text-[10px] text-center px-1">
+                    {subiendoFoto ? "Subiendo…" : (<><Camera size={18} /><span className="mt-1">Agregar</span></>)}
+                    <input type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={(e) => { agregarFotos(e.target.files); e.target.value = ""; }} />
+                  </label>
+                </div>
+                {fotoError && <div className="text-[10px] text-red-600 mt-1">No se pudo subir: {fotoError}</div>}
+                <div className="text-[10px] text-gray-400 mt-1">Se guardan en la nube (Cloudinary), ligadas a este trailer · toca una foto para verla en grande.</div>
+              </div>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={saveForm} className="text-xs px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Guardar ficha</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Visor de foto ampliada (lightbox) */}
+      {fotoZoom && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4" onClick={() => setFotoZoom(null)}>
+          <img src={fotoZoom} alt="Foto de la ficha" className="max-w-full max-h-full rounded-lg shadow-2xl" />
+          <button onClick={() => setFotoZoom(null)} className="absolute top-4 right-4 text-white/90 hover:text-white inline-flex" aria-label="Cerrar"><X size={26} /></button>
         </div>
       )}
 
@@ -655,7 +716,7 @@ export default function Modulo3() {
               {/* Datos generales (autollenados, editables) */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos del transporte <span className="font-normal text-gray-400 normal-case">— autollenados de la ficha</span></div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className="text-xs text-gray-500 block mb-0.5">Manifiesto</label><input className={INP} value={inspForm.manifiesto} onChange={(e) => updInsp("manifiesto", e.target.value)} placeholder="No." /></div>
                   <div><label className="text-xs text-gray-500 block mb-0.5">Fecha</label><input className={INP} value={inspForm.fecha} onChange={(e) => updInsp("fecha", e.target.value)} /></div>
                   <div><label className="text-xs text-gray-500 block mb-0.5">Destino</label><input className={INP} value={inspForm.destino} onChange={(e) => updInsp("destino", e.target.value)} /></div>
@@ -755,6 +816,7 @@ export default function Modulo3() {
               <button onClick={() => setCatLineas(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -777,6 +839,7 @@ export default function Modulo3() {
                   ))}
                 </tbody>
               </table>
+              </div>
               <button onClick={addLinea} className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar línea</button>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
@@ -801,6 +864,7 @@ export default function Modulo3() {
               {/* Choferes */}
               <div>
                 <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><User size={16} /> Choferes</div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -828,12 +892,14 @@ export default function Modulo3() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <button onClick={() => addSub("choferes")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar chofer</button>
               </div>
 
               {/* Tractos: marca/modelo + placa */}
               <div>
                 <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><Truck size={16} /> Tractos</div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -859,12 +925,14 @@ export default function Modulo3() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <button onClick={() => addSub("tractos")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar tracto</button>
               </div>
 
               {/* Cajas: económico + placa */}
               <div>
                 <div className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 mb-2"><Package size={16} /> Cajas</div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -890,6 +958,7 @@ export default function Modulo3() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <button onClick={() => addSub("cajas")} className="mt-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar caja</button>
               </div>
             </div>

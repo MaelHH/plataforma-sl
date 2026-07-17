@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, X, AlertTriangle, MapPin, Sprout, Boxes, Inbox, Package } from "lucide-react";
+import InfoTip from "../components/InfoTip";
 import { useDatos, nuevoId } from "../store/datos";
-import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { guardarFolioOC } from "../utils/folioOC";
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
-import ControlFletesModal from "../components/ControlFletesModal";
+import ControlFletesPagina from "../components/ControlFletesPagina";
 
 import { hoyISO } from "../utils/fecha";
 
@@ -29,6 +31,7 @@ export default function Modulo8() {
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
+  const [verFletes, setVerFletes] = useState(false);   // página Control de fletes · FRUTA (SAP)
   const [editId, setEditId] = useState(null); // id del movimiento que se está editando (null = nuevo)
   const [catCarga, setCatCarga] = useState(false);
   const [catUbic, setCatUbic] = useState(false);
@@ -104,7 +107,6 @@ export default function Modulo8() {
   }, [catUbic]);
 
   // ── Control de fletes de ACARREO · FRUTA (SAP, solo lectura) → componente compartido ──
-  const [verFletes, setVerFletes] = useState(false);
 
   // ── SAP · Fleteros (proveedores) + Orden de compra de flete (Paso 4) ──
   const [catFleteros, setCatFleteros] = useState(false);
@@ -117,14 +119,17 @@ export default function Modulo8() {
   const [ocItem, setOcItem] = useState("");
   const [ocTax, setOcTax] = useState("");
   const [ocCultivo, setOcCultivo] = useState("");
+  const [ocDepto, setOcDepto] = useState("");    // Departamento (CostingCode3); editable, no siempre "Campo"
   const [ocFecha, setOcFecha] = useState("");   // "Fecha necesaria" (RequiredDate) del flete
   const [ocComentario, setOcComentario] = useState("");
+  const [ocDetalle, setOcDetalle] = useState("");   // "Detalles de artículo" de la línea (POR1.FreeText)
   const [ocCargando, setOcCargando] = useState(false);
   const [ocError, setOcError] = useState("");
   const [ocConfirm, setOcConfirm] = useState(false); // 2do paso: confirmar antes de escribir en SAP
   const [itemsFlete, setItemsFlete] = useState([]);
   const [taxCodes, setTaxCodes] = useState([]);
   const [cultivos, setCultivos] = useState([]);
+  const [departamentos, setDepartamentos] = useState([]);
 
   // Traer fleteros de SAP → upsert al catálogo `proveedores` (por cardCode).
   const cargarProveedoresSAP = async () => {
@@ -160,6 +165,7 @@ export default function Modulo8() {
       if (t) setOcTax(t.Code || "");
     } catch { /* noop */ }
     try { const d = await getCultivosSAP(); setCultivos(d.value || []); } catch { /* noop */ }
+    try { const d = await getDepartamentosSAP(); setDepartamentos(d.value || []); } catch { /* noop */ }
   };
   const abrirOC = (m) => {
     setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax("");
@@ -167,8 +173,11 @@ export default function Modulo8() {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
     const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
     setOcCultivo(r?.cultivo || "");
+    setOcDepto(r?.departamento || m.departamento || "");   // default al del proyecto/rancho (editable)
     setOcFecha(new Date().toISOString().slice(0, 10)); // Fecha necesaria default = hoy (editable)
     setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
+    // "Detalles de artículo" default: acarreo + cultivo + lote (editable). Sin factura/pagar.
+    setOcDetalle([`ACARREO`, r?.cultivo, m.rancho ? `Lote ${m.rancho}` : ""].filter(Boolean).join(" · "));
     setOcMov(m);
     cargarCatalogosOC();
   };
@@ -185,11 +194,13 @@ export default function Modulo8() {
       const res = await crearOrdenCompraSAP({
         cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
         proyecto: m.proyecto || null, cultivo: ocCultivo || r?.cultivo || null, lote: m.rancho || null,
-        departamento: r?.departamento || m.departamento || null, comentario: ocComentario,
+        departamento: ocDepto || r?.departamento || m.departamento || null, comentario: ocComentario,
+        detalle: ocDetalle || null,   // "Detalles de artículo" de la línea (POR1.FreeText)
         requiredDate: ocFecha || null,
         movimientoId: m.id, origen: "movimiento",   // idempotencia: evita doble OC en SAP
       });
       setMovimientos((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: new Date().toISOString() } } : x));
+      await guardarFolioOC(res?.pedido?.docEntry, m.folio);   // el folio del movimiento → Control de Fletes
       setOcMov(null);
     } catch (e) { setOcError(String(e?.message || e)); }
     finally { setOcCargando(false); }
@@ -449,20 +460,58 @@ export default function Modulo8() {
   const ranchosMov = [...new Set(movimientos.map((m) => ranchoDe(m)).filter(Boolean))];
   const hayFiltros = q || fDestino || fRancho;
 
-  // Semáforo $/kg: promedio (sobre todos los movimientos con flete y peso válidos) y
-  // desviación de cada fila. ≤5% verde · ≤10% amarillo · >10% rojo.
-  const costosKg = movimientos
-    .map((m) => { const f = parseFloat(m.flete) || 0; const p = parseFloat(m.pesoBascula) || 0; return f > 0 && p > 0 ? f / p : 0; })
-    .filter((x) => x > 0);
-  const promedioKg = costosKg.length ? costosKg.reduce((a, x) => a + x, 0) / costosKg.length : 0;
-  const semaforoKg = (costo) => {
-    if (!costo || !promedioKg) return null;
-    const desv = Math.abs(costo - promedioKg) / promedioKg * 100;
-    if (desv <= 5) return { cls: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500", desv };
-    if (desv <= 10) return { cls: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500", desv };
-    return { cls: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500", desv };
+  // ── Semáforo $/kg POR RUTA (destino), con umbrales derivados de TUS datos ──
+  // Antes cada flete/kg se comparaba contra un PROMEDIO GLOBAL; con dos niveles de precio (rutas
+  // baratas ~$1.5 y caras ~$3.1) el promedio caía en el hueco y casi todo salía rojo. Ahora cada
+  // flete se compara contra la MEDIANA de $/kg de SU MISMO destino (robusta a extremos), y las
+  // bandas verde/amarillo/rojo se calculan de la dispersión REAL (no un 5/10% inventado).
+  const _mediana = (arr) => {
+    if (!arr.length) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const _kgDe = (m) => { const f = parseFloat(m.flete) || 0; const p = parseFloat(m.pesoBascula) || 0; return f > 0 && p > 0 ? f / p : 0; };
+  // Ruta = origen → destino. A un mismo empaque llegan orígenes muy distintos (distancias
+  // distintas = costo distinto), así que se compara DENTRO de la misma ruta, no solo por destino.
+  const _rutaDe = (m) => `${m.origen || "—"} → ${m.destino || "—"}`;
+  // Mediana de $/kg por ruta = la referencia "normal" de esa ruta.
+  const refKgPorRuta = (() => {
+    const grupos = {};
+    movimientos.forEach((m) => { const c = _kgDe(m); if (c > 0) (grupos[_rutaDe(m)] ||= []).push(c); });
+    const ref = {};
+    for (const [d, arr] of Object.entries(grupos)) ref[d] = { mediana: _mediana(arr), n: arr.length };
+    return ref;
+  })();
+  // Umbrales de color derivados de la dispersión real: la desviación TÍPICA (mediana) vs la ruta.
+  const _desvKg = movimientos.map((m) => {
+    const c = _kgDe(m); const r = refKgPorRuta[_rutaDe(m)];
+    return c > 0 && r && r.mediana > 0 && r.n >= 2 ? Math.abs(c - r.mediana) / r.mediana * 100 : null;
+  }).filter((x) => x != null);
+  const umbralVerde = _desvKg.length ? Math.max(3, Math.round(_mediana(_desvKg))) : 8;  // desviación típica de la ruta
+  const umbralAmarillo = umbralVerde * 2;                                                // el doble = "revisar"
+  const haySemaforo = _desvKg.length > 0;
+  const semaforoKg = (costo, ruta) => {
+    const r = refKgPorRuta[ruta];
+    if (!costo || !r || !r.mediana) return null;
+    if (r.n < 2) return { neutral: true, ref: r.mediana };   // único flete de esa ruta → nada con qué comparar
+    const desv = Math.abs(costo - r.mediana) / r.mediana * 100;
+    if (desv <= umbralVerde) return { cls: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500", desv, ref: r.mediana };
+    if (desv <= umbralAmarillo) return { cls: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500", desv, ref: r.mediana };
+    return { cls: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500", desv, ref: r.mediana };
   };
   const limpiarFiltros = () => { setQ(""); setFDestino(""); setFRancho(""); };
+
+  // Resumen de GASTO del conjunto FILTRADO (por proyecto/temporada, destino, búsqueda):
+  // cajas movidas (Σ bultos), gasto total (Σ flete), $/caja (gasto÷cajas) y $/movida (gasto÷#).
+  const gRes = movsFiltrados.reduce((acc, m) => {
+    acc.cajas += (m.cargaItems || []).reduce((a, it) => a + (parseFloat(it.bultos) || 0), 0);
+    acc.gasto += parseFloat(m.flete) || 0;
+    return acc;
+  }, { cajas: 0, gasto: 0 });
+  const gPorCaja = gRes.cajas > 0 ? gRes.gasto / gRes.cajas : 0;
+  const gPorMovida = movsFiltrados.length > 0 ? gRes.gasto / movsFiltrados.length : 0;
+  const fmt2 = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const lineaActualId = lineaNueva ? "__nueva__" : (lineaSel?.id || "");
   const choferActualId = choferNuevo ? "__nuevo__" : ((lineaSel?.choferes || []).find((c) => c.nombre === form.chofer)?.id || "");
@@ -470,14 +519,17 @@ export default function Modulo8() {
   const cajaActualId = cajaNueva ? "__nueva__" : ((lineaSel?.cajas || []).find((c) => c.placa === form.placaCaja)?.id || "");
   const hayLinea = !!form.linea;
 
+  // Control de fletes (FRUTA): abre una página completa dentro del módulo, con botón "Regresar".
+  if (verFletes) return <ControlFletesPagina tipo="fruta" proyectos={proyectos} onBack={() => setVerFletes(false)} />;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 gap-y-3 mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Movimientos Internos Campo → Empaques</h1>
           <p className="text-sm text-gray-500 mt-0.5">Oscar · manifiesto de carga nacional desde campo</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={() => setCatCarga(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Package size={14} /> Carga</button>
           <button onClick={() => setCatUbic(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><MapPin size={14} /> Ranchos / Empaques</button>
           <button onClick={() => setCatZonas(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><MapPin size={14} /> Zonas</button>
@@ -489,20 +541,20 @@ export default function Modulo8() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap gap-2">
+      <div className="bg-white border border-gray-200 rounded-xl mb-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 rounded-t-xl flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movimientos.length}` : ""})</span>
-            {promedioKg > 0 && (
-              <span className="text-[11px] text-gray-500 flex items-center gap-2">
-                <span>$/kg prom: <b className="text-gray-700">${promedioKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>≤5%</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>≤10%</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>&gt;10%</span>
+            {haySemaforo && (
+              <span className="text-[11px] text-gray-500 flex items-center gap-2 flex-wrap">
+                <span className="text-gray-400">$/kg vs mediana de su ruta:</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>≤{umbralVerde}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>≤{umbralAmarillo}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>&gt;{umbralAmarillo}%</span>
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 flex items-center gap-1"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
             <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
           </div>
@@ -510,10 +562,24 @@ export default function Modulo8() {
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-white">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, rancho, chofer, línea…"
-              className="flex-1 min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
-            <div className="w-44"><SearchSelect className={INP} value={fDestino} onChange={setFDestino} placeholder="Destino: todos" options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
-            <div className="w-44"><SearchSelect className={INP} value={fRancho} onChange={setFRancho} placeholder="Temporada: todas" options={[{ value: "", label: "Temporada: todas" }, ...ranchosMov.map((r) => ({ value: r, label: r }))]} /></div>
+              className="w-full sm:flex-1 sm:min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+            <div className="w-full sm:w-44"><SearchSelect className={INP} value={fDestino} onChange={setFDestino} placeholder="Destino: todos" options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
+            <div className="w-full sm:w-44"><SearchSelect className={INP} value={fRancho} onChange={setFRancho} placeholder="Temporada: todas" options={[{ value: "", label: "Temporada: todas" }, ...ranchosMov.map((r) => ({ value: r, label: r }))]} /></div>
             {hayFiltros && <button onClick={limpiarFiltros} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Limpiar</button>}
+          </div>
+        )}
+        {movsFiltrados.length > 0 && (
+          <div className="px-4 py-3 border-b border-gray-100 bg-white">
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Gasto de acarreo {fRancho ? `· ${fRancho}` : "· todas las temporadas"}{fDestino ? ` · ${fDestino}` : ""}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide">Movimientos</div><div className="text-base font-bold text-gray-800">{movsFiltrados.length.toLocaleString("en-US")}</div></div>
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide">Cajas movidas</div><div className="text-base font-bold text-gray-800">{gRes.cajas.toLocaleString("en-US")}</div></div>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2"><div className="text-[10px] text-indigo-600 uppercase tracking-wide flex items-center gap-1">Gasto total (flete)<InfoTip className="text-indigo-400">Suma de todos los fletes de los movimientos mostrados (según el filtro).<br /><b className="text-indigo-300">Fórmula:</b> suma del "Flete $" de cada movimiento.</InfoTip></div><div className="text-base font-bold text-indigo-700">${fmt2(gRes.gasto)}</div></div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2"><div className="text-[10px] text-emerald-600 uppercase tracking-wide flex items-center gap-1">$ / caja<InfoTip className="text-emerald-500">Cuánto cuesta mover cada caja.<br /><b className="text-emerald-300">Fórmula:</b> Gasto total (flete) ÷ Cajas movidas (bultos).</InfoTip></div><div className="text-base font-bold text-emerald-700">${fmt2(gPorCaja)}</div></div>
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">$ / movida<InfoTip>Costo promedio por movimiento (viaje/flete).<br /><b className="text-gray-300">Fórmula:</b> Gasto total (flete) ÷ número de movimientos.</InfoTip></div><div className="text-base font-bold text-gray-800">${fmt2(gPorMovida)}</div></div>
+            </div>
           </div>
         )}
         {movimientos.length === 0 ? (
@@ -522,20 +588,16 @@ export default function Modulo8() {
           <div className="text-xs text-gray-400 text-center py-8 italic">Ningún movimiento coincide con la búsqueda.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "1000px" }}>
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                   <th className="text-left px-3 py-2 font-medium">Folio</th>
-                  <th className="text-left px-3 py-2 font-medium">Salida campo</th>
-                  <th className="text-left px-3 py-2 font-medium">Recibo empaque</th>
-                  <th className="text-left px-3 py-2 font-medium">Temporada</th>
-                  <th className="text-left px-3 py-2 font-medium">Origen → Destino</th>
+                  <th className="text-left px-3 py-2 font-medium">Salida / Recibo</th>
+                  <th className="text-left px-3 py-2 font-medium">Temporada · Ruta</th>
                   <th className="text-left px-3 py-2 font-medium">Línea / Chofer</th>
-                  <th className="text-right px-3 py-2 font-medium">Parrillas</th>
-                  <th className="text-right px-3 py-2 font-medium">Bultos</th>
-                  <th className="text-right px-3 py-2 font-medium">Flete</th>
-                  <th className="text-right px-3 py-2 font-medium">$/kg</th>
-                  <th className="text-center px-3 py-2 font-medium"></th>
+                  <th className="text-right px-3 py-2 font-medium">Parr · Bultos</th>
+                  <th className="text-right px-3 py-2 font-medium">Flete · $/kg</th>
+                  <th className="text-right px-3 py-2 font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -545,55 +607,53 @@ export default function Modulo8() {
                   const flete = parseFloat(m.flete) || 0;
                   const pesoKg = parseFloat(m.pesoBascula) || 0;
                   const costoKg = flete > 0 && pesoKg > 0 ? flete / pesoKg : 0;
+                  const rec = fechaReciboEmpaque(m);
+                  const dias = rec ? diasPlazo(m.fecha, rec) : null;
+                  const s = semaforoKg(costoKg, _rutaDe(m));
+                  const fac = estadosOC[m.id]?.factura ?? m.ocSAP?.factura;
                   return (
-                    <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {(() => {
-                          const rec = fechaReciboEmpaque(m);
-                          if (!rec) return <span className="text-gray-300 italic">Pendiente</span>;
-                          const d = diasPlazo(m.fecha, rec);
-                          return (<><div className="font-semibold text-green-700">{rec}</div>{d != null && <div className="text-[10px] text-gray-400">{d} {d === 1 ? "día" : "días"} en tránsito</div>}</>);
-                        })()}
+                    <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
+                      <td className="px-3 py-2.5 font-bold text-red-600 whitespace-nowrap">{m.folio || "—"}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="text-gray-700"><span className="text-gray-400">Sal</span> {m.fecha || "—"}</div>
+                        {rec
+                          ? <div className="text-green-700"><span className="text-gray-400">Rec</span> {rec}{dias != null && <span className="text-[10px] text-gray-400"> · {dias} {dias === 1 ? "día" : "días"}</span>}</div>
+                          : <div className="text-gray-300 italic">Rec pendiente</div>}
                       </td>
-                      <td className="px-3 py-2 text-gray-700">{ranchoDe(m) || "—"}{loteDe(m) ? ` · ${loteDe(m)}` : ""}</td>
-                      <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
-                      <td className="px-3 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">{par || "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-right">
-                        {(() => {
-                          const s = semaforoKg(costoKg);
-                          if (!s) return <span className="text-gray-300">—</span>;
-                          return (
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-semibold ${s.cls}`} title={`${s.desv.toFixed(1)}% vs promedio ($${promedioKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg)`}>
-                              <span className={`w-2 h-2 rounded-full ${s.dot}`}></span>
-                              ${costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg
-                            </span>
-                          );
-                        })()}
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-gray-700">{ranchoDe(m) || "—"}{loteDe(m) ? ` · ${loteDe(m)}` : ""}</div>
+                        <div className="text-[11px] text-gray-500">{m.origen || "—"} → {m.destino || "—"}</div>
                       </td>
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
-                        <button onClick={() => setVerMov(m)} className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1 inline-flex items-center gap-1"><Eye size={14} /> Ver</button>
-                        <button onClick={() => abrirEditar(m)} className="text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1 inline-flex items-center gap-1"><Pencil size={14} /> Editar</button>
-                        {m.ocSAP ? (
-                          <span className="inline-flex items-center gap-1 mr-1 align-middle">
-                            <span title="Documentos creados en SAP" className="text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={14} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
-                            {(() => {
-                              const fac = estadosOC[m.id]?.factura ?? m.ocSAP.factura;
-                              return fac?.existe ? (
-                                <span title={`Factura de proveedor en SAP${fac.docNum ? " #" + fac.docNum : ""}`} className="text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={14} /> Facturado{fac.docNum ? ` #${fac.docNum}` : ""}</span>
-                              ) : fac ? (
-                                <span title="Aún sin factura de proveedor" className="text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={14} /> Sin factura</span>
-                              ) : null;
-                            })()}
-                          </span>
-                        ) : (
-                          <button onClick={() => abrirOC(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1 inline-flex items-center gap-1"><FileText size={14} /> OC</button>
+                      <td className="px-3 py-2.5"><div className="font-medium text-gray-700">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <div className="font-semibold text-green-700">{par || "—"} <span className="text-[10px] font-normal text-gray-400">parr</span></div>
+                        <div className="font-semibold text-blue-700">{bul ? bul.toLocaleString() : "—"} <span className="text-[10px] font-normal text-gray-400">bultos</span></div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <div className="font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</div>
+                        {s?.neutral
+                          ? <span className="mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500 font-semibold" title="Único flete de esta ruta — sin comparación"><span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>${costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg</span>
+                          : s
+                          ? <span className={`mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold ${s.cls}`} title={`${s.desv.toFixed(1)}% vs la mediana de su ruta ($${s.ref.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg)`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>${costoKg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/kg</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => setVerMov(m)} title="Ver" className="p-1.5 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /></button>
+                          <button onClick={() => abrirEditar(m)} title="Editar" className="p-1.5 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600"><Pencil size={14} /></button>
+                          {!m.ocSAP && <button onClick={() => abrirOC(m)} title="Crear OC en SAP" className="p-1.5 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><FileText size={14} /></button>}
+                          <button onClick={() => borrarMov(m.id)} title="Borrar" className="p-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
+                        </div>
+                        {m.ocSAP && (
+                          <div className="mt-1 flex flex-wrap gap-1 justify-end">
+                            <span title="Documentos creados en SAP" className="text-[10px] px-2 py-0.5 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={12} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            {fac?.existe ? (
+                              <span title={`Factura de proveedor en SAP${fac.docNum ? " #" + fac.docNum : ""}`} className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={12} /> Fact{fac.docNum ? ` #${fac.docNum}` : ""}</span>
+                            ) : fac ? (
+                              <span title="Aún sin factura de proveedor" className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={12} /> Sin factura</span>
+                            ) : null}
+                          </div>
                         )}
-                        <button onClick={() => borrarMov(m.id)} className="text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500 inline-flex items-center"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );
@@ -617,7 +677,7 @@ export default function Modulo8() {
               {/* Encabezado del viaje */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos del viaje</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className={LBL}>Folio</label><input className={INP} value={form.folio} onChange={(e) => setForm((f) => ({ ...f, folio: e.target.value }))} placeholder="No. 0203" /></div>
                   <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} /></div>
                   <div><label className={LBL}>Viaje (zona)</label>
@@ -625,7 +685,7 @@ export default function Modulo8() {
                       options={zonas.map((z) => ({ value: z, label: z }))} />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                   <div>
                     <label className={LBL}>Temporada</label>
                     <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v, rancho: "", departamento: "", responsableCosecha: "" }))} placeholder="— Temporada —"
@@ -676,7 +736,7 @@ export default function Modulo8() {
               {/* Descripción de la carga */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Descripción de la carga</div>
-                <div className="border border-gray-200 rounded-lg">
+                <div className="border border-gray-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500">
@@ -738,7 +798,7 @@ export default function Modulo8() {
                   />
                 </div>
                 {lineaNueva && <div className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2 inline-flex items-center gap-1"><Pencil size={14} /> Capturando línea nueva — se guarda en el catálogo al guardar</div>}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className={LBL}>Línea</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.linea} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, linea: e.target.value }))} /></div>
                   <div><label className={LBL}>Contacto</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.contacto} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, contacto: e.target.value }))} /></div>
                   <div><label className={LBL}>Número</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.numero} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))} /></div>
@@ -758,7 +818,7 @@ export default function Modulo8() {
                           { value: "__nuevo__", label: "+ Nuevo chofer" },
                         ]}
                       />
-                      <div className="grid grid-cols-3 gap-2 mt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer} readOnly={!choferNuevo} placeholder="Nombre" onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.telefono} readOnly={!choferNuevo} placeholder="Teléfono" onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.licencia} readOnly={!choferNuevo} placeholder="Licencia" onChange={(e) => setForm((f) => ({ ...f, licencia: e.target.value }))} />
@@ -826,7 +886,7 @@ export default function Modulo8() {
               <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700 text-lg inline-flex items-center"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {[
                   ["Salida campo", verMov.fecha], ["Recibo empaque", fechaReciboEmpaque(verMov)],
                   ["Plazo (días)", (() => { const d = diasPlazo(verMov.fecha, fechaReciboEmpaque(verMov)); return d != null ? `${d} ${d === 1 ? "día" : "días"}` : ""; })()],
@@ -841,6 +901,7 @@ export default function Modulo8() {
               </div>
               <div>
                 <div className="text-gray-400 mb-1 font-medium uppercase">Carga</div>
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead><tr className="text-gray-400"><th className="text-left py-1">Producto</th><th className="text-right py-1">Parrillas</th><th className="text-right py-1">Bultos</th></tr></thead>
                   <tbody>
@@ -849,10 +910,11 @@ export default function Modulo8() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
               <div className="border-t border-gray-100 pt-3">
                 <div className="text-gray-400 mb-1 font-medium uppercase">Transporte</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
                     ["Línea", verMov.linea], ["Chofer", verMov.chofer], ["Teléfono", verMov.telefono],
                     ["Licencia", verMov.licencia], ["Marca/Modelo", verMov.marcaModelo], ["Placa tracto", verMov.placaTracto],
@@ -937,7 +999,7 @@ export default function Modulo8() {
                             <input value={r.nombre} onChange={(e) => updRanchoFld(p.code, ri, "nombre", e.target.value)} className={INP_TBL + " font-medium"} placeholder="Rancho" />
                             <button onClick={() => delRancho(p.code, ri)} className="text-gray-300 hover:text-red-500 text-xs inline-flex items-center" title="Eliminar rancho"><Trash2 size={14} /></button>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               <div className="text-[10px] font-semibold text-gray-400 uppercase mb-0.5">Departamento {r.sap ? <span className="text-gray-300 normal-case">· de SAP</span> : null}</div>
                               <input value={r.departamento || ""} onChange={(e) => updRanchoFld(p.code, ri, "departamento", e.target.value)} className={INP_TBL} placeholder="Departamento" />
@@ -1084,7 +1146,6 @@ export default function Modulo8() {
       )}
 
       {/* Modal: Control de fletes de acarreo - FRUTA (SAP, solo lectura) */}
-      {verFletes && <ControlFletesModal tipo="fruta" proyectos={proyectos} onClose={() => setVerFletes(false)} />}
 
       {/* ── Modal: Orden de compra de flete (Solicitud + Pedido) ── */}
       {ocMov && (() => {
@@ -1103,7 +1164,6 @@ export default function Modulo8() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-gray-400">Temporada</span><div className="font-medium text-gray-800">{m.proyecto || "—"}</div></div>
                   <div><span className="text-gray-400">Rancho</span><div className="font-medium text-gray-800">{m.rancho || "—"}</div></div>
-                  <div><span className="text-gray-400">Departamento</span><div className="font-medium text-gray-800">{r?.departamento || m.departamento || "—"}</div></div>
                 </div>
                 <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 text-xs flex items-center justify-between">
                   <span className="text-gray-500">Precio (Flete $ del movimiento)</span>
@@ -1116,6 +1176,15 @@ export default function Modulo8() {
                     options={(() => {
                       const opts = cultivos.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }));
                       if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo });
+                      return opts;
+                    })()} />
+                </div>
+                <div>
+                  <label className={LBL}>Departamento {r?.departamento ? <span className="text-gray-400 font-normal">· del proyecto: {r.departamento}</span> : null}</label>
+                  <SearchSelect className={INP} value={ocDepto} onChange={setOcDepto} searchThreshold={0} placeholder="— Departamento (norma de reparto) —"
+                    options={(() => {
+                      const opts = departamentos.map((d) => ({ value: d.FactorCode, label: `${d.FactorCode}${d.FactorDescription ? " · " + d.FactorDescription : ""}` }));
+                      if (ocDepto && !opts.some((o) => o.value === ocDepto)) opts.unshift({ value: ocDepto, label: ocDepto });
                       return opts;
                     })()} />
                 </div>
@@ -1140,6 +1209,10 @@ export default function Modulo8() {
                 <div>
                   <label className={LBL}>Fecha necesaria</label>
                   <input type="date" value={ocFecha} onChange={(e) => setOcFecha(e.target.value)} className={INP} />
+                </div>
+                <div>
+                  <label className={LBL}>Detalles de artículo <span className="text-gray-400">· en la línea de la OC (acarreo, cultivo, lote)</span></label>
+                  <textarea value={ocDetalle} onChange={(e) => setOcDetalle(e.target.value)} rows={2} className={INP} placeholder="Ej. ACARREO · Chile Bell · Lote Angulo" />
                 </div>
                 <div>
                   <label className={LBL}>Comentario</label>

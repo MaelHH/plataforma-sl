@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Camera, Truck, Check, CheckCircle2, ArrowUp, Send, Thermometer, Lock, Package, Hash, Satellite, ArrowLeft, ArrowRight } from "lucide-react";
+import * as XLSX from "xlsx";
+import { Camera, Truck, Check, CheckCircle2, ArrowUp, Send, Thermometer, Lock, Package, Hash, Satellite, ArrowLeft, ArrowRight, Boxes, X, FileText } from "lucide-react";
 import { useDatos, TOTAL, CAT_VACIO, EMPRESAS, DC, nuevoId } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
+import { getProductosTerminadosSAP } from "../store/api";
 
 const FRONTAL_FIELDS = [
   { id: "temp_antes", label: "Temp. antes de carga", Icon: Thermometer },
@@ -15,9 +17,62 @@ const FRONTAL_FIELDS = [
 ];
 
 export default function Modulo4() {
-  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, catalogo } = useDatos();
+  const { trailers, setTrailers, cargasEmbarques, setCargasEmbarques, catalogo, setCatalogo } = useDatos();
   const CATALOGO = [CAT_VACIO, ...catalogo];
+  // Opciones del dropdown: solo "Sin asignar" + los PT (ItemCode que empieza con "PT").
+  // Así aunque el catálogo tenga items viejos, en la distribución solo salen los PT reales.
+  const CATALOGO_PT = CATALOGO.filter((c) => !c.id || /^PT/i.test(c.id));
+  // Traer Productos Terminados (PT) de SAP → upsert al catálogo (para elegirlos en la distribución).
+  const [ptCargando, setPtCargando] = useState(false);
+  const [ptInfo, setPtInfo] = useState("");
+  const cargarPTsap = async () => {
+    setPtCargando(true); setPtInfo("");
+    try {
+      const d = await getProductosTerminadosSAP();
+      const pts = (d.value || []).map((it) => {
+        // Cajas reales de SAP: "En stock" del Status de almacén (QuantityOnStock), en cajas
+        // (la UoM de inventario del PT). Ej. PT-0051 = 250 cajas.
+        const cajas = Math.round(Number(it.QuantityOnStock) || 0);
+        return {
+          id: it.ItemCode,
+          // Código + nombre (como MangoFlow): así pueden buscar por "PT-0001" y ver cuál es.
+          label: it.ItemName ? `${it.ItemCode} · ${it.ItemName}` : it.ItemCode,
+          color: "bg-slate-100 text-slate-700",
+          cajasPorParrilla: cajas,     // ← ahora sale del stock real de SAP (antes 0)
+          cajasStock: cajas,           // referencia: existencia en cajas
+          uom: it.InventoryUOM || "",  // unidad de inventario (ej. "Caja")
+          librasPorCaja: 0,
+          sap: true, sapGrupo: it.ItemsGroupCode,
+        };
+      });
+      setCatalogo((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const byId = new Map(base.map((c) => [c.id, c]));
+        for (const p of pts) byId.set(p.id, { ...byId.get(p.id), ...p });
+        return Array.from(byId.values()).sort((a, b) => (a.label || "").localeCompare(b.label || ""));
+      });
+      setPtInfo(pts.length ? `${pts.length} PT de SAP` : "SAP no devolvió PT (revisa el grupo)");
+    } catch (e) { setPtInfo("Error: " + String(e?.message || e)); }
+    finally { setPtCargando(false); }
+  };
+
+  // Ver los PT que tienen existencia (>0) en SAP, ordenados por cajas desc (solo lectura).
+  const [ptStock, setPtStock] = useState(null);       // null=cerrado | [] = abierto
+  const [ptStockCargando, setPtStockCargando] = useState(false);
+  const [ptStockError, setPtStockError] = useState("");
+  const verPTconStock = async () => {
+    setPtStock([]); setPtStockCargando(true); setPtStockError("");
+    try {
+      const d = await getProductosTerminadosSAP(true);
+      setPtStock(d.value || []);
+    } catch (e) { setPtStockError(String(e?.message || e)); }
+    finally { setPtStockCargando(false); }
+  };
   const [tabM4, setTabM4] = useState("preparar"); // preparar | enviados
+  // Filtros de la pestaña "Enviados" (búsqueda + Destino + Estado SAP) — patrón M13.
+  const [q, setQ] = useState("");
+  const [fDestino, setFDestino] = useState("");
+  const [fSap, setFSap] = useState("");
   const [trailerSel, setTrailerSel] = useState(null);
   const [cargaPhotos, setCargaPhotos] = useState(Array(TOTAL).fill(null));
   const [frontalPhotos, setFrontalPhotos] = useState({});
@@ -130,7 +185,7 @@ export default function Modulo4() {
               <SearchSelect value={p.prod} disabled={blocked}
                 onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
                 className={`w-full text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}
-                options={CATALOGO.map((c) => ({ value: c.id, label: c.label }))} />
+                options={CATALOGO_PT.map((c) => ({ value: c.id, label: c.label }))} />
             </div>
             <div className={`w-11 shrink-0 text-center text-[10px] font-semibold rounded px-0.5 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-600" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
           </div>
@@ -207,13 +262,62 @@ export default function Modulo4() {
     );
   }
 
+  // ── Pestaña "Enviados": filtro (texto + Destino + Estado SAP) y Excel (patrón M13) ──
+  const qLow = q.trim().toLowerCase();
+  const cargasFiltradas = cargasEmbarques.filter((c) => {
+    if (fDestino && c.trailer?.dest !== fDestino) return false;
+    if (fSap && (c.sapStatus || "pendiente") !== fSap) return false;
+    if (qLow) {
+      const empLabels = (c.empresasSel || []).map((eid) => EMPRESAS.find((e) => e.id === eid)?.label || "").join(" ");
+      const campos = [c.trailer?.dest, c.trailer?.linea, c.trailer?.chofer, c.trailer?.placaTracto, c.trailer?.economicoCaja, empLabels];
+      if (!campos.some((x) => String(x ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
+  });
+  const destinosCargas = [...new Set(cargasEmbarques.map((c) => c.trailer?.dest).filter(Boolean))];
+  const hayFiltros = q || fDestino || fSap;
+  const limpiarFiltros = () => { setQ(""); setFDestino(""); setFSap(""); };
+  const INP_FILTRO = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
+
+  // ── Exportar a Excel (respeta los filtros activos) ──
+  const exportarExcel = () => {
+    if (cargasFiltradas.length === 0) return;   // sin dlg en este módulo → return silencioso
+    const filas = cargasFiltradas.map((c) => ({
+      Enviado: c.fecha || "",
+      Destino: c.trailer?.dest || "",
+      Línea: c.trailer?.linea || "",
+      Chofer: c.trailer?.chofer || "",
+      "Placa tracto": c.trailer?.placaTracto || "",
+      "No. caja": c.trailer?.economicoCaja || "",
+      Empresas: (c.empresasSel || []).map((eid) => EMPRESAS.find((e) => e.id === eid)?.label || eid).join(", "),
+      "Fotos carga": `${c.cargaFotos || 0}/30`,
+      "Fotos frontales": c.frontalFotos || 0,
+      "Estado SAP": c.sapStatus === "cargado" ? "Cargado" : "Pendiente",
+    }));
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Enviados");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Evidencias_${hoy}.xlsx`);
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 gap-y-3 mb-4">
         <div>
 <h1 className="text-base font-semibold text-gray-900">Evidencias de Carga</h1>
           <p className="text-sm text-gray-500 mt-0.5">Francisco Flores · fotos y distribución del trailer</p>        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={cargarPTsap} disabled={ptCargando}
+            className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 disabled:opacity-50 inline-flex items-center gap-1"
+            title="Trae los Productos Terminados reales de SAP para elegirlos en la distribución (solo lectura)">
+            <Package size={14} /> {ptCargando ? "Trayendo…" : "Traer PT de SAP"}{ptInfo ? ` · ${ptInfo}` : ""}
+          </button>
+          <button onClick={verPTconStock} disabled={ptStockCargando}
+            className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-100 disabled:opacity-50 inline-flex items-center gap-1"
+            title="Muestra los PT que tienen existencia (cajas) en SAP, de mayor a menor (solo lectura)">
+            <Boxes size={14} /> {ptStockCargando ? "Consultando…" : "PT con existencia"}
+          </button>
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">FF</div>
           <span className="text-sm font-medium text-gray-700">Francisco</span>
         </div>
@@ -226,11 +330,25 @@ export default function Modulo4() {
 
       {tabM4 === "enviados" ? (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-            <span className="text-sm font-semibold text-gray-900">Cargas enviadas a Embarques ({cargasEmbarques.length})</span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap gap-2 gap-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-gray-900">Cargas enviadas a Embarques ({cargasFiltradas.length}{hayFiltros ? ` de ${cargasEmbarques.length}` : ""})</span>
+              {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
+            </div>
+            {cargasEmbarques.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar destino, línea, chofer, placa, empresa…"
+                  className="flex-1 min-w-0 sm:min-w-[200px] max-w-md text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+                <div className="w-full sm:w-40"><SearchSelect className={INP_FILTRO} value={fDestino} onChange={setFDestino} placeholder="Destino: todos" options={[{ value: "", label: "Destino: todos" }, ...destinosCargas.map((d) => ({ value: d, label: d }))]} /></div>
+                <div className="w-full sm:w-40"><SearchSelect className={INP_FILTRO} value={fSap} onChange={setFSap} placeholder="SAP: todos" options={[{ value: "", label: "SAP: todos" }, { value: "pendiente", label: "Pendiente" }, { value: "cargado", label: "Cargado" }]} /></div>
+                <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
+              </div>
+            )}
           </div>
           {cargasEmbarques.length === 0 ? (
             <div className="text-xs text-gray-400 text-center py-8 italic">Aún no has enviado cargas a Embarques.</div>
+          ) : cargasFiltradas.length === 0 ? (
+            <div className="text-xs text-gray-400 text-center py-8 italic">Ninguna carga coincide con la búsqueda.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs" style={{ minWidth: "720px" }}>
@@ -245,7 +363,7 @@ export default function Modulo4() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cargasEmbarques.map((c) => (
+                  {cargasFiltradas.map((c) => (
                     <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="px-3 py-2 text-gray-600">{c.fecha}</td>
                       <td className="px-3 py-2"><span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[c.trailer?.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{c.trailer?.dest || "—"}</span></td>
@@ -312,7 +430,7 @@ export default function Modulo4() {
         <div>
 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <div className="text-xs font-semibold text-blue-700 uppercase mb-3">Datos del trailer — pre-llenados de Mónica</div>
-            <div className="grid grid-cols-3 gap-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
               {[
                 ["Fecha", trailerSel.fecha],
                 ["Origen", trailerSel.origen],
@@ -332,7 +450,7 @@ export default function Modulo4() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
 {[{ l: "Fotos carga", v: `${cargaFilled}/30`, c: "text-blue-700" }, { l: "Fotos frontales", v: `${frontalFilled}/${FRONTAL_FIELDS.length}`, c: "text-purple-700" }, { l: "Empresas", v: empresasSel.length, c: "text-green-700" }].map((s, i) => (              <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5"><div className="text-xs text-gray-500 mb-1">{s.l}</div><div className={`text-lg font-semibold ${s.c}`}>{s.v}</div></div>
             ))}
           </div>
@@ -340,7 +458,7 @@ export default function Modulo4() {
           {/* Frontal */}
           <div className="flex items-center gap-2 mb-3"><div className="w-2 h-2 rounded-full bg-purple-500"></div><span className="text-sm font-semibold text-gray-800">Parte frontal del trailer</span></div>
           <div className="bg-white border border-purple-200 rounded-xl p-3 mb-5">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {FRONTAL_FIELDS.map((f) => (
                 <div key={f.id} onClick={() => setActivePhoto({ type: "frontal", index: f.id })}
                   className={`border-2 rounded-xl p-3 cursor-pointer flex flex-col items-center justify-center gap-1 ${frontalPhotos[f.id] ? "border-green-400 bg-green-50" : "border-dashed border-gray-300 bg-gray-50 hover:border-purple-400"}`} style={{ minHeight: "72px" }}>
@@ -365,10 +483,50 @@ export default function Modulo4() {
         </>
       )}
 
+      {/* Modal: PT con existencia (stock de SAP) */}
+      {ptStock !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPtStock(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-emerald-50">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800"><Boxes size={16} /> PT con existencia en SAP</div>
+              <button onClick={() => setPtStock(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-2 text-xs text-gray-400 border-b border-gray-100">Cajas en stock (mayor a menor). Solo lectura de SAP.</div>
+            <div className="overflow-y-auto">
+              {ptStockCargando ? (
+                <div className="text-center text-sm text-gray-400 py-10">Consultando SAP…</div>
+              ) : ptStockError ? (
+                <div className="text-center text-sm text-red-500 py-10 px-5">No se pudo consultar SAP.<div className="text-xs text-gray-400 mt-1">{ptStockError}</div></div>
+              ) : ptStock.length === 0 ? (
+                <div className="text-center text-sm text-gray-400 py-10 px-5">Ningún PT con existencia (o SAP no respondió / VPN caída).</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                    <tr><th className="text-left px-4 py-2 font-medium">Código</th><th className="text-left px-4 py-2 font-medium">Producto</th><th className="text-right px-4 py-2 font-medium">Cajas</th></tr>
+                  </thead>
+                  <tbody>
+                    {ptStock.map((it) => (
+                      <tr key={it.ItemCode} className="border-t border-gray-100 hover:bg-emerald-50/40">
+                        <td className="px-4 py-1.5 font-mono text-gray-700 whitespace-nowrap">{it.ItemCode}</td>
+                        <td className="px-4 py-1.5 text-gray-600">{it.ItemName}</td>
+                        <td className="px-4 py-1.5 text-right font-semibold text-emerald-700">{Math.round(Number(it.QuantityOnStock) || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {!ptStockCargando && !ptStockError && ptStock.length > 0 && (
+              <div className="px-5 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50">{ptStock.length} PT con existencia</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modal cámara */}
       {activePhoto !== null && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] shadow-xl overflow-hidden overflow-y-auto">
             <div className="bg-gray-900 h-44 flex flex-col items-center justify-center gap-2">
               <Camera size={32} className="text-white" />
               <span className="text-gray-400 text-sm">

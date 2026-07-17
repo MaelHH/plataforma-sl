@@ -1,8 +1,10 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { esc } from "../utils/esc";
 import { useDatos, CATS_QC, CALIDAD_ESTADOS, ahora } from "../store/datos";
 import ColaTabs from "../components/ColaTabs";
-import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check } from "lucide-react";
+import SearchSelect from "../components/SearchSelect";
+import { FlaskConical, User, MapPin, Sprout, X, Camera, BarChart3, Send, Phone, Save, Check, FileText } from "lucide-react";
 import { useDialog } from "../components/Dialog";
 
 import { hoyISO } from "../utils/fecha";
@@ -111,6 +113,28 @@ export default function Modulo12() {
   const aprobados = cargasEmbarques.filter((c) => estadoDe(c) === "aprobado").length;
   const [tabQC, setTabQC] = useState("pendientes"); // pendientes | historial
   const listaQC = tabQC === "pendientes" ? pendientesArr : resueltosArr;
+
+  // ── Búsqueda + filtros (sobre la pestaña activa) ──
+  const [q, setQ] = useState("");
+  const [fProducto, setFProducto] = useState("");
+  const [fLugar, setFLugar] = useState("");
+  const qLow = q.trim().toLowerCase();
+  const listaFiltrada = listaQC.filter((carga) => {
+    const cal = carga.calidad || {};
+    const tr = carga.trailer || {};
+    if (fProducto && cal.producto !== fProducto) return false;
+    if (fLugar && cal.lugar !== fLugar) return false;
+    if (qLow) {
+      const campos = [cal.producto, cal.lugar, cal.inspector, cal.folio, cal.grower, cal.lote, cal.manifiesto, tr.dest, tr.chofer, carga.fecha];
+      if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
+  });
+  const productosLista = [...new Set(listaQC.map((c) => c.calidad?.producto).filter(Boolean))];
+  const lugaresLista = [...new Set(listaQC.map((c) => c.calidad?.lugar).filter(Boolean))];
+  const hayFiltros = q || fProducto || fLugar;
+  const limpiarFiltros = () => { setQ(""); setFProducto(""); setFLugar(""); };
+  const INP_FILTRO = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
@@ -265,14 +289,70 @@ export default function Modulo12() {
     win.document.close();
   };
 
+  // Resumen QC de una carga (para exportar): mismos % del reporte, pero sobre
+  // cualquier carga de la lista (no solo la abierta). No modifica el cálculo original.
+  const resumenCalidad = (carga) => {
+    const cal = carga.calidad || {};
+    const defs = defectosCalidad[cal.producto] || [];
+    const pesoM = parseFloat(cal.pesoMuestra) || 0;
+    const pctD = (d) => { const g = parseFloat(cal.defectos?.[d.id]?.peso) || 0; return pesoM > 0 ? (g / pesoM) * 100 : 0; };
+    const pQuality = defs.filter((d) => d.cat === "calidad").reduce((a, d) => a + pctD(d), 0);
+    const pCondition = defs.filter((d) => d.cat === "condicion" || d.cat === "plaga").reduce((a, d) => a + pctD(d), 0);
+    const pDefects = pQuality + pCondition;
+    const conHallazgo = defs.filter((d) => (parseFloat(cal.defectos?.[d.id]?.peso) || 0) > 0);
+    return {
+      pctDefects: pDefects,
+      pctGood: Math.max(0, 100 - pDefects),
+      nDefectos: conHallazgo.length,
+      defectos: conHallazgo.map((d) => d.label).join(", "),
+    };
+  };
+
+  // ── Exportar a Excel (respeta los filtros y la pestaña activa) ──
+  const exportarExcel = () => {
+    if (listaFiltrada.length === 0) { dlg.alerta({ title: "Sin datos", message: "No hay inspecciones para exportar con los filtros actuales." }); return; }
+    const filas = listaFiltrada.map((carga) => {
+      const cal = carga.calidad || {};
+      const tr = carga.trailer || {};
+      const r = resumenCalidad(carga);
+      return {
+        "Fecha embarque": carga.fecha || "",
+        Destino: tr.dest || "",
+        Chofer: tr.chofer || "",
+        Producto: cal.producto || "",
+        Inspector: cal.inspector || "",
+        Lugar: cal.lugar || "",
+        "Fecha inspección": cal.fecha || "",
+        "Folio (ID muestra)": cal.folio || "",
+        Grower: cal.grower || "",
+        Lote: cal.lote || "",
+        Size: cal.size || "",
+        Count: cal.count || "",
+        Temperatura: cal.temperatura || "",
+        Manifiesto: cal.manifiesto || "",
+        Estado: CALIDAD_ESTADOS[estadoDe(carga)]?.label || "Pendiente",
+        "% Good Quality": cal.producto ? Number(r.pctGood.toFixed(1)) : "",
+        "% Defects": cal.producto ? Number(r.pctDefects.toFixed(2)) : "",
+        "Nº defectos": r.nDefectos || 0,
+        Defectos: r.defectos || "",
+        Observaciones: cal.observaciones || "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "QC Bodegas");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `QC_Bodegas_${hoy}.xlsx`);
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">QC - Bodegas</h1>
           <p className="text-sm text-gray-500 mt-0.5">Inspección de calidad de los embarques antes de liberar · fotos por defecto, según el producto</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setCatDef(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><FlaskConical size={14} /> Defectos</button>
           <button onClick={() => setCatInsp(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><User size={14} /> Inspectores</button>
           <button onClick={() => setCatLug(true)} className={BTN_CAT + " inline-flex items-center gap-1"}><MapPin size={14} /> Lugares</button>
@@ -280,7 +360,7 @@ export default function Modulo12() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
         {stat("Total embarques", total, "text-gray-900")}
         {stat("Por inspeccionar", pendientes, "text-orange-600")}
         {stat("Inspeccionados", aprobados, "text-green-700")}
@@ -298,11 +378,33 @@ export default function Modulo12() {
           { key: "pendientes", label: "Por inspeccionar", count: pendientesArr.length },
           { key: "historial", label: "Historial", count: resueltosArr.length },
         ]} />
+
+        {/* Barra: búsqueda + filtros + exportar a Excel (respeta la pestaña activa) */}
+        {listaQC.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-xl mb-3">
+            <div className="flex items-center justify-between px-4 py-3 flex-wrap gap-2 gap-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-gray-900">Embarques ({listaFiltrada.length}{hayFiltros ? ` de ${listaQC.length}` : ""})</span>
+                {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto, lugar, inspector, folio, destino, chofer…"
+                  className="flex-1 min-w-0 sm:min-w-[200px] max-w-md text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+                <div className="w-full sm:w-44"><SearchSelect className={INP_FILTRO} value={fProducto} onChange={setFProducto} placeholder="Producto: todos" options={[{ value: "", label: "Producto: todos" }, ...productosLista.map((p) => ({ value: p, label: p }))]} /></div>
+                <div className="w-full sm:w-44"><SearchSelect className={INP_FILTRO} value={fLugar} onChange={setFLugar} placeholder="Lugar: todos" options={[{ value: "", label: "Lugar: todos" }, ...lugaresLista.map((l) => ({ value: l, label: l }))]} /></div>
+                <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {listaQC.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-xs text-gray-400 italic">{tabQC === "pendientes" ? "No hay embarques por inspeccionar." : "Aún no hay embarques inspeccionados."}</div>
+        ) : listaFiltrada.length === 0 ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-xs text-gray-400 italic">Ninguna inspección coincide con la búsqueda.</div>
         ) : (
         <div className="grid grid-cols-1 gap-3">
-          {listaQC.map((carga) => {
+          {listaFiltrada.map((carga) => {
             const est = estadoDe(carga);
             const cfg = CALIDAD_ESTADOS[est];
             return (

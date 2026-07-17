@@ -94,7 +94,7 @@ export default function Usuarios({ onClose }) {
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><Users size={18} /></div>
             <div>
@@ -114,6 +114,7 @@ export default function Usuarios({ onClose }) {
           {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">{error}</div>}
 
           <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wide">
@@ -157,6 +158,7 @@ export default function Usuarios({ onClose }) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
 
@@ -168,7 +170,7 @@ export default function Usuarios({ onClose }) {
       {/* Modal Nuevo / Editar */}
       {form && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="text-base font-semibold text-gray-900">{form.modo === "nuevo" ? "Nuevo usuario" : "Editar usuario"}</div>
               <button onClick={() => setForm(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>

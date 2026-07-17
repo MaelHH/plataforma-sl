@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { esc } from "../utils/esc";
 import SearchSelect from "../components/SearchSelect";
 import ColaTabs from "../components/ColaTabs";
@@ -87,6 +88,11 @@ export default function Modulo10() {
 
   const [edit, setEdit] = useState(null); // importación en edición (objeto) o null
   const [verCatalogo, setVerCatalogo] = useState(false);
+
+  // Búsqueda + filtros de la lista
+  const [q, setQ] = useState("");
+  const [fProveedor, setFProveedor] = useState("");
+  const [fAduana, setFAduana] = useState("");
 
   // ── Edición de importación ──
   const nueva = () => setEdit(importacionVacia());
@@ -240,6 +246,63 @@ export default function Modulo10() {
   const [tabImp, setTabImp] = useState("tramite"); // tramite | historial
   const listaImp = tabImp === "tramite" ? enTramiteArr : retornadasArr;
 
+  // ── Búsqueda + filtros (siempre sobre la pestaña activa) ──
+  const qLow = q.trim().toLowerCase();
+  const listaFiltrada = listaImp.filter((imp) => {
+    if (fProveedor && imp.proveedor !== fProveedor) return false;
+    if (fAduana && imp.aduana !== fAduana) return false;
+    if (qLow) {
+      const matTexto = (imp.items || []).map((it) => `${it.codigo || ""} ${it.descripcion || ""}`).join(" ");
+      const campos = [imp.folio, imp.proveedor, imp.pedimento, imp.agenteAduanal, imp.aduana, imp.paisOrigen, imp.factura, matTexto];
+      if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
+  });
+  const proveedoresImp = [...new Set(listaImp.map((i) => i.proveedor).filter(Boolean))];
+  const aduanasImp = [...new Set(listaImp.map((i) => i.aduana).filter(Boolean))];
+  const hayFiltros = q || fProveedor || fAduana;
+  const limpiarFiltros = () => { setQ(""); setFProveedor(""); setFAduana(""); };
+  const INP_FILTRO = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
+
+  // ── Exportar a Excel (respeta la pestaña activa y los filtros) ──
+  const exportarExcel = () => {
+    if (listaFiltrada.length === 0) { dlg.alerta({ title: "Sin datos", message: "No hay importaciones para exportar con los filtros actuales." }); return; }
+    const filas = listaFiltrada.map((imp) => {
+      const v = vencimientoImportacion(imp);
+      const estCfg = IMPORT_ESTADOS[imp.estado] || IMPORT_ESTADOS.borrador;
+      const mats = (imp.items || [])
+        .map((it) => `${it.descripcion || it.codigo || ""}${it.cantidad ? ` (${it.cantidad}${it.unidad ? " " + it.unidad : ""})` : ""}`)
+        .filter((s) => s.trim())
+        .join(", ");
+      return {
+        Folio: imp.folio || "",
+        Proveedor: imp.proveedor || "",
+        "País origen": imp.paisOrigen || "",
+        Factura: imp.factura || "",
+        "Fecha importación": fmtFecha(imp.fechaImportacion),
+        Pedimento: imp.pedimento || "",
+        Aduana: imp.aduana || "",
+        "Agente aduanal": imp.agenteAduanal || "",
+        Patente: imp.patente || "",
+        Transportista: imp.transportista || "",
+        Chofer: imp.chofer || "",
+        Placas: imp.placas || "",
+        Artículos: imp.items?.length || 0,
+        Materiales: mats,
+        Moneda: imp.moneda || "",
+        "Valor total": totalImportacion(imp) || 0,
+        "Fecha límite": v?.limite ? fmtFecha(v.limite) : "",
+        "Días restantes": v ? txtDias(v.dr) : "",
+        Estado: estCfg.label,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Importaciones");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Importaciones_${hoy}.xlsx`);
+  };
+
   const stat = (l, v, c) => (
     <div className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
       <div className="text-xs text-gray-500 mb-1">{l}</div>
@@ -249,18 +312,18 @@ export default function Modulo10() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Importaciones de Materiales</h1>
           <p className="text-sm text-gray-500 mt-0.5">Documentación de importación temporal y control de fechas límite de salida</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setVerCatalogo(true)} className="inline-flex items-center gap-1 text-xs px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Boxes size={14} /> Catálogo de materiales</button>
           <button onClick={nueva} className="text-xs px-3 py-2 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-700">+ Nueva importación</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
         {stat("Importaciones", totDocs, "text-gray-900")}
         {stat("Por vencer", porVencer, "text-amber-600")}
         {stat("Vencidas", vencidas, "text-red-600")}
@@ -275,8 +338,20 @@ export default function Modulo10() {
       )}
 
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">{totDocs === 0 ? "Importaciones registradas" : tabImp === "tramite" ? "Importaciones en trámite" : "Importaciones retornadas"} ({totDocs === 0 ? 0 : listaImp.length})</span>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap gap-2 gap-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-gray-900">{totDocs === 0 ? "Importaciones registradas" : tabImp === "tramite" ? "Importaciones en trámite" : "Importaciones retornadas"} ({listaFiltrada.length}{hayFiltros ? ` de ${listaImp.length}` : ""})</span>
+            {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
+          </div>
+          {listaImp.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, proveedor, material, pedimento, agente…"
+                className="flex-1 min-w-0 sm:min-w-[200px] max-w-md text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+              <div className="w-full sm:w-44"><SearchSelect className={INP_FILTRO} value={fProveedor} onChange={setFProveedor} placeholder="Proveedor: todos" options={[{ value: "", label: "Proveedor: todos" }, ...proveedoresImp.map((p) => ({ value: p, label: p }))]} /></div>
+              <div className="w-full sm:w-40"><SearchSelect className={INP_FILTRO} value={fAduana} onChange={setFAduana} placeholder="Aduana: todas" options={[{ value: "", label: "Aduana: todas" }, ...aduanasImp.map((a) => ({ value: a, label: a }))]} /></div>
+              <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
+            </div>
+          )}
         </div>
         {totDocs === 0 ? (
           <div className="text-center py-10">
@@ -286,6 +361,8 @@ export default function Modulo10() {
           </div>
         ) : listaImp.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-8 italic">{tabImp === "tramite" ? "No hay importaciones en trámite." : "Aún no hay importaciones retornadas."}</div>
+        ) : listaFiltrada.length === 0 ? (
+          <div className="text-xs text-gray-400 text-center py-8 italic">Ninguna importación coincide con la búsqueda.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs" style={{ minWidth: "1080px" }}>
@@ -304,7 +381,7 @@ export default function Modulo10() {
                 </tr>
               </thead>
               <tbody>
-                {listaImp.map((imp) => {
+                {listaFiltrada.map((imp) => {
                   const v = vencimientoImportacion(imp);
                   const estCfg = IMPORT_ESTADOS[imp.estado] || IMPORT_ESTADOS.borrador;
                   return (
@@ -356,7 +433,7 @@ export default function Modulo10() {
               {/* Datos generales */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos generales</div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div><label className={LBL}>Folio / Referencia</label><input className={INP} value={edit.folio} onChange={(e) => upd("folio", e.target.value)} placeholder="IMP-2026-001" /></div>
                   <div><label className={LBL}>Proveedor</label><input className={INP} value={edit.proveedor} onChange={(e) => upd("proveedor", e.target.value)} placeholder="Nombre del proveedor" /></div>
                   <div><label className={LBL}>País de origen</label><input className={INP} value={edit.paisOrigen} onChange={(e) => upd("paisOrigen", e.target.value)} placeholder="USA" /></div>
@@ -378,7 +455,7 @@ export default function Modulo10() {
               {/* Datos aduanales y transporte */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Aduana y transporte</div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div><label className={LBL}>Pedimento</label><input className={INP} value={edit.pedimento} onChange={(e) => upd("pedimento", e.target.value)} placeholder="No. de pedimento" /></div>
                   <div><label className={LBL}>Aduana</label><input className={INP} value={edit.aduana} onChange={(e) => upd("aduana", e.target.value)} placeholder="Nogales / Mexicali…" /></div>
                   <div><label className={LBL}>Agente aduanal</label><input className={INP} value={edit.agenteAduanal} onChange={(e) => upd("agenteAduanal", e.target.value)} placeholder="Nombre / Agencia" /></div>
@@ -391,7 +468,7 @@ export default function Modulo10() {
 
               {/* Artículos */}
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                   <div className="text-xs font-semibold text-gray-500 uppercase">Artículos a importar</div>
                   <button onClick={agregarItem} className="text-xs px-3 py-1.5 text-cyan-700 hover:bg-cyan-50 rounded-lg font-medium border border-cyan-200">+ Agregar artículo</button>
                 </div>
@@ -453,7 +530,7 @@ export default function Modulo10() {
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
+            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 gap-y-2 flex-wrap justify-between items-center sticky bottom-0 bg-white">
               <button onClick={() => generarReporte(edit)} className="inline-flex items-center gap-1 text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700"><FileText size={14} /> Generar PDF</button>
               <div className="flex gap-2">
                 <button onClick={cerrar} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
@@ -476,7 +553,7 @@ export default function Modulo10() {
               <button onClick={() => setVerCatalogo(false)} className="inline-flex items-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="border border-gray-200 rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 border-b border-gray-200">

@@ -7,7 +7,15 @@
 // que se abrió la app, en el puerto 4104 (puerto del backend FastAPI / servicio NSSM
 // PlataformaSL-Backend). Así funciona tanto en tu compu (localhost) como cuando un
 // colega entra por tu IP local (http://192.168.x.x:7890 → :4104).
-const hostBackend = typeof window !== "undefined" ? `http://${window.location.hostname}:4104` : "http://localhost:4104";
+// Fallback si no hay VITE_API_URL: en HTTP (dev/LAN) usa el backend en :4104 del mismo host
+// (así un colega entra por tu IP local). En HTTPS usa ruta RELATIVA (mismo origen) para NO caer
+// en mixed content: el navegador bloquearía un POST a http://…:4104 desde una página https.
+const hostBackend =
+  typeof window === "undefined"
+    ? "http://localhost:4104"
+    : window.location.protocol === "https:"
+      ? ""  // relativo → mismo origen (nginx debe proxyear /api al backend)
+      : `http://${window.location.hostname}:4104`;
 export const API_URL = (import.meta.env.VITE_API_URL || hostBackend).replace(/\/$/, "");
 
 const tokenKey = "plataforma_sl_token";
@@ -45,8 +53,15 @@ async function req(method, path, body, timeoutMs) {
       setToken(null);
       if (typeof window !== "undefined") window.dispatchEvent(new Event("sl-unauthorized"));
     }
-    const txt = await res.text().catch(() => "");
-    throw new Error(`${method} ${path} → ${res.status} ${txt}`);
+    const raw = await res.text().catch(() => "");
+    // El detalle completo (incl. respuestas de SAP/HANA) va SOLO a la consola, nunca a la vista.
+    if (raw) console.error(`API ${method} ${path} → ${res.status}:`, raw);
+    // Al usuario: solo el `detail` limpio que manda el backend; si el body no es JSON, mensaje genérico.
+    let msg = `Error ${res.status}`;
+    try { const j = JSON.parse(raw); if (j && typeof j.detail === "string") msg = j.detail; } catch { /* body no-JSON → genérico */ }
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return null;
   const ct = res.headers.get("content-type") || "";
@@ -115,6 +130,25 @@ export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produc
 // ── SAP · Orden de compra de flete (Paso 4) ──
 export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-flete${qs({ q })}`);
 export const getItemsFleteSAP = () => req("GET", "/api/sap/items-flete");
+// Productos Terminados (PT) de SAP para la distribución de Evidencias de Carga (solo lectura).
+// conStock=true → solo los PT con existencia (>0), ordenados por stock desc.
+export const getProductosTerminadosSAP = (conStock = false) =>
+  req("GET", `/api/sap/productos-terminados${qs({ con_stock: conStock ? "true" : undefined })}`, undefined, 60000);
+export const getItemGruposSAP = () => req("GET", "/api/sap/item-grupos");
+
+// ── Solicitud (necesidad) de trailer — la levanta el encargado de campo ──
+export const getSolicitudesTrailer = (estado) => req("GET", `/api/solicitudes-trailer${qs({ estado })}`);
+export const crearSolicitudTrailer = (body) => req("POST", "/api/solicitudes-trailer", body);
+export const cumplirSolicitudTrailer = (id) => req("PATCH", `/api/solicitudes-trailer/${id}/cumplir`);
+export const reabrirSolicitudTrailer = (id) => req("PATCH", `/api/solicitudes-trailer/${id}/reabrir`);
+export const borrarSolicitudTrailer = (id) => req("DELETE", `/api/solicitudes-trailer/${id}`);
+
+// ── Fotos de ficha de trailer (Cloudinary: la imagen va a la nube, la BD guarda la URL) ──
+export const getFotosTrailer = (trailerId) => req("GET", `/api/fotos-trailer${qs({ trailer_id: trailerId })}`);
+export const subirFotoTrailer = (trailerId, imagen) => req("POST", "/api/fotos-trailer", { trailerId, imagen }, 60000);
+export const borrarFotoTrailer = (id) => req("DELETE", `/api/fotos-trailer/${encodeURIComponent(id)}`);
+// Borra TODAS las fotos de un trailer (al eliminar el trailer, para no dejar basura en la nube).
+export const borrarFotosDeTrailer = (trailerId) => req("DELETE", `/api/fotos-trailer/de-trailer/${encodeURIComponent(trailerId)}`);
 export const getTaxCodesSAP = () => req("GET", "/api/sap/tax-codes");
 export const getCultivosSAP = () => req("GET", "/api/sap/cultivos");
 export const getDepartamentosSAP = () => req("GET", "/api/sap/departamentos");

@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { Eye, Pencil, Trash2, FileText, RefreshCw, Package, Receipt, Check, X, AlertTriangle, Plug } from "lucide-react";
 import { useDatos, nuevoId, ORIGENES, DESTINOS_ALL } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 import { getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getDepartamentosSAP, getLotesSAP, getCultivosSAP, getProyectosSAPlist, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { guardarFolioOC } from "../utils/folioOC";
 import { useDialog } from "../components/Dialog";
-import ControlFletesModal from "../components/ControlFletesModal";
+import ControlFletesPagina from "../components/ControlFletesPagina";
+import InfoTip from "../components/InfoTip";
 
 // FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
 const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
@@ -20,7 +23,7 @@ import { hoyISO } from "../utils/fecha";
 export default function Modulo13() {
   const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores, proyectos } = useDatos();
   const dlg = useDialog();
-  const [verFletes, setVerFletes] = useState(false);   // modal Control de fletes · MATERIAL (SAP)
+  const [verFletes, setVerFletes] = useState(false);   // página Control de fletes · MATERIAL (SAP)
 
   const [modal, setModal] = useState(false);
   const [editId, setEditId] = useState(null); // id del movimiento que se edita (null = nuevo)
@@ -28,6 +31,9 @@ export default function Modulo13() {
   const [catMat, setCatMat] = useState(false); // modal catálogo de materiales
 
   const [q, setQ] = useState("");
+  const [fDestino, setFDestino] = useState("");
+  const [fLinea, setFLinea] = useState("");
+  const [fMaterial, setFMaterial] = useState("");
 
   // modos "nuevo" en la ficha de transporte (igual que M8)
   const [lineaNueva, setLineaNueva] = useState(false);
@@ -158,6 +164,7 @@ export default function Modulo13() {
   const [ocProyecto, setOcProyecto] = useState("");   // SAP exige proyecto en cada línea
   const [ocFecha, setOcFecha] = useState("");
   const [ocComentario, setOcComentario] = useState("");
+  const [ocDetalle, setOcDetalle] = useState("");   // "Detalles de artículo" de la línea (POR1.FreeText)
   const [ocConfirm, setOcConfirm] = useState(false);
   const [ocCargando, setOcCargando] = useState(false);
   const [ocError, setOcError] = useState("");
@@ -232,6 +239,8 @@ export default function Modulo13() {
     setOcCultivo("N/A"); setOcLote("N/A"); // fallback; el cargador fija el código N/A exacto de SAP
     setOcFecha(hoyISO());
     setOcComentario(`Acarreo materiales · Folio ${m.folio || ""} · ${m.origen || ""}→${m.destino || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
+    // "Detalles de artículo" default: acarreo de material + ruta (editable). Sin factura/pagar.
+    setOcDetalle([`ACARREO MATERIAL`, (m.origen && m.destino) ? `${m.origen}→${m.destino}` : ""].filter(Boolean).join(" · "));
     setOcMov(m);
     cargarCatalogosOC();
   };
@@ -249,10 +258,12 @@ export default function Modulo13() {
         cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
         proyecto: ocProyecto, cultivo: ocCultivo, lote: ocLote,
         departamento: ocDepto || DEPTO_DEFAULT, comentario: ocComentario,
+        detalle: ocDetalle || null,   // "Detalles de artículo" de la línea (POR1.FreeText)
         requiredDate: ocFecha || null, warehouse: ALMACEN_MATERIALES,
         movimientoId: m.id, origen: "mov_material",   // idempotencia: evita doble OC en SAP
       });
       setMovMateriales((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, departamento: ocDepto || DEPTO_DEFAULT, ts: new Date().toISOString() } } : x));
+      await guardarFolioOC(res?.pedido?.docEntry, m.folio);   // el folio del movimiento → Control de Fletes
       setOcMov(null);
     } catch (e) { setOcError(String(e?.message || e)); }
     finally { setOcCargando(false); }
@@ -305,14 +316,121 @@ export default function Modulo13() {
   const INP_TBL = "w-full text-sm px-2 py-1 border border-gray-200 focus:border-blue-400 rounded-md focus:outline-none";
   const LBL = "text-xs text-gray-500 block mb-0.5";
 
-  // Filtro de la lista
+  // Filtro de la lista: búsqueda de texto + filtros por Destino / Línea / Material
   const qLow = q.trim().toLowerCase();
   const movsFiltrados = movMateriales.filter((m) => {
-    if (!qLow) return true;
-    const matLabels = (m.materialItems || []).map((it) => matDe(it.materialId)?.descripcion || "").join(" ");
-    const campos = [m.folio, m.origen, m.destino, m.linea, m.chofer, matLabels];
-    return campos.some((c) => String(c ?? "").toLowerCase().includes(qLow));
+    if (fDestino && m.destino !== fDestino) return false;
+    if (fLinea && m.linea !== fLinea) return false;
+    if (fMaterial && !(m.materialItems || []).some((it) => matDe(it.materialId)?.descripcion === fMaterial)) return false;
+    if (qLow) {
+      const matLabels = (m.materialItems || []).map((it) => matDe(it.materialId)?.descripcion || "").join(" ");
+      const campos = [m.folio, m.origen, m.destino, m.linea, m.chofer, matLabels];
+      if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
+    }
+    return true;
   }).sort((a, b) => String(b.fecha || "").localeCompare(String(a.fecha || "")) || String(b.creado || "").localeCompare(String(a.creado || "")));
+  const destinosMov = [...new Set(movMateriales.map((m) => m.destino).filter(Boolean))];
+  const lineasMov = [...new Set(movMateriales.map((m) => m.linea).filter(Boolean))];
+  const materialesMov = [...new Set(movMateriales.flatMap((m) => (m.materialItems || []).map((it) => matDe(it.materialId)?.descripcion)).filter(Boolean))];
+  const hayFiltros = q || fDestino || fLinea || fMaterial;
+  const limpiarFiltros = () => { setQ(""); setFDestino(""); setFLinea(""); setFMaterial(""); };
+  const INP_FILTRO = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
+
+  // ── Semáforo $/unidad POR RUTA (origen→destino), umbrales derivados de TUS datos ──
+  // Igual que en Movimientos Campo pero sobre $/unidad = Flete ÷ cantidad de material. Cada
+  // movimiento se compara contra la MEDIANA de $/unidad de SU MISMA ruta (robusta a extremos) y
+  // las bandas verde/amarillo/rojo salen de tu dispersión real (no un % fijo). 1 solo flete = gris.
+  const _mediana = (arr) => {
+    if (!arr.length) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const _rutaDe = (m) => `${m.origen || "—"} → ${m.destino || "—"}`;
+  const _cantDe = (m) => (m.materialItems || []).reduce((a, it) => a + (parseFloat(it.cantidad) || 0), 0);
+  const _uniDe = (m) => { const f = parseFloat(m.flete) || 0; const c = _cantDe(m); return f > 0 && c > 0 ? f / c : 0; };
+  const refUniPorRuta = (() => {
+    const grupos = {};
+    movMateriales.forEach((m) => { const u = _uniDe(m); if (u > 0) (grupos[_rutaDe(m)] ||= []).push(u); });
+    const ref = {};
+    for (const [d, arr] of Object.entries(grupos)) ref[d] = { mediana: _mediana(arr), n: arr.length };
+    return ref;
+  })();
+  const _desvUni = movMateriales.map((m) => {
+    const u = _uniDe(m); const r = refUniPorRuta[_rutaDe(m)];
+    return u > 0 && r && r.mediana > 0 && r.n >= 2 ? Math.abs(u - r.mediana) / r.mediana * 100 : null;
+  }).filter((x) => x != null);
+  const umbralVerde = _desvUni.length ? Math.max(3, Math.round(_mediana(_desvUni))) : 8;
+  const umbralAmarillo = umbralVerde * 2;
+  const haySemaforo = _desvUni.length > 0;
+  const semaforoUni = (costo, ruta) => {
+    const r = refUniPorRuta[ruta];
+    if (!costo || !r || !r.mediana) return null;
+    if (r.n < 2) return { neutral: true, ref: r.mediana };   // único flete de esa ruta → sin comparación
+    const desv = Math.abs(costo - r.mediana) / r.mediana * 100;
+    if (desv <= umbralVerde) return { cls: "bg-green-100 text-green-700 border-green-200", dot: "bg-green-500", desv, ref: r.mediana };
+    if (desv <= umbralAmarillo) return { cls: "bg-amber-100 text-amber-700 border-amber-200", dot: "bg-amber-500", desv, ref: r.mediana };
+    return { cls: "bg-red-100 text-red-700 border-red-200", dot: "bg-red-500", desv, ref: r.mediana };
+  };
+
+  // ── Exportar a Excel (respeta los filtros activos) ──
+  const exportarExcel = () => {
+    if (movsFiltrados.length === 0) { dlg.alerta({ title: "Sin datos", message: "No hay movimientos para exportar con los filtros actuales." }); return; }
+    const filas = movsFiltrados.map((m) => {
+      const mats = (m.materialItems || []).filter((it) => it.materialId);
+      const cantTotal = mats.reduce((a, it) => a + (parseFloat(it.cantidad) || 0), 0);
+      const flete = parseFloat(m.flete) || 0;
+      return {
+        Folio: m.folio || "", Fecha: m.fecha || "",
+        Origen: m.origen || "", Destino: m.destino || "",
+        Línea: m.linea || "", Chofer: m.chofer || "",
+        "Placa tracto": m.placaTracto || "", "No. caja": m.economicoCaja || "",
+        Materiales: mats.map((it) => `${matDe(it.materialId)?.descripcion || it.materialId} (${it.cantidad || 0})`).join(", "),
+        "Cantidad total": cantTotal || "",
+        Flete: flete || "",
+        "$/unidad": flete > 0 && cantTotal > 0 ? Number((flete / cantTotal).toFixed(2)) : "",
+        Observaciones: m.observaciones || "",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Materiales");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Movimiento_Materiales_${hoy}.xlsx`);
+  };
+
+  // ── Resumen de GASTO de acarreo de MATERIALES (sobre lo filtrado) ──
+  // gasto total (Σ flete), cantidad de material (Σ cantidad), $/unidad, $/movida,
+  // y un desglose POR MATERIAL (repartiendo el flete de cada movimiento entre sus materiales
+  // por proporción de cantidad) — así se ve cuánto costó mover cada material.
+  const gRes = movsFiltrados.reduce((acc, m) => {
+    acc.gasto += parseFloat(m.flete) || 0;
+    (m.materialItems || []).forEach((it) => { acc.cantidad += parseFloat(it.cantidad) || 0; });
+    return acc;
+  }, { gasto: 0, cantidad: 0 });
+  const gPorMovida = movsFiltrados.length > 0 ? gRes.gasto / movsFiltrados.length : 0;
+  const gPorUnidad = gRes.cantidad > 0 ? gRes.gasto / gRes.cantidad : 0;
+  const porMaterial = (() => {
+    const map = {};
+    movsFiltrados.forEach((m) => {
+      const flete = parseFloat(m.flete) || 0;
+      const items = (m.materialItems || []).filter((it) => it.materialId);
+      const totalCant = items.reduce((a, it) => a + (parseFloat(it.cantidad) || 0), 0);
+      items.forEach((it) => {
+        const mat = matDe(it.materialId);
+        const cant = parseFloat(it.cantidad) || 0;
+        if (!map[it.materialId]) map[it.materialId] = { nombre: mat?.descripcion || "—", unidad: mat?.unidad || "", cantidad: 0, gasto: 0, movs: new Set() };
+        map[it.materialId].cantidad += cant;
+        // Reparte el flete del movimiento por proporción de cantidad (o partes iguales si no hay cantidad).
+        map[it.materialId].gasto += totalCant > 0 ? flete * (cant / totalCant) : (items.length ? flete / items.length : 0);
+        map[it.materialId].movs.add(m.id);
+      });
+    });
+    return Object.values(map)
+      .map((x) => ({ ...x, movs: x.movs.size, porUnidad: x.cantidad > 0 ? x.gasto / x.cantidad : 0 }))
+      .sort((a, b) => b.gasto - a.gasto);
+  })();
+  const fmt2 = (n) => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const lineaActualId = lineaNueva ? "__nueva__" : (lineaSel?.id || "");
   const choferActualId = choferNuevo ? "__nuevo__" : ((lineaSel?.choferes || []).find((c) => c.nombre === form.chofer)?.id || "");
@@ -323,35 +441,96 @@ export default function Modulo13() {
   const origenOpts = [...new Set([...ORIGENES, ...ubicaciones.origenes.map((o) => o.nombre), ...ubicaciones.destinos.map((d) => d.nombre)])];
   const destinoOpts = [...new Set([...DESTINOS_ALL.filter((d) => d !== "Sin asignar"), ...ubicaciones.destinos.map((d) => d.nombre)])];
 
+  // Control de fletes (MATERIAL): abre una página completa dentro del módulo, con botón "Regresar".
+  if (verFletes) return <ControlFletesPagina tipo="material" proyectos={proyectos} onBack={() => setVerFletes(false)} />;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Movimiento Materiales</h1>
           <p className="text-sm text-gray-500 mt-0.5">Materiales transportados con el flete · catálogo de materiales (a futuro desde SAP)</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setCatMat(true)} className="text-xs bg-gray-100 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-gray-200 inline-flex items-center gap-1"><Package size={14} /> Catálogo de materiales</button>
           <button onClick={() => setVerFletes(true)} className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 inline-flex items-center gap-1"><Receipt size={14} /> Control fletes</button>
           <button onClick={abrirNuevo} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700">+ Nuevo movimiento</button>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-4">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 flex-wrap gap-2">
-          <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{q ? ` de ${movMateriales.length}` : ""})</span>
+      <div className="bg-white border border-gray-200 rounded-xl mb-4">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 rounded-t-xl flex-wrap gap-2 gap-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-gray-900">Movimientos registrados ({movsFiltrados.length}{hayFiltros ? ` de ${movMateriales.length}` : ""})</span>
+            {hayFiltros && <button onClick={limpiarFiltros} className="text-xs text-blue-600 hover:underline">Limpiar filtros</button>}
+            {haySemaforo && (
+              <span className="text-[11px] text-gray-500 flex items-center gap-2 flex-wrap">
+                <span className="text-gray-400">$/unidad vs mediana de su ruta:</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span>≤{umbralVerde}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>≤{umbralAmarillo}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500"></span>&gt;{umbralAmarillo}%</span>
+              </span>
+            )}
+          </div>
           {movMateriales.length > 0 && (
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, origen, destino, línea, chofer, material…"
-              className="flex-1 min-w-[240px] max-w-md text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, origen, destino, línea, chofer, material…"
+                className="flex-1 min-w-0 sm:min-w-[200px] max-w-md text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+              <div className="w-full sm:w-40"><SearchSelect className={INP_FILTRO} value={fDestino} onChange={setFDestino} placeholder="Destino: todos" options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
+              <div className="w-full sm:w-40"><SearchSelect className={INP_FILTRO} value={fLinea} onChange={setFLinea} placeholder="Línea: todas" options={[{ value: "", label: "Línea: todas" }, ...lineasMov.map((l) => ({ value: l, label: l }))]} /></div>
+              <div className="w-full sm:w-44"><SearchSelect className={INP_FILTRO} value={fMaterial} onChange={setFMaterial} placeholder="Material: todos" options={[{ value: "", label: "Material: todos" }, ...materialesMov.map((mm) => ({ value: mm, label: mm }))]} /></div>
+              <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
+            </div>
           )}
         </div>
+        {movsFiltrados.length > 0 && (
+          <div className="px-4 py-3 border-b border-gray-100 bg-white">
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Gasto de acarreo de materiales{q ? " · (filtrado)" : ""}</div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide">Movimientos</div><div className="text-base font-bold text-gray-800">{movsFiltrados.length.toLocaleString("en-US")}</div></div>
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">Material movido<InfoTip>Suma de la cantidad de material de todos los movimientos.<br /><b className="text-gray-300">Nota:</b> si hay materiales con unidades distintas, es una suma mixta — revisa el desglose por material.</InfoTip></div><div className="text-base font-bold text-gray-800">{gRes.cantidad.toLocaleString("en-US")}</div></div>
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2"><div className="text-[10px] text-indigo-600 uppercase tracking-wide flex items-center gap-1">Gasto total (flete)<InfoTip className="text-indigo-400">Suma del flete de cada movimiento de materiales.<br /><b className="text-indigo-300">Fórmula:</b> Σ "Flete" de cada movimiento.</InfoTip></div><div className="text-base font-bold text-indigo-700">${fmt2(gRes.gasto)}</div></div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2"><div className="text-[10px] text-emerald-600 uppercase tracking-wide flex items-center gap-1">$ / unidad<InfoTip className="text-emerald-500">Costo de acarreo por unidad de material.<br /><b className="text-emerald-300">Fórmula:</b> Gasto total (flete) ÷ cantidad de material.<br />Aproximado si hay unidades distintas — usa el desglose por material.</InfoTip></div><div className="text-base font-bold text-emerald-700">${fmt2(gPorUnidad)}</div></div>
+              <div className="rounded-lg border border-gray-200 px-3 py-2"><div className="text-[10px] text-gray-500 uppercase tracking-wide flex items-center gap-1">$ / movida<InfoTip>Costo promedio por movimiento (viaje/flete).<br /><b className="text-gray-300">Fórmula:</b> Gasto total (flete) ÷ número de movimientos.</InfoTip></div><div className="text-base font-bold text-gray-800">${fmt2(gPorMovida)}</div></div>
+            </div>
+            {porMaterial.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Por material</div>
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
+                        <th className="text-left px-3 py-1.5 font-medium">Material</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Cantidad</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Movs</th>
+                        <th className="text-right px-3 py-1.5 font-medium">Gasto flete</th>
+                        <th className="text-right px-3 py-1.5 font-medium">$ / unidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {porMaterial.map((x, i) => (
+                        <tr key={i} className="border-b border-gray-100 last:border-0">
+                          <td className="px-3 py-1.5 text-gray-700 font-medium">{x.nombre}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-700">{x.cantidad.toLocaleString("en-US")}{x.unidad ? ` ${x.unidad}` : ""}</td>
+                          <td className="px-3 py-1.5 text-right text-gray-500">{x.movs}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold text-indigo-700">${fmt2(x.gasto)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold text-emerald-700">${fmt2(x.porUnidad)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {movMateriales.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-8 italic">Sin movimientos de materiales. Registra el primero con "+ Nuevo movimiento".</div>
         ) : movsFiltrados.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-8 italic">Ningún movimiento coincide con la búsqueda.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "880px" }}>
+            <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
                   <th className="text-left px-3 py-2 font-medium">Folio</th>
@@ -367,8 +546,11 @@ export default function Modulo13() {
                 {movsFiltrados.map((m) => {
                   const items = m.materialItems || [];
                   const flete = parseFloat(m.flete) || 0;
+                  const costoUni = _uniDe(m);
+                  const s = semaforoUni(costoUni, _rutaDe(m));
+                  const fac = estadosOC[m.id]?.factura ?? m.ocSAP?.factura;
                   return (
-                    <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
                       <td className="px-3 py-2 font-bold text-red-600">{m.folio || "—"}</td>
                       <td className="px-3 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
                       <td className="px-3 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
@@ -381,26 +563,31 @@ export default function Modulo13() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</td>
-                      <td className="px-3 py-2 text-center whitespace-nowrap">
-                        {m.ocSAP ? (
-                          <span className="inline-flex items-center gap-1 mr-1 align-middle">
-                            <span title="Documentos creados en SAP" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-green-50 text-green-700 border border-green-200"><Check size={14} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
-                            {(() => {
-                              const fac = estadosOC[m.id]?.factura ?? m.ocSAP.factura;
-                              return fac?.existe ? (
-                                <span title={`Factura de proveedor en SAP${fac.docNum ? " #" + fac.docNum : ""}`} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200"><Receipt size={14} /> Facturado{fac.docNum ? ` #${fac.docNum}` : ""}</span>
-                              ) : fac ? (
-                                <span title="Aún sin factura de proveedor" className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200"><Receipt size={14} /> Sin factura</span>
-                              ) : null;
-                            })()}
-                          </span>
-                        ) : (
-                          <button onClick={() => abrirOC(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600 mr-1"><FileText size={14} /> OC</button>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <div className="font-semibold text-green-700">{flete ? "$" + flete.toLocaleString() : "—"}</div>
+                        {s?.neutral
+                          ? <span className="mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-500 font-semibold text-[10px]" title="Único flete de esta ruta — sin comparación"><span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>${costoUni.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/u</span>
+                          : s
+                          ? <span className={`mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold text-[10px] ${s.cls}`} title={`${s.desv.toFixed(1)}% vs la mediana de su ruta ($${s.ref.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/u)`}><span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>${costoUni.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/u</span>
+                          : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => setVerMov(m)} title="Ver" className="p-1.5 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /></button>
+                          <button onClick={() => abrirEditar(m)} title="Editar" className="p-1.5 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600"><Pencil size={14} /></button>
+                          {!m.ocSAP && <button onClick={() => abrirOC(m)} title="Crear OC en SAP" className="p-1.5 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><FileText size={14} /></button>}
+                          <button onClick={() => borrarMov(m.id)} title="Borrar" className="p-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
+                        </div>
+                        {m.ocSAP && (
+                          <div className="mt-1 flex flex-wrap gap-1 justify-end">
+                            <span title="Documentos creados en SAP" className="text-[10px] px-2 py-0.5 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={12} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}</span>
+                            {fac?.existe ? (
+                              <span title={`Factura de proveedor en SAP${fac.docNum ? " #" + fac.docNum : ""}`} className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1"><Receipt size={12} /> Fact{fac.docNum ? ` #${fac.docNum}` : ""}</span>
+                            ) : fac ? (
+                              <span title="Aún sin factura de proveedor" className="text-[10px] px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 inline-flex items-center gap-1"><Receipt size={12} /> Sin factura</span>
+                            ) : null}
+                          </div>
                         )}
-                        <button onClick={() => setVerMov(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
-                        <button onClick={() => abrirEditar(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-blue-200 rounded-lg bg-white hover:bg-blue-50 text-blue-600 mr-1"><Pencil size={14} /> Editar</button>
-                        <button onClick={() => borrarMov(m.id)} className="inline-flex items-center justify-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
                       </td>
                     </tr>
                   );
@@ -453,7 +640,7 @@ export default function Modulo13() {
               {/* Materiales */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Materiales</div>
-                <div className="border border-gray-200 rounded-lg">
+                <div className="border border-gray-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500">
@@ -501,7 +688,7 @@ export default function Modulo13() {
                   />
                 </div>
                 {lineaNueva && <div className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-md px-2 py-1.5 mb-2"><Pencil size={14} /> Capturando línea nueva — se guarda en el catálogo al guardar</div>}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className={LBL}>Línea</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.linea} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, linea: e.target.value }))} /></div>
                   <div><label className={LBL}>Contacto</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.contacto} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, contacto: e.target.value }))} /></div>
                   <div><label className={LBL}>Número</label><input className={INP + (lineaNueva ? "" : " bg-gray-50")} value={form.numero} readOnly={!lineaNueva} onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))} /></div>
@@ -521,7 +708,7 @@ export default function Modulo13() {
                           { value: "__nuevo__", label: "+ Nuevo chofer" },
                         ]}
                       />
-                      <div className="grid grid-cols-3 gap-2 mt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.chofer} readOnly={!choferNuevo} placeholder="Nombre" onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.telefono} readOnly={!choferNuevo} placeholder="Teléfono" onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} />
                         <input className={INP + (choferNuevo ? "" : " bg-gray-50")} value={form.licencia} readOnly={!choferNuevo} placeholder="Licencia" onChange={(e) => setForm((f) => ({ ...f, licencia: e.target.value }))} />
@@ -592,7 +779,7 @@ export default function Modulo13() {
               <button onClick={() => setVerMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="px-5 py-4 space-y-4 text-xs">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {[
                   ["Proyecto", verMov.proyecto], ["Fecha", verMov.fecha], ["Origen", verMov.origen], ["Destino", verMov.destino],
                   ["Flete", verMov.flete ? "$" + verMov.flete : ""],
@@ -602,6 +789,7 @@ export default function Modulo13() {
               </div>
               <div>
                 <div className="text-gray-400 mb-1 font-medium uppercase">Materiales</div>
+                <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead><tr className="text-gray-400"><th className="text-left py-1">Material</th><th className="text-right py-1">Cantidad</th><th className="text-left py-1 pl-2">Unidad</th></tr></thead>
                   <tbody>
@@ -612,10 +800,11 @@ export default function Modulo13() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
               <div className="border-t border-gray-100 pt-3">
                 <div className="text-gray-400 mb-1 font-medium uppercase">Transporte (fletero)</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     ["Línea", verMov.linea], ["Contacto", verMov.contacto], ["Número", verMov.numero],
                     ["Chofer", verMov.chofer], ["Teléfono", verMov.telefono], ["Licencia", verMov.licencia],
@@ -722,6 +911,10 @@ export default function Modulo13() {
                   <input type="date" value={ocFecha} onChange={(e) => setOcFecha(e.target.value)} className={INP} />
                 </div>
                 <div>
+                  <label className={LBL}>Detalles de artículo <span className="text-gray-400">· en la línea de la OC (acarreo, material, ruta)</span></label>
+                  <textarea value={ocDetalle} onChange={(e) => setOcDetalle(e.target.value)} rows={2} className={INP} placeholder="Ej. ACARREO MATERIAL · Bodega→Empaque" />
+                </div>
+                <div>
                   <label className={LBL}>Comentario</label>
                   <textarea value={ocComentario} onChange={(e) => setOcComentario(e.target.value)} rows={2} className={INP} />
                 </div>
@@ -747,7 +940,6 @@ export default function Modulo13() {
       })()}
 
       {/* ── Modal catálogo de materiales (master compartido) ── */}
-      {verFletes && <ControlFletesModal tipo="material" proyectos={proyectos} onClose={() => setVerFletes(false)} />}
 
       {catMat && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -760,7 +952,7 @@ export default function Modulo13() {
               <button onClick={() => setCatMat(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="px-5 py-4">
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="border border-gray-200 rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 text-gray-500">

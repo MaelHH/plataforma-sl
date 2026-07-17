@@ -104,17 +104,17 @@ export default function Modulo6() {
     XLSX.writeFile(wb, `Consolidado_Fletes_${hoy}.xlsx`);
   };
 
-  const SEL = "text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
+  const SEL = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
   const filasPlanas = construirFilas();
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Consolidado y Fletes</h1>
           <p className="text-sm text-gray-500 mt-0.5">Cristina · división de fletes por empresa</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="w-8 h-8 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-bold">CR</div>
           <span className="text-sm font-medium text-gray-700">Cristina</span>
         </div>
@@ -130,7 +130,7 @@ export default function Modulo6() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {[
               { l: "Total cargas", v: cargasEmbarques.length, c: "text-gray-900" },
               { l: "Pendientes SAP", v: cargasEmbarques.filter((c) => c.sapStatus === "pendiente").length, c: "text-orange-600" },
@@ -164,7 +164,7 @@ export default function Modulo6() {
             {hayFiltros && <div className="text-xs text-gray-400 mt-2">Mostrando {cargasFiltradas.length} de {cargasEmbarques.length}</div>}
           </div>
 
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-3">
             <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
               <button onClick={() => setVista("tarjetas")} className={`text-xs px-3 py-1.5 font-medium inline-flex items-center gap-1 ${vista === "tarjetas" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}><Boxes size={14} /> Tarjetas</button>
               <button onClick={() => setVista("tabla")} className={`text-xs px-3 py-1.5 font-medium inline-flex items-center gap-1 ${vista === "tabla" ? "bg-gray-100 text-gray-900 font-semibold" : "bg-white text-gray-500 hover:bg-gray-50"}`}><ListChecks size={14} /> Base de datos</button>

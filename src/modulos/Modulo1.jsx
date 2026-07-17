@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ClipboardList, X, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import * as XLSX from "xlsx";
+import { ClipboardList, X, Plus, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { useDatos, ORIGENES, DESTINOS_ALL, COLORES_CAT, nuevoId, calcularDias, etiquetaSemana, moverSemana } from "../store/datos";
 import SearchSelect from "../components/SearchSelect";
 
@@ -61,6 +62,29 @@ export default function Modulo1() {
   // Total de cajas de la pestaña actual
   const totalCajas = filasTab.reduce((a, f) => a + f.dias.reduce((b, c) => b + c, 0), 0);
 
+  // ── Exportar a Excel (las filas visibles: semana + cultivo activos) ──
+  const exportarExcel = () => {
+    if (filasTab.length === 0) return; // no truena si no hay filas
+    const cultivoLabel = cultivos.find((c) => c.id === tab)?.label || tab;
+    const filas = filasTab.map((r) => {
+      const pres = catalogo.find((c) => c.id === r.presId);
+      const fila = {
+        Cultivo: cultivoLabel,
+        Presentación: pres?.label || "—",
+        Origen: r.origen || "",
+        Destino: r.dest || "",
+      };
+      dias.forEach((d, i) => { fila[d] = Number(r.dias?.[i]) || 0; });
+      fila.Total = (r.dias || []).reduce((a, b) => a + (Number(b) || 0), 0);
+      return fila;
+    });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Programa");
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Programa_Semanal_${hoy}.xlsx`);
+  };
+
   // ── Guardar en el store ──
   const setFilas = (nuevasFilasSemana) => setPrograma((prev) => ({ ...prev, [semana]: nuevasFilasSemana }));
 
@@ -88,7 +112,7 @@ export default function Modulo1() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Programa Semanal</h1>
           <p className="text-sm text-gray-500 mt-0.5">José Carlos Preciado · planeación de cajas por presentación</p>
@@ -99,9 +123,9 @@ export default function Modulo1() {
       </div>
 
       {/* Selector de semana */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex items-center justify-between">
+      <div className="bg-white border border-gray-200 rounded-xl p-3 mb-4 flex flex-wrap items-center justify-center sm:justify-between gap-2">
         <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><span className="inline-flex items-center gap-1"><ChevronLeft size={16} /> Anterior</span></button>
-        <div className="text-center">
+        <div className="text-center min-w-0 order-first w-full sm:order-none sm:w-auto">
           <div className="text-xs text-gray-400">Semana del programa</div>
           <div className="text-sm font-semibold text-gray-900">{etiquetaSemana(semana)}</div>
           <input type="date" value={semana} onChange={(e) => { if (e.target.value) setSemana(e.target.value); }}
@@ -120,9 +144,14 @@ export default function Modulo1() {
         ))}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-4 inline-block">
-        <div className="text-xs text-gray-500">Total cajas semana · {cultivos.find((c) => c.id === tab)?.label}</div>
-        <div className="text-2xl font-semibold text-gray-900">{totalCajas.toLocaleString()}</div>
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 inline-block">
+          <div className="text-xs text-gray-500">Total cajas semana · {cultivos.find((c) => c.id === tab)?.label}</div>
+          <div className="text-2xl font-semibold text-gray-900">{totalCajas.toLocaleString()}</div>
+        </div>
+        <button onClick={exportarExcel} className="inline-flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 whitespace-nowrap">
+          <FileText size={14} /> Excel
+        </button>
       </div>
 
       {/* Tabla editable */}
@@ -192,6 +221,7 @@ export default function Modulo1() {
               <button onClick={() => setCatAbierto(false)} className="inline-flex items-center justify-center text-gray-400 hover:text-gray-700"><X size={16} /></button>
             </div>
             <div className="px-5 py-4">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-xs text-gray-500 border-b border-gray-100">
@@ -229,6 +259,7 @@ export default function Modulo1() {
                   ))}
                 </tbody>
               </table>
+              </div>
               <button onClick={addCat} className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium"><Plus size={14} /> Agregar presentación</button>
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end">

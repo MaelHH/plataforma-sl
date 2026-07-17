@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP } from "../store/api";
@@ -111,6 +112,7 @@ export default function Modulo9() {
   const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [q, setQ] = useState("");
+  const [fDestino, setFDestino] = useState(""); // filtro dropdown por Destino (aplica a la pestaña activa)
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
   const [rechazoMov, setRechazoMov] = useState(null); // flete a rechazar
   const [rechazoComent, setRechazoComent] = useState("");
@@ -143,7 +145,8 @@ export default function Modulo9() {
     if (!(cubetas > 0)) { setSapError("La cantidad calculada es 0."); return; }
     setSapCargando(true); setSapError("");
     try {
-      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas });
+      // movimientoId → idempotencia server-side: si esto se reintenta, SAP no recibe doble recibo.
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id });
       setMovimientos((prev) => prev.map((x) => x.id === m.id
         ? { ...x, recepcion: { ...x.recepcion, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } } }
         : x));
@@ -255,6 +258,12 @@ export default function Modulo9() {
   };
 
   const reabrir = async (id) => {
+    // Candado: si el recibo ya se envió a SAP, NO se puede reabrir (desincronizaría con SAP).
+    const mov = movimientos.find((x) => x.id === id);
+    if (mov?.recepcion?.sapEnvio) {
+      await dlg.alerta({ title: "No se puede reabrir", message: `Este flete ya se envió a SAP (Recibo #${mov.recepcion.sapEnvio.docNum}). Reabrirlo dejaría la plataforma fuera de sincronía con SAP.` });
+      return;
+    }
     if (!(await dlg.confirm({ title: "Reabrir flete", message: "¿Reabrir este flete? Volverá a 'Por recibir' y se borrará el vaciado registrado.", confirmText: "Reabrir", danger: true }))) return;
     setMovimientos((prev) => prev.map((m) => (m.id === id ? { ...m, recepcion: undefined, vaciado: undefined } : m)));
   };
@@ -345,7 +354,10 @@ export default function Modulo9() {
   // Historiales: manifiestos sin kg en piso, separados por a dónde se fue el producto.
   const vaciadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgVaciadosDe(m) > 0);  // entraron a empaque
   const mermadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgMermadosDe(m) > 0);  // NO entraron (merma)
-  const filasVac = tabRec === "histVaciado" ? vaciadosHist : tabRec === "histMermado" ? mermadosHist : enPisoLista;
+  // Filtro de Destino (dropdown): aplica a la lista VISIBLE de la pestaña activa.
+  const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const filasVac = (tabRec === "histVaciado" ? vaciadosHist : tabRec === "histMermado" ? mermadosHist : enPisoLista)
+    .filter((m) => !fDestino || m.destino === fDestino);
   const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
   const pendientes = movimientos.filter((m) => !atendido(m));
   const historialArr = movimientos.filter(atendido);
@@ -353,12 +365,14 @@ export default function Modulo9() {
   const qLow = q.trim().toLowerCase();
   const lista = (tabRec === "pendientes" ? pendientes : historialArr).filter((m) => {
     if (tabRec === "historial" && fTipo && (m.recepcion?.estado || "") !== fTipo) return false;
+    if (fDestino && m.destino !== fDestino) return false;
     if (qLow) {
       const campos = [m.folio, m.remision, m.rancho, m.lote, m.linea, m.chofer, m.origen, m.destino, m.viaje];
       if (!campos.some((c) => String(c ?? "").toLowerCase().includes(qLow))) return false;
     }
     return true;
   });
+  const hayFiltros = !!(q || fTipo || fDestino);
 
   // Inventario (acumulado, no por día): recibido / vaciado / mermado / en piso, todo en kg.
   const totKgRec = recibidos.reduce((a, m) => a + kgRecibidosDe(m), 0);
@@ -410,7 +424,73 @@ export default function Modulo9() {
   const lotesHora = [...new Set(porHora.flatMap(([, v]) => Object.keys(v.lotes)))].sort();
 
   const INP = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
+  const INP_FILTRO = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 bg-white";
   const LBL = "text-xs text-gray-500 block mb-0.5";
+
+  // ── Exportar a Excel ── Exporta la lista de la PESTAÑA ACTIVA, tal como se ve
+  // (ya filtrada por búsqueda `q` y por el dropdown de Destino). Las columnas usan
+  // los campos reales del movimiento según la pestaña. No truena si no hay filas.
+  const exportarExcel = () => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const NOMBRE_TAB = { pendientes: "Por_recibir", historial: "Historial_por_recibir", vaciado: "Vaciado_a_empaque", histVaciado: "Historial_vaciado", histMermado: "Historial_mermado" };
+    const prodDe = (m) => (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ");
+    let filas;
+    if (tabRec === "pendientes" || tabRec === "historial") {
+      filas = lista.map((m) => {
+        const r = m.recepcion || {};
+        const nMu = m.muestreos?.length || 0;
+        const qciProm = nMu ? m.muestreos.reduce((a, mu) => a + calcQCI(mu), 0) / nMu : null;
+        const base = {
+          Folio: m.folio || "", Fecha: m.fecha || "", Remisión: m.remision || "",
+          Rancho: m.rancho || "", Lote: m.lote || "",
+          Origen: m.origen || "", Destino: m.destino || "",
+          Línea: m.linea || "", Chofer: m.chofer || "",
+          Producto: prodDe(m),
+          Parrillas: sumar(m.cargaItems, "parrillas") || "",
+          Bultos: sumar(m.cargaItems, "bultos") || "",
+          "Viaje/Zona": m.viaje || "",
+          QCI: qciProm !== null ? Number(qciProm.toFixed(2)) : "",
+        };
+        if (tabRec === "historial") {
+          return {
+            ...base,
+            Estado: r.estado === "recibido" ? "Recibido" : r.estado === "rechazado" ? "Rechazado" : "",
+            Condición: r.estado === "recibido" ? (r.condicion === "con_novedad" ? "Con novedad" : "OK") : "",
+            "Fecha llegada": r.fechaLlegada || "", "Hora llegada": r.horaLlegada || "",
+            Responsable: r.responsable || "",
+            "Parrillas recibidas": r.parrillasRecibidas || "", "Bultos recibidos": r.bultosRecibidos || "",
+            "Peso recibido (kg)": r.pesoRecibido || "",
+            "Neto (kg)": r.estado === "recibido" ? Math.round(kgRecibidosDe(m)) : "",
+            "Cliente directo": r.clienteDirecto ? "Sí" : "",
+            Observaciones: r.observaciones || r.comentario || "",
+          };
+        }
+        return { ...base, "Peso báscula (kg)": m.pesoBascula || "" };
+      });
+    } else {
+      // vaciado / histVaciado / histMermado → usan la lista visible `filasVac`
+      filas = filasVac.map((m) => {
+        const motivos = (m.vaciado?.mermas || []).map((e) => e.motivo).filter(Boolean).join(", ");
+        return {
+          "Folio/Remisión": m.remision || m.folio || "",
+          Folio: m.folio || "", Remisión: m.remision || "",
+          Lote: loteDe(m), Rancho: m.rancho || "",
+          Origen: m.origen || "", Destino: m.destino || "",
+          Producto: prodDe(m),
+          "Recibido (kg)": Math.round(kgRecibidosDe(m)),
+          "Vaciado a empaque (kg)": Math.round(kgVaciadosDe(m)),
+          "Mermado (kg)": Math.round(kgMermadosDe(m)),
+          "En piso (kg)": Math.round(kgEnPisoDe(m)),
+          ...(tabRec === "histMermado" ? { "Motivos de merma": motivos } : {}),
+        };
+      });
+    }
+    if (filas.length === 0) { dlg.alerta({ title: "Sin datos", message: "No hay fletes para exportar en esta pestaña con los filtros actuales." }); return; }
+    const ws = XLSX.utils.json_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Empaque");
+    XLSX.writeFile(wb, `Empaque_${NOMBRE_TAB[tabRec] || tabRec}_${hoy}.xlsx`);
+  };
 
   // Dropdown de inspector con catálogo compartido (mismo que Aprobación de Calidad).
   // Incluye opción para agregar uno nuevo al vuelo.
@@ -448,18 +528,18 @@ export default function Modulo9() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Empaque</h1>
           <p className="text-sm text-gray-500 mt-0.5">Confirmación de llegada de los fletes que salieron de campo</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold">EM</div>
           <span className="text-sm font-medium text-gray-700">Empaque</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
         {stat("Total fletes", movimientos.length, "text-gray-900")}
         {stat("Por recibir", pendientes.length, "text-orange-600")}
         {stat("Recibidos", recibidos.length, "text-green-700")}
@@ -600,7 +680,9 @@ export default function Modulo9() {
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Por recibir", count: pendientes.length },
         { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
-        { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
+        // OCULTO (no se usa por ahora): pestaña "Cliente Directo". La lógica y los datos siguen
+        // intactos; solo se quita el botón. Para reactivarla, descomenta esta línea:
+        // { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
         { key: "historial", label: "Historial por Recibir", count: historialArr.length },
         { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
         { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
@@ -612,10 +694,10 @@ export default function Modulo9() {
             <div>
               <span className="text-sm font-semibold text-gray-900">
                 {tabRec === "histVaciado"
-                  ? `Vaciados completos (${vaciadosHist.length})`
+                  ? `Vaciados completos (${filasVac.length})`
                   : tabRec === "histMermado"
-                    ? `Mermados — no entraron a empaque (${mermadosHist.length})`
-                    : `En piso para vaciar a producción (${enPisoLista.length})`}
+                    ? `Mermados — no entraron a empaque (${filasVac.length})`
+                    : `En piso para vaciar a producción (${filasVac.length})`}
               </span>
               <span className="text-xs text-gray-400 ml-2">
                 {tabRec === "histVaciado"
@@ -625,9 +707,15 @@ export default function Modulo9() {
                     : "· captura los kg recibidos; vacía a empaque o marca merma (no entró)"}
               </span>
             </div>
-            {tabRec === "histMermado" && (
-              <button onClick={abrirRezaga} className="inline-flex items-center gap-1 text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap"><Plus size={14} /> Registrar rezaga</button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <div className="w-full sm:w-44 min-w-0"><SearchSelect className={INP_FILTRO} value={fDestino} onChange={setFDestino} placeholder="Destino: todos"
+                options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
+              {fDestino && <button onClick={() => setFDestino("")} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 whitespace-nowrap">Limpiar filtros</button>}
+              <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{fDestino ? " (filtrado)" : ""}</button>
+              {tabRec === "histMermado" && (
+                <button onClick={abrirRezaga} className="inline-flex items-center gap-1 text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap"><Plus size={14} /> Registrar rezaga</button>
+              )}
+            </div>
           </div>
           {filasVac.length === 0 ? (
             <div className="text-xs text-gray-400 text-center py-8 italic">
@@ -825,7 +913,11 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-gray-600 align-top">{m.consignado || m.distribuidor || m.destino || "—"}</td>
                         <td className="px-3 py-2 text-center whitespace-nowrap align-top">
                           <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
-                          <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
+                          {m.recepcion?.sapEnvio ? (
+                            <span title="No se puede reabrir: el recibo ya está en SAP" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center gap-1"><Ban size={14} /> Reabrir</span>
+                          ) : (
+                            <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -848,12 +940,15 @@ export default function Modulo9() {
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, rancho, chofer, destino…"
-              className="flex-1 min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+              className="flex-1 min-w-0 sm:min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
+            <div className="w-full sm:w-44 min-w-0"><SearchSelect className={INP_FILTRO} value={fDestino} onChange={setFDestino} placeholder="Destino: todos"
+              options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
             {tabRec === "historial" && (
-              <div className="w-48"><SearchSelect className={INP} value={fTipo} onChange={setFTipo} placeholder="Tipo: todos"
+              <div className="w-full sm:w-48"><SearchSelect className={INP} value={fTipo} onChange={setFTipo} placeholder="Tipo: todos"
                 options={[{ value: "", label: "Tipo: todos" }, { value: "recibido", label: "Recepción" }, { value: "rechazado", label: "Rechazo" }]} /></div>
             )}
-            {(q || fTipo) && <button onClick={() => { setQ(""); setFTipo(""); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Limpiar</button>}
+            {hayFiltros && <button onClick={() => { setQ(""); setFTipo(""); setFDestino(""); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 whitespace-nowrap">Limpiar filtros</button>}
+            <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center justify-center gap-1 whitespace-nowrap w-full sm:w-auto"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
           </div>
         )}
         {lista.length === 0 ? (
@@ -935,7 +1030,11 @@ export default function Modulo9() {
                               ) : ordenSAPde(m) ? (
                                 <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
                               ) : null}
-                              <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
+                              {m.recepcion?.sapEnvio ? (
+                                <span title="No se puede reabrir: el recibo ya está en SAP" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
+                              ) : (
+                                <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
+                              )}
                             </>
                           ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
@@ -967,7 +1066,7 @@ export default function Modulo9() {
               {/* Datos declarados (lo que dijeron que salió) */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Lo que salió de campo (declarado)</div>
-                <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3">
                   {[
                     ["Rancho", recibir.rancho], ["Origen", recibir.origen], ["Destino", recibir.destino],
                     ["Línea", recibir.linea], ["Chofer", recibir.chofer], ["Placa tracto", recibir.placaTracto],
@@ -981,7 +1080,7 @@ export default function Modulo9() {
               {/* Confirmación de cantidades: salió vs llegó */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Confirmar cantidades recibidas</div>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 text-gray-500">
@@ -1047,7 +1146,7 @@ export default function Modulo9() {
               {/* Datos de llegada */}
               <div>
                 <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Datos de la recepción</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div><label className={LBL}>Fecha de llegada</label><input type="date" className={INP} value={form.fechaLlegada} onChange={(e) => upd("fechaLlegada", e.target.value)} /></div>
                   <div><label className={LBL}>Hora de llegada</label><input type="time" className={INP} value={form.horaLlegada} onChange={(e) => upd("horaLlegada", e.target.value)} /></div>
                   <div><label className={LBL}>Recibe (responsable)</label><input className={INP} value={form.responsable} onChange={(e) => upd("responsable", e.target.value)} placeholder="Nombre de quien recibe" /></div>
@@ -1100,10 +1199,10 @@ export default function Modulo9() {
               </div>
 
               {/* Pestañas de muestreos */}
-              <div className="px-5 pt-3 flex items-center gap-2 border-b border-gray-100">
+              <div className="px-5 pt-3 flex items-center gap-2 border-b border-gray-100 overflow-x-auto">
                 {muestreos.map((_, i) => (
                   <button key={i} onClick={() => setMActivo(i)}
-                    className={`text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px ${i === mActivo ? "border-indigo-500 text-indigo-700 bg-indigo-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                    className={`text-xs px-3 py-1.5 rounded-t-lg font-medium border-b-2 -mb-px whitespace-nowrap ${i === mActivo ? "border-indigo-500 text-indigo-700 bg-indigo-50" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                     Muestreo {i + 1}
                     {muestreos.length > 1 && <span onClick={(e) => { e.stopPropagation(); eliminarMuestreo(i); }} className="ml-2 inline-flex items-center text-gray-300 hover:text-red-500"><X size={14} /></span>}
                   </button>
@@ -1117,7 +1216,7 @@ export default function Modulo9() {
                 {/* Datos arrastrados del movimiento de campo (solo lectura) */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
                   <div className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Datos del movimiento de campo</div>
-                  <div className="grid grid-cols-4 gap-x-3 gap-y-1 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 text-xs">
                     {[["Remisión", muestreoMov.remision], ["Folio", muestreoMov.folio], ["Rancho", muestreoMov.rancho], ["Lote", muestreoMov.lote], ["Viaje / zona", muestreoMov.viaje], ["Consignado", muestreoMov.consignado], ["Distribuidor", muestreoMov.distribuidor], ["Resp. cosecha", muestreoMov.responsableCosecha], ["Origen → Destino", `${muestreoMov.origen || "—"} → ${muestreoMov.destino || "—"}`], ["Fecha salida", muestreoMov.fecha], ["Línea", muestreoMov.linea], ["Chofer", muestreoMov.chofer]].map(([l, v]) => (
                       <div key={l}><span className="text-gray-400">{l}: </span><span className="font-semibold text-gray-700">{v || "—"}</span></div>
                     ))}
@@ -1125,7 +1224,7 @@ export default function Modulo9() {
                 </div>
 
                 {/* Encabezado del muestreo */}
-                <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                   <div><label className={LBL}>Lote (paredes)</label><input className={INP} value={mu.lote} onChange={(e) => updMuestreo("lote", e.target.value)} placeholder="Paredes" /></div>
                   <div><label className={LBL}>Inspector</label>{selectorInspector(mu.inspector, (v) => updMuestreo("inspector", v))}</div>
                   <div><label className={LBL}>Folio muestreo / ID</label><input className={INP} value={mu.folio} onChange={(e) => updMuestreo("folio", e.target.value)} placeholder="201" /></div>
@@ -1134,7 +1233,7 @@ export default function Modulo9() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Tabla de defectos (col 1-2) */}
-                  <div className="md:col-span-2 border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="md:col-span-2 border border-gray-200 rounded-lg overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -1192,7 +1291,7 @@ export default function Modulo9() {
                 </div>
               </div>
 
-              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
+              <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2 gap-y-2 justify-between items-center sticky bottom-0 bg-white">
                 <div className="flex gap-2">
                   <button onClick={() => generarReporteCalidad(muestreoMov, muestreos)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1"><FileText size={14} /> Generar PDF</button>
                   <button onClick={() => abrirRechazo(muestreoMov)} className="inline-flex items-center gap-1 text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50"><Ban size={14} /> Rechazar flete</button>
@@ -1221,7 +1320,7 @@ export default function Modulo9() {
 
             <div className="px-5 py-4 space-y-5">
               {/* Encabezado del registro */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="col-span-1"><label className={LBL}>Producto</label><input className={INP} value={insp.producto} onChange={(e) => updInsp("producto", e.target.value)} placeholder="Producto" /></div>
                 <div><label className={LBL}>Fecha</label><input type="date" className={INP} value={insp.fecha} onChange={(e) => updInsp("fecha", e.target.value)} /></div>
                 <div><label className={LBL}>Hora</label><input type="time" className={INP} value={insp.hora} onChange={(e) => updInsp("hora", e.target.value)} /></div>
@@ -1272,7 +1371,7 @@ export default function Modulo9() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div><label className={LBL}>Temperatura interna del producto (°F)</label><input type="number" step="0.1" className={INP} value={insp.tempProducto} onChange={(e) => updInsp("tempProducto", e.target.value)} placeholder="°F" /></div>
                 <div className="col-span-2"><label className={LBL}>Observaciones y/o acciones correctivas</label><input className={INP} value={insp.observaciones} onChange={(e) => updInsp("observaciones", e.target.value)} placeholder="Observaciones" /></div>
               </div>
@@ -1288,7 +1387,7 @@ export default function Modulo9() {
               </div>
             </div>
 
-            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-between items-center sticky bottom-0 bg-white">
+            <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2 gap-y-2 justify-between items-center sticky bottom-0 bg-white">
               <div className="flex gap-2">
                 <button onClick={() => generarReporteInspeccion(insp)} className="text-xs px-4 py-2 bg-orange-600 text-white rounded-lg font-semibold hover:bg-orange-700 flex items-center gap-1"><FileText size={14} /> Generar PDF</button>
                 <button onClick={() => abrirRechazo(inspMov)} className="inline-flex items-center gap-1 text-xs px-4 py-2 border border-red-300 text-red-600 rounded-lg font-semibold hover:bg-red-50"><Ban size={14} /> Rechazar flete</button>
@@ -1305,7 +1404,7 @@ export default function Modulo9() {
       {/* ── Modal de rechazo del flete ── */}
       {rechazoMov && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Ban size={16} /> Rechazar flete — Folio {rechazoMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5">El flete saldrá de "Por recibir" y pasará al Historial como Rechazo.</div>
@@ -1326,7 +1425,7 @@ export default function Modulo9() {
       {/* ── Modal: registrar vaciado a producción ── */}
       {vaciarMov && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="text-sm font-semibold text-gray-900"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={16} /> Vaciar a producción</span> — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -1365,7 +1464,7 @@ export default function Modulo9() {
       {/* ── Modal: registrar merma (no entró a empaque) ── */}
       {mermarMov && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlertTriangle size={16} /> Mermar (no entró a empaque) — {mermarMov.remision || mermarMov.folio || "—"}</div>
               <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
@@ -1418,7 +1517,7 @@ export default function Modulo9() {
       {/* ── Modal: registrar rezaga suelta (Historial Mermado) ── */}
       {rezagaForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-xl">
             <div className="px-5 py-4 border-b border-gray-100">
               <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Plus size={16} /> Registrar rezaga</div>
               <div className="text-xs text-gray-500 mt-0.5">Rezaga suelta (no viene de un manifiesto). Se guarda en Historial Mermado.</div>
@@ -1457,7 +1556,7 @@ export default function Modulo9() {
         const cubetas = Math.round(neto / kgc);
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Send size={16} /> Mandar cantidad a SAP — Folio {sapMov.folio || "—"}</div>
                 <button onClick={() => setSapMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>

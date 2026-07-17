@@ -180,11 +180,11 @@ export default function Modulo7() {
     return (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-3">
         <div className="px-4 py-3 cursor-pointer hover:bg-gray-50" onClick={() => setExpandido(isOpen ? null : t.id)}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3 min-w-0">
               <span className="text-gray-400 text-sm">{isOpen ? "▲" : "▼"}</span>
-              <div>
-                <div className="text-base font-semibold text-gray-900">{t.linea || "Sin línea de flete"}</div>
+              <div className="min-w-0">
+                <div className="text-base font-semibold text-gray-900 truncate">{t.linea || "Sin línea de flete"}</div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${DC[t.dest] || "bg-gray-100 text-gray-600 border-gray-200"}`}>{t.dest}</span>
                   <span className="text-xs text-gray-500">{t.chofer || "Sin chofer"}</span>
@@ -197,7 +197,7 @@ export default function Modulo7() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
               {conEvidencia > 0 && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">{conEvidencia} evento{conEvidencia > 1 ? "s" : ""}</span>}
               {!esHistorial ? (
                 <button onClick={() => marcarEntregado(t.id)} className="inline-flex items-center gap-1 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700"><Check size={14} /> Llegó a destino</button>
@@ -231,8 +231,8 @@ export default function Modulo7() {
               const numFotos = ev.id === "preenfriado" ? 8 : 4;
               return (
                 <div key={ev.id} className={`border-2 rounded-xl p-3 ${estado.hubo === true ? c.border + " " + c.bg : "border-gray-200 bg-white"}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className={`text-lg ${c.text}`}><ev.Icon size={14} /></span>
                       <span className="text-sm font-medium text-gray-700">{ev.label}</span>
                     </div>
@@ -299,18 +299,18 @@ export default function Modulo7() {
     );
   }
 
-  const SEL = "text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
+  const SEL = "w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
   const listaActiva = tab === "ruta" ? enRuta : entregados;
   const totalActiva = tab === "ruta" ? enRutaAll.length : entregadosAll.length;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Monitoreo en Ruta</h1>
           <p className="text-sm text-gray-500 mt-0.5">Eventos en tránsito · preenfriado · TIVE · retenes · aduanas · accidentes</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">FF</div>
           <span className="text-sm font-medium text-gray-700">Francisco / Kiko</span>
         </div>

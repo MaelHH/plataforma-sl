@@ -4,7 +4,7 @@ import { DatosProvider, useDatos } from "./store/datos";
 import {
   Users, LogOut, LayoutDashboard, Boxes, Sprout, PackageOpen, ClipboardList, Truck,
   LayoutGrid, Camera, PackageCheck, DollarSign, Radar, FlaskConical, Container, FileText,
-  AlertTriangle, MapPin,
+  AlertTriangle, MapPin, Menu, X, Megaphone,
 } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
@@ -35,11 +35,13 @@ const Modulo10 = lazy(() => import("./modulos/Modulo10"));
 const Modulo11 = lazy(() => import("./modulos/Modulo11"));
 const Modulo12 = lazy(() => import("./modulos/Modulo12"));
 const Modulo13 = lazy(() => import("./modulos/Modulo13"));
+const Modulo14 = lazy(() => import("./modulos/Modulo14"));
 
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
 const MODULOS = [
   { id: 0, nombre: "Dashboard", sub: "Dirección / Gerencia", icono: LayoutDashboard, desc: "Visión general para dirección: KPIs de la semana, avance por destino, costos y alertas." },
+  { id: 14, nombre: "Solicitud de Trailer", sub: "Encargado de Campo", icono: Megaphone, desc: "El encargado de campo levanta la necesidad de trailer: responsable, fecha de corte, temporada/rancho (de SAP), taras cortadas, cantidad de trailers y hora estimada. Se marca 'cumplida' cuando se atiende." },
   { id: 13, nombre: "Movimiento Materiales", sub: "Materiales", icono: Boxes, desc: "Registra el movimiento de materiales con los mismos datos del fletero (línea/chofer/tracto/caja) y marca si los materiales iban arriba del trailer. Catálogo de materiales (a futuro desde SAP)." },
   { id: 8, nombre: "Movimientos Campo → Empaques", sub: "Oscar", icono: Sprout, desc: "Oscar registra cada flete que sale del campo hacia el empaque: remisión, rancho/lote, carga y transporte. Alimenta a Recepción." },
   { id: 9, nombre: "Empaque", sub: "Empaque", icono: PackageOpen, desc: "Empaque confirma la llegada de los fletes (calidad/inspección/rechazo) y registra el vaciado de bins a producción (Vaciado a Empaque)." },
@@ -77,30 +79,37 @@ class ErrorBoundary extends Component {
 function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
   const [verUsuarios, setVerUsuarios] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);   // drawer del menú en móvil
   const modActivo = MODULOS.find((m) => m.id === moduloActivo);
   const dlg = useDialog();
 
   const confirmarSalir = async () => {
     if (await dlg.confirm({ title: "Cerrar sesión", message: "¿Seguro que quieres cerrar la sesión?", confirmText: "Cerrar sesión", danger: true })) onLogout();
   };
+  // Al elegir un módulo (o abrir usuarios), cerramos el drawer en móvil.
+  const seleccionar = (id) => { setModuloActivo(id); setMenuAbierto(false); };
 
   return (
     <DatosProvider>
-      <div className="flex h-screen bg-gray-50">
-        {/* Menú lateral */}
-        <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        {/* Fondo oscuro al abrir el menú en móvil */}
+        {menuAbierto && <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setMenuAbierto(false)} aria-hidden />}
+
+        {/* Menú lateral — cajón deslizable en móvil, fijo en desktop */}
+        <div className={`fixed md:static inset-y-0 left-0 z-40 w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col transform transition-transform duration-200 ${menuAbierto ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
           <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">SL</div>
-            <div>
+            <img src="/logo/web/icono-48x48.png" alt="SL Logística" className="w-10 h-10 shrink-0 object-contain" />
+            <div className="flex-1 min-w-0">
               <h1 className="text-base font-bold text-gray-900 leading-tight">SL Logística</h1>
-              <p className="text-xs text-gray-500">SL Produce · SL Agrícola</p>
+              <p className="text-xs text-gray-500 truncate">SL Produce · SL Agrícola</p>
             </div>
+            <button onClick={() => setMenuAbierto(false)} className="md:hidden text-gray-400 hover:text-gray-700 shrink-0" aria-label="Cerrar menú"><X size={18} /></button>
           </div>
           <nav className="flex-1 p-2 overflow-y-auto">
             {MODULOS.map((m) => (
               <button
                 key={m.id}
-                onClick={() => setModuloActivo(m.id)}
+                onClick={() => seleccionar(m.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm mb-1 transition-colors ${
                   moduloActivo === m.id
                     ? "bg-blue-50 text-blue-700 font-semibold"
@@ -108,9 +117,9 @@ function AppAutenticada({ onLogout }) {
                 }`}
               >
                 <m.icono size={18} className="shrink-0" />
-                <div className="text-left leading-tight">
-                  <div>{m.nombre}</div>
-                  <div className={`text-xs font-normal ${moduloActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
+                <div className="text-left leading-tight min-w-0">
+                  <div className="truncate">{m.nombre}</div>
+                  <div className={`text-xs font-normal truncate ${moduloActivo === m.id ? "text-blue-400" : "text-gray-400"}`}>{m.sub}</div>
                 </div>
               </button>
             ))}
@@ -119,15 +128,22 @@ function AppAutenticada({ onLogout }) {
             <EstadoConexion />
             <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
-              <button onClick={() => setVerUsuarios(true)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
+              <button onClick={() => { setVerUsuarios(true); setMenuAbierto(false); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>
               <button onClick={confirmarSalir} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
         </div>
 
         {/* Contenido del módulo */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-8 max-w-6xl mx-auto">
+        <div className="flex-1 overflow-auto flex flex-col min-w-0">
+          {/* Barra superior móvil con botón de menú (hamburguesa) */}
+          <div className="md:hidden sticky top-0 z-20 bg-white border-b border-gray-200 flex items-center gap-3 px-4 py-3">
+            <button onClick={() => setMenuAbierto(true)} className="text-gray-600 hover:text-gray-900" aria-label="Abrir menú"><Menu size={22} /></button>
+            <img src="/logo/web/icono-32x32.png" alt="SL Logística" className="w-7 h-7 shrink-0 object-contain" />
+            <span className="text-sm font-semibold text-gray-900 truncate">{modActivo?.nombre || "SL Logística"}</span>
+          </div>
+
+          <div className="p-4 md:p-8 w-full max-w-6xl mx-auto">
             {modActivo?.desc && (
               <div className="mb-4 flex items-start gap-2 text-xs text-gray-600 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
                 <modActivo.icono size={16} className="shrink-0 mt-0.5 text-gray-700" />
@@ -150,6 +166,7 @@ function AppAutenticada({ onLogout }) {
                 {moduloActivo === 11 && <Modulo11 />}
                 {moduloActivo === 12 && <Modulo12 />}
                 {moduloActivo === 13 && <Modulo13 />}
+                {moduloActivo === 14 && <Modulo14 />}
               </Suspense>
             </ErrorBoundary>
           </div>

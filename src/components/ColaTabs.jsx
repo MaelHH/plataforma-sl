@@ -8,7 +8,7 @@
 //   tabs      [{ key, label, count }]
 export default function ColaTabs({ tab, setTab, tabs }) {
   return (
-    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+    <div className="inline-flex max-w-full flex-wrap rounded-lg border border-gray-200 mb-4">
       {tabs.map((t) => (
         <button
           key={t.key}

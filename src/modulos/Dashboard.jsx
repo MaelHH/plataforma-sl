@@ -180,12 +180,12 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-4">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Dashboard Ejecutivo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Visión general de la operación · {etiquetaSemana(semana)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setSemana(moverSemana(semana, -1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><ChevronLeft size={16} /></button>
           <button onClick={() => setSemana(moverSemana(semana, 1))} className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium text-gray-600"><ChevronRight size={16} /></button>
         </div>
@@ -308,7 +308,7 @@ export default function Dashboard() {
         <div className="text-sm font-bold text-gray-900 mb-3 inline-flex items-center gap-1"><DollarSign size={16} /> Análisis de Costos · costo por libra</div>
 
         {viajesValidos.length === 0 ? (
-          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center">
+          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-4 md:p-6 text-center">
             <div className="text-xs text-gray-400">El análisis de costos se calcula con cargas consolidadas que tengan distribución de presentaciones y flete (desde Evidencias de Carga).</div>
           </div>
         ) : (
@@ -332,7 +332,7 @@ export default function Dashboard() {
             </div>
 
             {/* Selector de vista */}
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3">
               {[["linea", "Por línea"], ["ruta", "Por ruta"], ["producto", "Por producto"]].map(([id, lbl]) => (
                 <button key={id} onClick={() => setVistaCosto(id)}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium ${vistaCosto === id ? "bg-emerald-100 text-emerald-700" : "bg-white text-gray-500 border border-gray-200"}`}>
@@ -342,13 +342,13 @@ export default function Dashboard() {
             </div>
 
             {/* Leyenda */}
-            <div className="flex gap-4 mb-2 text-xs text-gray-500">
+            <div className="flex flex-wrap gap-4 mb-2 text-xs text-gray-500">
               <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Bajo el promedio</span>
               <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Hasta +15%</span>
               <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> +15% o más</span>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
@@ -393,9 +393,9 @@ export default function Dashboard() {
 
         {/* ─── TENDENCIA DE COSTO (DATOS DEMO — BORRAR AL CONECTAR BACKEND) ─── */}
         <div className="mt-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-3">
             <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1"><TrendingUp size={16} /> Tendencia de costo por libra</div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {[["semanal", "Semanal"], ["mensual", "Mensual"], ["temporada", "Temporada"]].map(([id, lbl]) => (
                 <button key={id} onClick={() => setVistaTendencia(id)}
                   className={`px-3 py-1 rounded-lg text-xs font-medium ${vistaTendencia === id ? "bg-indigo-100 text-indigo-700" : "bg-white text-gray-500 border border-gray-200"}`}>
@@ -406,7 +406,7 @@ export default function Dashboard() {
           </div>
 
           {/* KPIs del periodo */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <div className="bg-white border border-gray-200 rounded-xl p-3">
               <div className="text-xs text-gray-500 mb-1">Promedio del periodo</div>
               <div className="text-xl font-bold text-gray-900">${promPeriodo.toFixed(3)}</div>
