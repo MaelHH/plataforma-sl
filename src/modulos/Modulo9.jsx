@@ -175,7 +175,7 @@ export default function Modulo9() {
         ? { ...x, recepcion: { ...x.recepcion, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } } }
         : x));
       registrarEvento?.({ evento: "recibo_produccion_sap", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
-        detalle: `${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden ${ord.absoluteEntry} · SAP #${res.docNum}`,
+        detalle: `${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`,
         meta: { cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
       setSapMov(null);
     } catch (e) {
@@ -216,7 +216,7 @@ export default function Modulo9() {
     const cub = cubetasDe(neto);
     const ok = await dlg.confirm({
       title: "Aprobar el cálculo antes de SAP",
-      message: `¿Segura que el cálculo es correcto? Se enviarán ${cub} cubetas (${Math.round(neto)} kg ÷ 6) a la orden #${ord?.absoluteEntry ?? "—"}. Quedará registrado a TU nombre como responsable de esta hora. Al aprobar se habilita el botón de mandar a SAP.`,
+      message: `¿Segura que el cálculo es correcto? Se enviarán ${cub} cubetas (${Math.round(neto)} kg ÷ 6) a la orden #${(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}. Quedará registrado a TU nombre como responsable de esta hora. Al aprobar se habilita el botón de mandar a SAP.`,
       confirmText: "Sí, es correcto — aprobar",
     });
     if (!ok) return;
@@ -286,7 +286,7 @@ export default function Modulo9() {
         ? { ...h, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
         : h)));
       registrarEvento?.({ evento: "recibo_produccion_hora_sap", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
-        detalle: `${hora.etiqueta}: ${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden ${ord.absoluteEntry} · SAP #${res.docNum}`,
+        detalle: `${hora.etiqueta}: ${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`,
         meta: { horaId: hora.id, cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
       setHoraSap(null);
     } catch (e) { setHoraSapError(String(e?.message || e)); }
@@ -1765,7 +1765,7 @@ export default function Modulo9() {
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
                 <div className="min-w-0">
                   <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Clock size={16} /> Vaciado por hora — Folio {m.folio || m.remision || "—"}</div>
-                  <div className="text-xs text-gray-400 truncate">{ord?.temporada || m.proyecto || ""}{loteDe(m) !== "—" ? ` · ${loteDe(m)}` : ""} · orden SAP {ord?.absoluteEntry ?? "—"}</div>
+                  <div className="text-xs text-gray-400 truncate">{ord?.temporada || m.proyecto || ""}{loteDe(m) !== "—" ? ` · ${loteDe(m)}` : ""} · orden SAP #{(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}</div>
                 </div>
                 <button onClick={cerrarPanelHoras} className="text-gray-400 hover:text-gray-700 shrink-0"><X size={18} /></button>
               </div>
@@ -1885,7 +1885,7 @@ export default function Modulo9() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><div className="text-gray-400">Temporada</div><div className="font-semibold">{ord?.temporada || "—"}</div></div>
                   <div><div className="text-gray-400">Rancho</div><div className="font-semibold">{ord?.rancho || "—"}</div></div>
-                  <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{ord?.absoluteEntry ?? "—"}</div></div>
+                  <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}</div></div>
                   <div><div className="text-gray-400">Ejote neto de la hora</div><div className="font-semibold">{fmt(neto)} kg</div></div>
                 </div>
                 {hora.aprobacion && <div className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Cálculo aprobado por {hora.aprobacion.por}</div>}
