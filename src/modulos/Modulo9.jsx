@@ -75,6 +75,13 @@ const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (par
 // Modo del folio: si ya tiene horas → "hora"; si ya se mandó el total a SAP → "total". Candado mutuo.
 const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
 const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
+// G2: ¿el folio ya tuvo CUALQUIER envío a SAP? (total, por hora o faltante) → no se puede
+// reabrir ni rechazar (borraría lo enviado y desincronizaría con SAP → riesgo de doble envío).
+const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio
+  || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio)
+  || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio);
+// G3: ¿el folio usa envío PARCIAL (por hora o faltante)? → bloquea el envío TOTAL (evita doble conteo).
+const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).length > 0;
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
 const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
@@ -150,7 +157,10 @@ export default function Modulo9() {
   };
   const abrirEnvioSAP = (m) => { setSapError(""); setSapKgCubeta(6); setSapMov(m); };
   const confirmarEnvioSAP = async () => {
-    const m = sapMov;
+    const m = movimientos.find((x) => x.id === sapMov.id) || sapMov;   // datos VIVOS (G3), no snapshot
+    // G3: revalida el candado justo antes del POST (por si otro dispositivo abrió horas/faltante).
+    if (usaParcial(m)) { setSapError("Este folio se está enviando por hora/faltante; no se puede mandar el TOTAL (evita doble conteo)."); return; }
+    if (tieneEnvioSAP(m) && !m.recepcion?.sapEnvio) { setSapError("Este folio ya tiene envíos parciales a SAP; no se puede mandar el total."); return; }
     const ord = ordenSAPde(m);
     const neto = kgRecibidosDe(m);
     const kgc = parseFloat(sapKgCubeta) || 6;
@@ -263,6 +273,7 @@ export default function Modulo9() {
     const neto = netoHora(hora);
     const kgc = parseFloat(horaKgCub) || 6;
     const cubetas = cubetasDe(neto, kgc);
+    if (usoTotalSAP(m)) { setHoraSapError("Este folio ya se mandó COMPLETO a SAP; no se puede enviar por hora (evita doble conteo)."); return; }   // G3
     if (!hora.aprobacion) { setHoraSapError("Falta APROBAR el cálculo antes de mandar a SAP."); return; }
     if (!ord) { setHoraSapError("Este folio no tiene orden de fabricación en SAP."); return; }
     if (!(cubetas > 0)) { setHoraSapError("La cantidad calculada es 0."); return; }
@@ -379,10 +390,11 @@ export default function Modulo9() {
   };
 
   const reabrir = async (id) => {
-    // Candado: si el recibo ya se envió a SAP, NO se puede reabrir (desincronizaría con SAP).
+    // Candado G2: si el folio ya tuvo CUALQUIER envío a SAP (total, por hora o faltante), NO se
+    // puede reabrir (borraría el vaciado ya enviado y podría causar doble envío al recapturar).
     const mov = movimientos.find((x) => x.id === id);
-    if (mov?.recepcion?.sapEnvio) {
-      await dlg.alerta({ title: "No se puede reabrir", message: `Este flete ya se envió a SAP (Recibo #${mov.recepcion.sapEnvio.docNum}). Reabrirlo dejaría la plataforma fuera de sincronía con SAP.` });
+    if (tieneEnvioSAP(mov)) {
+      await dlg.alerta({ title: "No se puede reabrir", message: "Este folio ya tuvo envíos a SAP (total, por hora o faltante). Reabrirlo borraría lo ya enviado y dejaría la plataforma fuera de sincronía con SAP." });
       return;
     }
     if (!(await dlg.confirm({ title: "Reabrir flete", message: "¿Reabrir este flete? Volverá a 'Por recibir' y se borrará el vaciado registrado.", confirmText: "Reabrir", danger: true }))) return;
@@ -455,8 +467,16 @@ export default function Modulo9() {
   const eliminarRezaga = async (id) => { if (await dlg.confirm({ title: "Eliminar rezaga", message: "¿Eliminar esta rezaga?", confirmText: "Eliminar", danger: true })) setRezagas((prev) => prev.filter((r) => r.id !== id)); };
 
   // ── Rechazo del flete (desde muestreo o inspección) ──
-  const abrirRechazo = (m) => { setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m); };
+  const abrirRechazo = async (m) => {
+    // Candado G2: rechazar borra el vaciado; si ya hubo envíos a SAP, no se permite.
+    if (tieneEnvioSAP(m)) {
+      await dlg.alerta({ title: "No se puede rechazar", message: "Este folio ya tuvo envíos a SAP (total, por hora o faltante). Rechazarlo borraría el vaciado ya enviado y lo dejaría fuera de sincronía con SAP." });
+      return;
+    }
+    setRechazoComent(m.recepcion?.comentario || ""); setRechazoMov(m);
+  };
   const confirmarRechazo = () => {
+    if (tieneEnvioSAP(rechazoMov)) { setRechazoMov(null); return; }   // defensa G2
     const recepcion = { estado: "rechazado", comentario: rechazoComent, confirmado: new Date().toLocaleString("es-MX") };
     setMovimientos((prev) => prev.map((m) => (m.id === rechazoMov.id ? { ...m, recepcion, vaciado: undefined } : m)));
     setRechazoMov(null); setRechazoComent("");
@@ -1043,8 +1063,8 @@ export default function Modulo9() {
                         <td className="px-3 py-2 text-gray-600 align-top">{m.consignado || m.distribuidor || m.destino || "—"}</td>
                         <td className="px-3 py-2 text-center whitespace-nowrap align-top">
                           <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600 mr-1"><Eye size={14} /> Ver</button>
-                          {m.recepcion?.sapEnvio ? (
-                            <span title="No se puede reabrir: el recibo ya está en SAP" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center gap-1"><Ban size={14} /> Reabrir</span>
+                          {tieneEnvioSAP(m) ? (
+                            <span title="No se puede reabrir: el folio ya tuvo envíos a SAP (total, por hora o faltante)" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center gap-1"><Ban size={14} /> Reabrir</span>
                           ) : (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                           )}
@@ -1157,8 +1177,8 @@ export default function Modulo9() {
                               <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> Ver</button>
                               {m.recepcion?.sapEnvio ? (
                                 <span title="Recibo de producción enviado a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium"><Check size={14} /> SAP #{m.recepcion.sapEnvio.docNum}</span>
-                              ) : usaHoras(m) ? (
-                                <span title="Este folio se está vaciando POR HORA — el envío del total está bloqueado para no mandar doble a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 text-center"><Clock size={14} /> Por hora</span>
+                              ) : usaParcial(m) ? (
+                                <span title="Este folio se está vaciando por hora/faltante — el envío del TOTAL está bloqueado para no mandar doble a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 text-center"><Clock size={14} /> {usaHoras(m) ? "Por hora" : "Por faltante"}</span>
                               ) : ordenSAPde(m) ? (
                                 puedeEnviarSap ? (
                                   <button onClick={() => abrirEnvioSAP(m)} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700"><Send size={14} /> Mandar a SAP</button>
@@ -1166,8 +1186,8 @@ export default function Modulo9() {
                                   <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"><Ban size={14} /> Sin permiso SAP</span>
                                 )
                               ) : null}
-                              {m.recepcion?.sapEnvio ? (
-                                <span title="No se puede reabrir: el recibo ya está en SAP" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
+                              {tieneEnvioSAP(m) ? (
+                                <span title="No se puede reabrir: el folio ya tuvo envíos a SAP (total, por hora o faltante)" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
                               ) : (
                                 <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                               )}
