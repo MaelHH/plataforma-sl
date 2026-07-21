@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search, ArrowRight } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
-import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
+import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
@@ -118,7 +118,7 @@ export default function Modulo9() {
     if (absoluteEntry == null) return null;
     return { absoluteEntry, docNum, totalOrdenes: (r.sap.ordenes || []).length, item: r.sap.item, plannedQty: r.sap.plannedQty, completedQty: r.sap.completedQty, temporada: proj.nombre, rancho: r.nombre };
   };
-  const abrirEnvioSAP = (m) => { setSapError(""); setSapKgCubeta(6); setSapMov(m); };
+  const abrirEnvioSAP = (m) => { setSapError(""); setSapKgCubeta(6); setSapMov(m); cargarOrdenSAP(ordenSAPde(m)?.absoluteEntry); };
   const confirmarEnvioSAP = async () => {
     const m = movimientos.find((x) => x.id === sapMov.id) || sapMov;   // datos VIVOS (G3), no snapshot
     // G3: revalida el candado justo antes del POST (por si otro dispositivo abrió horas/faltante).
@@ -134,7 +134,7 @@ export default function Modulo9() {
     // ÚLTIMO AVISO. Este es el envío MÁS grande (el folio completo de una vez) → se pregunta siempre.
     const seguro = await dlg.confirm({
       title: "¿Mandar el folio COMPLETO a SAP?",
-      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${m.remision || m.folio || ""}.\n\nEs el TOTAL del folio de una sola vez. Esto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer.`,
+      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la ${refOrdenSAP(ord)}, del folio ${m.remision || m.folio || ""} (lote ${loteDe(m)}).\n\nEs el TOTAL del folio de una sola vez. Esto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer.`,
       confirmText: `Sí, mandar ${cubetas.toLocaleString()} cubetas`,
       danger: true,
     });
@@ -159,6 +159,71 @@ export default function Modulo9() {
     } finally {
       setSapCargando(false);
     }
+  };
+
+  // ── FICHA DE LA ORDEN DE FABRICACIÓN (leída EN VIVO de SAP, solo GET) ──
+  // En Empaque no pueden meterse a SAP a investigar, así que antes de mandar se les enseña
+  // CONTRA QUÉ ORDEN van a sumar, con los datos REALES de SAP (no los capturados aquí): Nº
+  // visible, artículo, lote y departamento. Si el lote de la orden no coincide con el del
+  // folio, se avisa en rojo ANTES de mandar.
+  const [ordSap, setOrdSap] = useState(null);          // ficha traída de SAP
+  const [ordSapCargando, setOrdSapCargando] = useState(false);
+  const [ordSapError, setOrdSapError] = useState("");
+  // Cómo se nombra la orden en el aviso final: si ya se leyó de SAP, con su lote y artículo
+  // REALES (así se confirma que es la orden correcta sin tener que entrar a SAP).
+  const refOrdenSAP = (ord) => (ordSap
+    ? `orden #${ordSap.docNum ?? ordSap.absoluteEntry} (lote ${ordSap.lote || "?"} · ${ordSap.item || "?"})`
+    : `orden de fabricación #${ord?.docNum ?? ord?.absoluteEntry}`);
+  const cargarOrdenSAP = (absoluteEntry) => {
+    setOrdSap(null); setOrdSapError("");
+    if (!absoluteEntry) return;
+    setOrdSapCargando(true);
+    getOrdenFabricacionSAP(absoluteEntry)
+      .then((r) => setOrdSap(r))
+      .catch((e) => setOrdSapError(String(e?.message || e)))
+      .finally(() => setOrdSapCargando(false));
+  };
+
+  // Panel de verificación que se pinta en los 3 modales de envío.
+  const fichaOrdenSAP = (m) => {
+    const loteFolio = (loteDe(m) || "").trim().toUpperCase();
+    const loteSap = (ordSap?.lote || "").trim().toUpperCase();
+    const difiere = !!(ordSap && loteSap && loteFolio && loteSap !== loteFolio);
+    const fila = (l, v) => (
+      <div className="flex items-start justify-between gap-3 px-2.5 py-1">
+        <span className="text-gray-500 shrink-0">{l}</span>
+        <span className="text-gray-800 font-semibold text-right break-words">{v ?? "—"}</span>
+      </div>
+    );
+    return (
+      <div className="text-[11px] border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-2.5 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+          <span className="font-semibold text-gray-700 inline-flex items-center gap-1"><Search size={12} /> Orden de fabricación (leída de SAP)</span>
+          {ordSapCargando && <span className="text-gray-400">consultando…</span>}
+        </div>
+        {ordSapError ? (
+          <div className="px-2.5 py-2 text-amber-700 bg-amber-50">
+            No se pudo leer la orden en SAP para verificar ({ordSapError}). Revisa el número antes de mandar.
+          </div>
+        ) : ordSap ? (
+          <div className="divide-y divide-gray-100">
+            {fila("Nº de orden en SAP", <span className="text-indigo-700">#{ordSap.docNum ?? ordSap.absoluteEntry}</span>)}
+            {fila("Artículo", <>{ordSap.item}{ordSap.descripcion ? ` · ${ordSap.descripcion}` : ""}</>)}
+            {fila("Lote (rancho) en SAP", <span className={difiere ? "text-red-700" : "text-gray-800"}>{ordSap.lote || "—"}</span>)}
+            {ordSap.departamento ? fila("Departamento en SAP", ordSap.departamento) : null}
+            {ordSap.proyecto ? fila("Proyecto en SAP", ordSap.proyecto) : null}
+            {fila("Avance de la orden", <>{fmt(ordSap.completado)} / {fmt(ordSap.planeado)} · faltan <b className="text-amber-700">{fmt(ordSap.restante)}</b></>)}
+            {difiere && (
+              <div className="px-2.5 py-2 bg-red-50 text-red-700">
+                ⚠️ <b>El lote NO coincide.</b> La orden #{ordSap.docNum ?? ordSap.absoluteEntry} es del lote <b>{ordSap.lote}</b>, pero este folio es del lote <b>{loteDe(m)}</b>. Verifícalo antes de mandar.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="px-2.5 py-2 text-gray-400">Consultando la orden en SAP…</div>
+        )}
+      </div>
+    );
   };
 
   // ── G4 · Envío "PENDIENTE DE CONFIRMAR" (se quedó enviando) ──────────────────────────────
@@ -308,7 +373,7 @@ export default function Modulo9() {
   const reabrirHoraFn = (m, horaId) =>
     setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId && h.estado === "cerrada" ? { ...h, estado: "abierta", cerradaEn: undefined, aprobacion: undefined } : h)));
 
-  const abrirEnvioHora = (m, hora) => { setHoraSapError(""); setHoraKgCub(6); setHoraSap({ m, hora }); };
+  const abrirEnvioHora = (m, hora) => { setHoraSapError(""); setHoraKgCub(6); setHoraSap({ m, hora }); cargarOrdenSAP(ordenSAPde(m)?.absoluteEntry); };
   const confirmarEnvioHora = async () => {
     const m = movimientos.find((x) => x.id === horaSap.m.id) || horaSap.m;         // datos vivos
     const hora = (m.vaciado?.horas || []).find((h) => h.id === horaSap.hora.id) || horaSap.hora;
@@ -325,7 +390,7 @@ export default function Modulo9() {
     // se pregunta SIEMPRE antes del POST.
     const seguro = await dlg.confirm({
       title: `¿Mandar ${hora.etiqueta} a SAP?`,
-      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${m.remision || m.folio || ""}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${hora.aprobacion?.por || "—"}.`,
+      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la ${refOrdenSAP(ord)}, del folio ${m.remision || m.folio || ""} (lote ${loteDe(m)}).\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${hora.aprobacion?.por || "—"}.`,
       confirmText: `Sí, mandar ${cubetas.toLocaleString()} cubetas`,
       danger: true,
     });
@@ -367,6 +432,7 @@ export default function Modulo9() {
     const pend = ajustePendienteDe(m);
     setFaltanteKg(pend ? String(Math.round(pend.kg)) : String(Math.round(kgEnPisoDe(m))));
     setFaltanteMov(m);
+    cargarOrdenSAP(ordenSAPde(m)?.absoluteEntry);
   };
 
   // Crea o corrige el faltante PENDIENTE. Si se corrige el kg, se invalida la aprobación (hay que re-aprobar).
@@ -426,7 +492,7 @@ export default function Modulo9() {
     // SAP no se le puede deshacer: se pregunta SIEMPRE (un clic de más = cubetas de más en SAP).
     const seguro = await dlg.confirm({
       title: "¿Mandar el faltante a SAP?",
-      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(aju.kg)} kg ÷ 6) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${mv.remision || mv.folio || ""}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${aju.aprobacion?.por || "—"}.`,
+      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(aju.kg)} kg ÷ 6) a la ${refOrdenSAP(ord)}, del folio ${mv.remision || mv.folio || ""} (lote ${loteDe(mv)}).\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${aju.aprobacion?.por || "—"}.`,
       confirmText: `Sí, mandar ${cub.toLocaleString()} cubetas`,
       danger: true,
     });
@@ -2164,6 +2230,7 @@ export default function Modulo9() {
                   <div><span className="text-gray-400">Completada actual</span><div className="font-medium text-gray-800">{ord ? `${ord.completedQty} / ${ord.plannedQty}` : "—"}</div></div>
                 </div>
                 {ord && ord.totalOrdenes > 1 && <div className="inline-flex items-center gap-1 text-[11px] text-amber-600"><AlertTriangle size={14} /> Este rancho tiene {ord.totalOrdenes} órdenes liberadas en SAP; se usará la #{ord.docNum ?? ord.absoluteEntry}.</div>}
+                {fichaOrdenSAP(sapMov)}
                 <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between"><span className="text-xs text-gray-500">Ejote neto recibido</span><span className="font-semibold text-gray-800">{Math.round(neto)} kg</span></div>
                   <div className="flex items-center justify-between gap-2">
@@ -2375,6 +2442,7 @@ export default function Modulo9() {
                   <div><div className="text-gray-400">Ejote neto de la hora</div><div className="font-semibold">{fmt(neto)} kg</div></div>
                 </div>
                 {hora.aprobacion && <div className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Cálculo aprobado por {hora.aprobacion.por}</div>}
+                {fichaOrdenSAP(m)}
                 <div className="bg-gray-50 rounded-lg p-3">
                   <div className="flex items-center justify-between text-xs mb-1"><span className="text-gray-500">kg por cubeta</span><input type="number" value={horaKgCub} onChange={(e) => setHoraKgCub(e.target.value)} className="w-20 text-sm px-2 py-1 border border-gray-200 rounded text-right" /></div>
                   <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-2xl font-bold text-indigo-700">{cubetas.toLocaleString()}</span></div>
@@ -2446,6 +2514,8 @@ export default function Modulo9() {
                   Úsalo cuando <b>no se alcanzó a capturar todo por hora</b>: manda de una vez los kg que faltaron.
                   Cuentan como vaciado (baja el "en piso") y se registran en SAP como cubetas.
                 </div>
+
+                {fichaOrdenSAP(m)}
 
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div><div className="text-gray-400">Recibido</div><div className="font-semibold">{fmt(kgRecibidosDe(m))} kg</div></div>

@@ -149,6 +149,10 @@ export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalog
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
 // body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
 export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body, TIMEOUT_SAP_WRITE);
+// Ficha EN VIVO de una orden de fabricacion (solo GET): para VERIFICAR contra que orden se
+// va a sumar el recibo (Nº visible, articulo, lote/departamento reales y avance).
+export const getOrdenFabricacionSAP = (absoluteEntry) =>
+  req("GET", `/api/sap/orden-fabricacion${qs({ absoluteEntry })}`);
 // G4 · VERIFICAR (solo GET, no escribe en SAP): ¿el recibo que se quedó "enviando" sí se creó?
 // Evita el reintento a ciegas que duplicaría la Cantidad completada. Ver [[sap-reglas-garantia]].
 export const verificarReciboSAP = ({ clave, absoluteEntry, cantidad, fecha }) =>
