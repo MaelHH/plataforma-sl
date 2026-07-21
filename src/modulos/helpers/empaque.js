@@ -53,11 +53,26 @@ export const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
 export const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio || !!m?.recepcion?.sapPendiente
   || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio || h?.sapPendiente)
   || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio || a?.sapPendiente);
+// G4: ¿hay algún envío PENDIENTE DE CONFIRMAR? (se cortó la conexión y no sabemos si quedó en SAP)
+export const tienePendienteSAP = (m) => !!m?.recepcion?.sapPendiente
+  || (m?.vaciado?.horas || []).some((h) => h?.sapPendiente)
+  || (m?.vaciado?.ajustes || []).some((a) => a?.sapPendiente);
 // G3: ¿el folio usa envío PARCIAL (por hora o faltante)? → bloquea el envío TOTAL (evita doble conteo).
 export const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).length > 0;
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
 export const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
-export const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
+
+// ── CIERRE DEL VACIADO (terminado a mano) ──
+// Un folio casi nunca cierra en 0.00 exacto: quedan unos kg de diferencia de báscula que nadie va
+// a vaciar, y el folio se quedaría en la lista "en piso" para siempre. Cuando la encargada dice
+// "ya se terminó", se guarda `vaciado.terminado = { por, porId, ts, pisoAlCerrar }`: el folio deja
+// de contar como piso (físicamente ya no hay nada) y se archiva, PERO la diferencia queda guardada
+// en `pisoAlCerrar` para que se vea y se pueda auditar — no se borra ni se disfraza de merma.
+export const estaTerminado = (m) => !!m?.vaciado?.terminado;
+export const kgSobranteCierre = (m) => parseFloat(m?.vaciado?.terminado?.pisoAlCerrar) || 0;
+export const kgEnPisoDe = (m) => (estaTerminado(m)
+  ? 0
+  : Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m)));
 
 // ── Para el Dashboard (Dirección): predicados/agregados reusables ──
 // ¿el folio está RECIBIDO en empaque (no cliente directo)? — mismo predicado que usa Empaque (M9),

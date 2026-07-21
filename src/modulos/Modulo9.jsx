@@ -6,7 +6,7 @@ import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
-  kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe,
+  kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
   kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
@@ -580,10 +580,55 @@ export default function Modulo9() {
       : m)));
 
   // Devolver un manifiesto a "Vaciado a Empaque" (deshace vaciados y mermas; el piso vuelve completo).
+  // ── TERMINAR el vaciado de un folio (cierre a mano) ──
+  // Casi nunca cierra en 0.00: quedan kg de diferencia de báscula que nadie va a vaciar y el folio
+  // se quedaría "en piso" para siempre. Aquí una persona declara que ya se acabó. Se guarda quién y
+  // cuándo, y la diferencia que quedaba (no se borra: queda auditable en `pisoAlCerrar`).
+  const terminarVaciado = async (m) => {
+    const piso = kgEnPisoDe(m);
+    const pendSAP = kgPendienteSAP(m);
+    // Un envío sin confirmar SÍ bloquea: hay que saber primero si quedó en SAP (G4).
+    if (tienePendienteSAP(m)) {
+      await dlg.alerta({ title: "Primero verifica el envío", message: "Este folio tiene un envío a SAP PENDIENTE DE CONFIRMAR. Abre el vaciado por hora y dale a \"Verificar en SAP\" antes de darlo por terminado." });
+      return;
+    }
+    const avisos = [
+      piso > 0 ? `• Quedan ${fmt(piso)} kg en piso (≈ ${cubetasDe(piso)} cubetas) que YA NO se van a vaciar ni a mandar a SAP.` : "",
+      pendSAP > 0 ? `• Hay ${fmt(pendSAP)} kg vaciados (≈ ${cubetasDe(pendSAP)} cubetas) que TODAVÍA NO se han reportado a SAP.` : "",
+    ].filter(Boolean).join("\n");
+    const ok = await dlg.confirm({
+      title: "¿Ya se terminó este folio?",
+      message: `¿Segura que ya se terminó de vaciar el folio ${m.remision || m.folio || ""}?\n\n${avisos ? avisos + "\n\n" : ""}Al terminarlo se archiva en el historial y sale de la lista de "en piso". Solo la encargada podrá reabrirlo. Quedará registrado a TU nombre.`,
+      confirmText: "Sí, ya se terminó",
+      danger: pendSAP > 0,
+    });
+    if (!ok) return;
+    const por = usuarioActual?.full_name || usuarioActual?.email || "—";
+    setMovimientos((prev) => prev.map((x) => (x.id === m.id
+      ? { ...x, vaciado: { ...baseVac(x), terminado: { por, porId: usuarioActual?.id ?? null, ts: new Date().toISOString(), pisoAlCerrar: piso } } }
+      : x)));
+    registrarEvento?.({ evento: "vaciado_terminado", modulo: "M9", actor: por, destino: m.folio, ref: m.id,
+      detalle: `Vaciado terminado por ${por}${piso > 0 ? ` · quedaban ${fmt(piso)} kg sin vaciar` : " · cerró exacto"}${pendSAP > 0 ? ` · ${fmt(pendSAP)} kg sin reportar a SAP` : ""}`,
+      meta: { pisoAlCerrar: piso, pendienteSAP: pendSAP } });
+  };
+
+  // Reabrir un folio terminado: SOLO la encargada (mismo permiso que aprobar el cálculo).
+  const reabrirVaciado = async (m) => {
+    if (!puedeAprobar) {
+      await dlg.alerta({ title: "No puedes reabrir", message: "El folio ya se dio por terminado. Solo la encargada (gerente o admin) puede reabrirlo." });
+      return;
+    }
+    if (!(await dlg.confirm({ title: "Reabrir el vaciado", message: "¿Reabrir este folio? Volverá a la lista de \"en piso\" con los kg que le quedaban. Los vaciados y los envíos a SAP NO se tocan.", confirmText: "Reabrir" }))) return;
+    setMovimientos((prev) => prev.map((x) => (x.id === m.id
+      ? { ...x, vaciado: { ...baseVac(x), terminado: undefined } } : x)));
+    registrarEvento?.({ evento: "vaciado_reabierto", modulo: "M9", actor: usuarioActual?.full_name || "—", destino: m.folio, ref: m.id,
+      detalle: `Vaciado reabierto por ${usuarioActual?.full_name || "—"}` });
+  };
+
   const devolverManifiesto = async (id) => {
     if (!(await dlg.confirm({ title: "Devolver manifiesto", message: "¿Devolver este manifiesto a 'Vaciado a Empaque'? Se quitarán los vaciados y mermas registrados y el piso volverá completo.", confirmText: "Devolver", danger: true }))) return;
     setMovimientos((prev) => prev.map((m) => (m.id === id
-      ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [] } }
+      ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [], terminado: undefined } }
       : m)));
   };
 
@@ -1124,8 +1169,10 @@ export default function Modulo9() {
                     const sinEnviarKg = Math.max(0, vacK - enviadoKg);
                     const base = Math.max(1, recK, vacK + merK);
                     const anch = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
-                    const hayPend = !!rcp.sapPendiente || horasM.some((h) => h.sapPendiente) || ajustesM.some((a) => a.sapPendiente);
-                    const estado = completo ? { t: "Completado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
+                    const hayPend = tienePendienteSAP(m);
+                    const term = m.vaciado?.terminado;
+                    const estado = term ? { t: "Terminado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
+                      : completo ? { t: "Completado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
                       : esHist(m) ? { t: "Histórico — no va a SAP", c: "bg-gray-100 text-gray-500 border-gray-300", i: <Ban size={13} /> }
                         : hayPend ? { t: "Pendiente de confirmar", c: "bg-amber-50 text-amber-700 border-amber-300", i: <Clock size={13} /> }
                           : usaHoras(m) ? { t: "Vaciando por hora", c: "bg-blue-50 text-blue-700 border-blue-200", i: <Clock size={13} /> }
@@ -1268,17 +1315,30 @@ export default function Modulo9() {
                         {/* Pie: la cuenta del piso + los botones */}
                         <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
                           <span className="text-[11px] text-gray-500">
-                            {completo
-                              ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> Terminado — no queda nada en piso</span>
-                              : recK > 0
-                                ? <>En piso: rec {fmt(recK)} − vac {fmt(vacK)}{merK ? ` − mer ${fmt(merK)}` : ""} = <b className="text-amber-700">{fmt(pisoK)} kg</b></>
-                                : <>Captura los kg recibidos para empezar.</>}
+                            {term
+                              ? <span className="inline-flex items-center gap-1 flex-wrap"><Check size={14} className="text-green-600" /> <b className="text-green-700">Terminado por {term.por}</b> · {(term.ts || "").slice(0, 10)}{term.pisoAlCerrar > 0 ? <> · quedaron <b className="text-amber-700">{fmt(term.pisoAlCerrar)} kg</b> sin vaciar</> : " · cerró exacto"}</span>
+                              : completo
+                                ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> Terminado — no queda nada en piso</span>
+                                : recK > 0
+                                  ? <>En piso: rec {fmt(recK)} − vac {fmt(vacK)}{merK ? ` − mer ${fmt(merK)}` : ""} = <b className="text-amber-700">{fmt(pisoK)} kg</b></>
+                                  : <>Captura los kg recibidos para empezar.</>}
                           </span>
                           <div className="flex items-center gap-2 flex-wrap">
+                            {term && (
+                              <button onClick={() => reabrirVaciado(m)} title={puedeAprobar ? "Reabrir el folio (vuelve a 'en piso')" : "Solo la encargada puede reabrir un folio terminado"}
+                                className={`text-xs px-3 py-1.5 border rounded-lg font-medium whitespace-nowrap inline-flex items-center gap-1 ${puedeAprobar ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-gray-200 text-gray-300 cursor-not-allowed"}`}>
+                                <RotateCcw size={14} /> Reabrir
+                              </button>
+                            )}
                             {recK > 0 && !completo && (!puedeEditarVaciado ? (
                               <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
                             ) : (<>
                               <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
+                              {/* Cierre a mano: cuando ya no va a entrar más de este folio (casi nunca cierra en 0 exacto). */}
+                              {vacK > 0 && (
+                                <button onClick={() => terminarVaciado(m)} title="Dar por terminado el vaciado de este folio: se archiva y sale de 'en piso'"
+                                  className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 whitespace-nowrap"><Check size={14} /> Terminado</button>
+                              )}
                               {usoTotalSAP(m) ? (
                                 <span title="Ya se mandó el TOTAL a SAP — no se puede vaciar por hora (evita doble conteo)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Clock size={14} /> Vaciar por hora</span>
                               ) : (

@@ -5,7 +5,7 @@ import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, Che
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 import { hoyISO, lunesActual } from "../utils/fecha";
 import {
-  esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, netoPesada,
+  esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, tienePendienteSAP, estaTerminado, kgSobranteCierre, netoPesada,
 } from "./helpers/empaque";
 
 // Semáforo vs promedio
@@ -217,9 +217,7 @@ export default function Dashboard() {
   const empRecTot = empList.reduce((a, m) => a + kgRecibidosDe(m), 0);
   const empFoliosPendSAP = empList.filter((m) => kgPendienteSAP(m) > 0).length;
 
-  const tienePendiente = (m) => !!m?.recepcion?.sapPendiente
-    || (m?.vaciado?.horas || []).some((h) => h?.sapPendiente)
-    || (m?.vaciado?.ajustes || []).some((a) => a?.sapPendiente);
+  const tienePendiente = tienePendienteSAP;   // helper compartido con el módulo
   const folioDe = (m) => m.remision || m.folio || "—";
 
   const empAlertas = [
@@ -257,7 +255,9 @@ export default function Dashboard() {
         "Reportado a SAP (kg)": Math.round(kgEnviadosSAP(m)),
         "Falta reportar (kg)": Math.round(pend),
         Horas: (m.vaciado?.horas || []).length,
-        Estado: kgEnPisoDe(m) === 0 && rec > 0 ? "Terminado" : "En piso",
+        Estado: estaTerminado(m) ? "Terminado (cerrado a mano)" : (kgEnPisoDe(m) === 0 && rec > 0 ? "Terminado" : "En piso"),
+        "Quedo sin vaciar (kg)": Math.round(kgSobranteCierre(m)),
+        "Terminado por": m.vaciado?.terminado?.por || "",
         Atención: [
           tienePendiente(m) ? "envío sin confirmar" : "",
           rec > 0 && vac > rec ? "vaciado > recibido" : "",
