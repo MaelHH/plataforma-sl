@@ -169,6 +169,35 @@ export default function Modulo9() {
   const [ordSap, setOrdSap] = useState(null);          // ficha traída de SAP
   const [ordSapCargando, setOrdSapCargando] = useState(false);
   const [ordSapError, setOrdSapError] = useState("");
+  // Línea de "¿a qué orden de fabricación va a caer este folio?" para pintarla EN LA TARJETA.
+  // Sale del catálogo de Temporadas (que se trae de SAP), cruzando proyecto + rancho del folio: es
+  // el MISMO dato con el que se arma el envío, así que lo que se ve aquí es lo que se va a mandar.
+  // Se pinta siempre, no solo al mandar, para que nadie tenga que abrir el modal para saberlo.
+  const lineaOrdenSAP = (m) => {
+    const o = ordenSAPde(m);
+    if (!o) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+          <AlertTriangle size={11} /> Sin orden de fabricación en SAP (rancho «{m.rancho || "—"}» no está en el catálogo)
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold">
+          <Send size={11} /> Orden SAP #{o.docNum ?? o.absoluteEntry}
+        </span>
+        <span className="text-gray-500">{o.temporada || "—"} · {o.rancho || "—"}{o.item ? ` · ${o.item}` : ""}</span>
+        {o.plannedQty ? <span className="text-gray-400">· lleva {fmt(o.completedQty)} de {fmt(o.plannedQty)} cub</span> : null}
+        {o.totalOrdenes > 1 && (
+          <span title="Este rancho tiene varias órdenes liberadas en SAP; se usará la que se muestra" className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+            <AlertTriangle size={11} /> {o.totalOrdenes} órdenes en este rancho
+          </span>
+        )}
+      </span>
+    );
+  };
+
   // Cómo se nombra la orden en el aviso final: si ya se leyó de SAP, con su lote y artículo
   // REALES (así se confirma que es la orden correcta sin tener que entrar a SAP).
   const refOrdenSAP = (ord) => (ordSap
@@ -1348,6 +1377,8 @@ export default function Modulo9() {
                               {m.origen || m.destino ? <> · {m.origen || "—"} → {m.destino || "—"}</> : null}
                               {m.chofer ? <> · {m.chofer}</> : null}
                             </div>
+                            {/* A qué orden de fabricación va a caer (visible sin abrir nada) */}
+                            <div className="mt-1">{lineaOrdenSAP(m)}</div>
                           </div>
                           <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${estado.c}`}>{estado.i}{estado.t}</span>
                         </div>
@@ -1650,6 +1681,8 @@ export default function Modulo9() {
                             {m.remision && <span className="text-[11px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">rem. {m.remision}</span>}
                           </div>
                           <div className="text-[11px] text-gray-500 mt-0.5 truncate">{m.origen || "—"} → {m.destino || "—"}</div>
+                          {/* A qué orden de fabricación va a caer este flete (temporada · rancho) */}
+                          <div className="mt-1">{lineaOrdenSAP(m)}</div>
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           {r?.clienteDirecto && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200"><Truck size={13} /> Cliente directo</span>}
