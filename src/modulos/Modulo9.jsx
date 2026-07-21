@@ -583,16 +583,20 @@ export default function Modulo9() {
   const totKgPiso = recibidos.reduce((a, m) => a + kgEnPisoDe(m), 0);
 
   // Eventos/mermas del DÍA seleccionado (los viejos sin fecha cuentan como hoy).
-  const evDia = (m) => (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
-  const merDia = (m) => (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+  // SOLO lo que trae FECHA de ese día. Los registros VIEJOS sin fecha ya NO se cuentan como "hoy"
+  // (antes aparecían TODOS los días e inflaban el día); siguen contando en inventario / "en piso".
+  const evDia = (m) => (m.vaciado?.eventos || []).filter((e) => e.fecha === diaReporte);
+  const merDia = (m) => (m.vaciado?.mermas || []).filter((e) => e.fecha === diaReporte);
   const sumaKg = (arr) => arr.reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
   // Pesadas del vaciado POR HORA del día como pseudo-eventos {kg, fecha, hora}, para UNIR con evDia
   // en las vistas por día (card "Vaciado del día" y pivote "Vaciado por hora"). Usa netoPesada
   // (recalcula) para cuadrar con kgHorasDe/kgVaciadosDe. NO altera `eventos` ni `kgVaciadosDe`.
   const pesadasDia = (m) => (m.vaciado?.horas || []).flatMap((h) => (h.pesadas || [])
-    .filter((p) => (p.fecha || hoyISO()) === diaReporte)
+    .filter((p) => p.fecha === diaReporte)
     .map((p) => ({ kg: netoPesada(p), fecha: p.fecha, hora: p.hora })));
   const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)) + sumaKg(pesadasDia(m)), 0);
+  // Vaciado VIEJO sin fecha: no se puede ubicar en un día → se avisa para que no "desaparezca".
+  const kgVacSinFecha = recibidos.reduce((a, m) => a + sumaKg((m.vaciado?.eventos || []).filter((e) => !e.fecha)), 0);
   const totKgMerDia = recibidos.reduce((a, m) => a + sumaKg(merDia(m)), 0);
 
   // Lote/proveedor de un manifiesto (lo que se vacía y se inventaría).
@@ -869,14 +873,23 @@ export default function Modulo9() {
             )}
           </div>
 
-          {/* Vaciado por hora y lote (kg + bins teóricos de 240 kg) */}
+          {/* Aviso: vaciado VIEJO sin fecha (no se puede ubicar en un día) */}
+          {kgVacSinFecha > 0 && (
+            <div className="mb-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-1.5">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>Hay <b>{fmt(kgVacSinFecha)} kg</b> de vaciado <b>sin fecha</b> (registros viejos): no se muestran en ningún
+                día, pero <b>sí cuentan</b> en el inventario por lote y en el "en piso".</span>
+            </div>
+          )}
+
+          {/* Vaciado por hora y lote (kg + bins teóricos + CUBETAS que salieron esa hora) */}
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · bins teóricos = kg / 240</span></div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · bins teóricos = kg / 240 · cubetas = kg / 6</span></div>
             {porHora.length === 0 ? (
               <div className="text-xs text-gray-400 italic py-2">No hay vaciados registrados el día seleccionado.</div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                <table className="w-full text-xs" style={{ minWidth: `${260 + lotesHora.length * 90}px` }}>
+                <table className="w-full text-xs" style={{ minWidth: `${350 + lotesHora.length * 90}px` }}>
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
                       <th className="text-left px-3 py-1.5 font-medium">Hora</th>
@@ -884,6 +897,7 @@ export default function Modulo9() {
                         <th key={lote} className="text-right px-3 py-1.5 font-medium whitespace-nowrap">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
                       ))}
                       <th className="text-right px-3 py-1.5 font-medium bg-gray-100">Total (kg)</th>
+                      <th className="text-right px-3 py-1.5 font-semibold bg-indigo-50 text-indigo-700 whitespace-nowrap">Cubetas</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -894,6 +908,7 @@ export default function Modulo9() {
                           <td key={lote} className="px-3 py-1.5 text-right text-gray-700">{v.lotes[lote] ? fmt(v.lotes[lote]) : <span className="text-gray-300">—</span>}</td>
                         ))}
                         <td className="px-3 py-1.5 text-right font-semibold text-gray-800 bg-gray-50">{fmt(v.kg)}</td>
+                        <td className="px-3 py-1.5 text-right font-bold text-indigo-700 bg-indigo-50/50">{cubetasDe(v.kg).toLocaleString()}</td>
                       </tr>
                     ))}
                     <tr className="bg-gray-100 font-semibold text-gray-800">
@@ -903,6 +918,7 @@ export default function Modulo9() {
                         return <td key={lote} className="px-3 py-1.5 text-right">{fmt(t)}</td>;
                       })}
                       <td className="px-3 py-1.5 text-right">{fmt(totKgVacDia)}</td>
+                      <td className="px-3 py-1.5 text-right text-indigo-700 bg-indigo-100/60">{cubetasDe(totKgVacDia).toLocaleString()}</td>
                     </tr>
                     <tr className="bg-gray-50 text-gray-500 text-[10px]">
                       <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
@@ -911,6 +927,7 @@ export default function Modulo9() {
                         return <td key={lote} className="px-3 py-1 text-right">≈{(t / KG_POR_BIN_TEO).toFixed(1)}</td>;
                       })}
                       <td className="px-3 py-1 text-right">≈{(totKgVacDia / KG_POR_BIN_TEO).toFixed(1)}</td>
+                      <td className="px-3 py-1 text-right text-indigo-400">= kg ÷ 6</td>
                     </tr>
                   </tbody>
                 </table>

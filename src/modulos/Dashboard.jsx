@@ -161,9 +161,10 @@ export default function Dashboard() {
   const empList = empDestino ? recibidosEmp.filter((m) => empDestinoDe(m) === empDestino) : recibidosEmp;
 
   // kg vaciado de un día (eventos simples + pesadas por hora de ese día).
+  // Los registros VIEJOS sin fecha NO se cuentan como "hoy" (antes inflaban el día, todos los días).
   const kgVacDiaDe = (m, dia) =>
-    (m.vaciado?.eventos || []).filter((e) => (e.fecha || dia) === dia).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0)
-    + (m.vaciado?.horas || []).flatMap((h) => h.pesadas || []).filter((p) => (p.fecha || dia) === dia).reduce((a, p) => a + netoPesada(p), 0);
+    (m.vaciado?.eventos || []).filter((e) => e.fecha === dia).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0)
+    + (m.vaciado?.horas || []).flatMap((h) => h.pesadas || []).filter((p) => p.fecha === dia).reduce((a, p) => a + netoPesada(p), 0);
 
   const empVaciadoHoy = empList.reduce((a, m) => a + kgVacDiaDe(m, hoyEmp), 0);
   const empEnPiso = empList.reduce((a, m) => a + kgEnPisoDe(m), 0);
@@ -195,8 +196,8 @@ export default function Dashboard() {
     }
     const mapa = Object.fromEntries(dias.map((d) => [d, 0]));
     empList.forEach((m) => {
-      (m.vaciado?.eventos || []).forEach((e) => { const f = e.fecha || hoyEmp; if (f in mapa) mapa[f] += parseFloat(e.kg) || 0; });
-      (m.vaciado?.horas || []).forEach((h) => (h.pesadas || []).forEach((p) => { const f = p.fecha || hoyEmp; if (f in mapa) mapa[f] += netoPesada(p); }));
+      (m.vaciado?.eventos || []).forEach((e) => { if (e.fecha && e.fecha in mapa) mapa[e.fecha] += parseFloat(e.kg) || 0; });
+      (m.vaciado?.horas || []).forEach((h) => (h.pesadas || []).forEach((p) => { if (p.fecha && p.fecha in mapa) mapa[p.fecha] += netoPesada(p); }));
     });
     return dias.map((d) => ({ dia: d.slice(5), kg: Math.round(mapa[d]) }));
   })();
