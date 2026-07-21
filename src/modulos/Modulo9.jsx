@@ -7,7 +7,7 @@ import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
   kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe,
-  kgEnPisoDe, cubetasEnviadasSAP, kgPendienteSAP,
+  kgEnPisoDe, cubetasEnviadasSAP, kgPendienteSAP, esHistoricoSAP,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
@@ -75,9 +75,12 @@ const inspeccionConHallazgo = (insp) =>
     INSP_PRODUCTO.some((c) => insp.prod?.[c.id] === c.malo));
 
 export default function Modulo9() {
-  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, contenedores, setContenedores, registrarEvento } = useDatos();
+  const { movimientos, setMovimientos, inspectoresCalidad, setInspectoresCalidad, rezagas, setRezagas, proyectos, contenedores, setContenedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
   const CONTS = Array.isArray(contenedores) && contenedores.length ? contenedores : [{ id: "bin", label: "Bin", tara: 36 }];
   const dlg = useDialog();
+  // LÍNEA DE CORTE SAP: folios anteriores a esta fecha son HISTÓRICO → la app no los manda a SAP.
+  const goLiveSAP = configEmpaque?.goLiveSAP || "";
+  const esHist = (m) => esHistoricoSAP(m, goLiveSAP);
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
@@ -122,6 +125,7 @@ export default function Modulo9() {
   const confirmarEnvioSAP = async () => {
     const m = movimientos.find((x) => x.id === sapMov.id) || sapMov;   // datos VIVOS (G3), no snapshot
     // G3: revalida el candado justo antes del POST (por si otro dispositivo abrió horas/faltante).
+    if (esHist(m)) { setSapError(`Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): ya se registró fuera de la app, no se manda a SAP desde aquí.`); return; }
     if (usaParcial(m)) { setSapError("Este folio se está enviando por hora/faltante; no se puede mandar el TOTAL (evita doble conteo)."); return; }
     if (tieneEnvioSAP(m) && !m.recepcion?.sapEnvio) { setSapError("Este folio ya tiene envíos parciales a SAP; no se puede mandar el total."); return; }
     const ord = ordenSAPde(m);
@@ -236,6 +240,7 @@ export default function Modulo9() {
     const neto = netoHora(hora);
     const kgc = parseFloat(horaKgCub) || 6;
     const cubetas = cubetasDe(neto, kgc);
+    if (esHist(m)) { setHoraSapError(`Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): ya se registró fuera de la app, no se manda a SAP desde aquí.`); return; }
     if (usoTotalSAP(m)) { setHoraSapError("Este folio ya se mandó COMPLETO a SAP; no se puede enviar por hora (evita doble conteo)."); return; }   // G3
     if (!hora.aprobacion) { setHoraSapError("Falta APROBAR el cálculo antes de mandar a SAP."); return; }
     if (!ord) { setHoraSapError("Este folio no tiene orden de fabricación en SAP."); return; }
@@ -322,6 +327,7 @@ export default function Modulo9() {
     const aju = (mv.vaciado?.ajustes || []).find((a) => a.id === aj.id) || aj;
     const ord = ordenSAPde(mv);
     const cub = cubetasDe(aju.kg);
+    if (esHist(mv)) { setFaltanteError(`Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): ya se registró fuera de la app, no se manda a SAP desde aquí.`); return; }
     if (!aju.aprobacion) { setFaltanteError("Falta APROBAR el faltante antes de mandar a SAP."); return; }
     if (usoTotalSAP(mv)) { setFaltanteError("Este folio ya se mandó COMPLETO a SAP; no se puede mandar un faltante (evita doble conteo)."); return; }
     if (!ord) { setFaltanteError("Este folio no tiene orden de fabricación en SAP."); return; }
@@ -772,6 +778,25 @@ export default function Modulo9() {
         {stat("Rechazados", rechazados.length, "text-red-600")}
         {stat("Con novedad", conNovedad.length, "text-amber-600")}
       </div>
+
+      {/* ── LÍNEA DE CORTE SAP (solo encargada/admin) ── Folios anteriores = HISTÓRICO: se ven y se
+          pueden vaciar, pero la app NUNCA los manda a SAP (ese periodo ya se registró a mano). ── */}
+      {puedeAprobar && (
+        <div className="mb-3 flex items-start gap-2 flex-wrap text-[11px] bg-indigo-50/60 border border-indigo-200 rounded-lg px-3 py-2">
+          <span className="inline-flex items-center gap-1 font-semibold text-indigo-800 whitespace-nowrap"><Ban size={13} /> Línea de corte SAP:</span>
+          <input type="date" value={goLiveSAP}
+            onChange={(e) => setConfigEmpaque({ ...(configEmpaque || {}), goLiveSAP: e.target.value })}
+            className="text-xs px-2 py-1 border border-indigo-200 rounded-md bg-white focus:outline-none focus:border-indigo-400" />
+          {goLiveSAP ? (
+            <>
+              <span className="text-indigo-700 flex-1 min-w-[240px]">Los folios <b>anteriores</b> a esta fecha son <b>históricos</b>: se ven y se pueden vaciar normal, pero la app <b>NO</b> los manda a SAP (ya se registraron por fuera).</span>
+              <button onClick={() => setConfigEmpaque({ ...(configEmpaque || {}), goLiveSAP: "" })} className="text-indigo-600 hover:text-indigo-800 underline whitespace-nowrap">quitar corte</button>
+            </>
+          ) : (
+            <span className="text-gray-500 flex-1 min-w-[240px]">Sin corte: <b>todos</b> los folios pueden mandarse a SAP. Pon aquí la fecha desde la que la app empieza a registrar en SAP.</span>
+          )}
+        </div>
+      )}
 
       {(tabRec === "vaciado" || tabRec === "histVaciado" || tabRec === "histMermado") && (
         <div className="mb-3 space-y-4">
@@ -1368,6 +1393,8 @@ export default function Modulo9() {
                               )}
                               {m.recepcion?.sapEnvio ? (
                                 <span title="Recibo de producción enviado a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium"><Check size={14} /> SAP #{m.recepcion.sapEnvio.docNum}</span>
+                              ) : esHist(m) ? (
+                                <span title={`Folio anterior al corte (${goLiveSAP}): ya se registró fuera de la app. La app no manda históricos a SAP.`} className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-center"><Ban size={14} /> Histórico</span>
                               ) : usaParcial(m) ? (
                                 <span title="Este folio se está vaciando por hora/faltante — el envío del TOTAL está bloqueado para no mandar doble a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 text-center"><Clock size={14} /> {usaHoras(m) ? "Por hora" : "Por faltante"}</span>
                               ) : ordenSAPde(m) ? (
@@ -1378,7 +1405,7 @@ export default function Modulo9() {
                                 )
                               ) : null}
                               {/* Faltante: mandar lo que no se alcanzó a capturar por hora (no si ya se mandó el TOTAL) */}
-                              {ordenSAPde(m) && !usoTotalSAP(m) && (() => {
+                              {ordenSAPde(m) && !usoTotalSAP(m) && !esHist(m) && (() => {
                                 const pend = ajustePendienteDe(m);
                                 const nEnv = (m.vaciado?.ajustes || []).filter((a) => a.sapEnvio).length;
                                 const cls = pend
@@ -2037,7 +2064,9 @@ export default function Modulo9() {
                               {h.aprobacion && <span className="text-[11px] text-green-700 inline-flex items-center gap-1 mr-auto"><Check size={13} /> Aprobado por {h.aprobacion.por}</span>}
                               <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
                               {h.aprobacion ? (
-                                puedeEnviarSap ? (
+                                esHist(m) ? (
+                                  <span title={`Folio anterior al corte (${goLiveSAP}): ya se registró fuera de la app`} className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-500 bg-gray-50 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Histórico — no se manda a SAP</span>
+                                ) : puedeEnviarSap ? (
                                   <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
                                 ) : (
                                   <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Ban size={13} /> Sin permiso para enviar a SAP</span>

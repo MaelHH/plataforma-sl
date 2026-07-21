@@ -403,6 +403,10 @@ const CONFIG = {
   rezagas: { tipo: "col", seed: null }, // rezagas sueltas (no vienen de manifiesto) — Historial Mermado
   proyectos: { tipo: "kv", seed: [] }, // catálogo SAP: proyecto → ranchos + responsables. seed [] → SIEMPRE array (no {})
   proveedores: { tipo: "kv", seed: [] }, // catálogo SAP: fleteros (BusinessPartners cSupplier) para la OC de flete
+  // LÍNEA DE CORTE SAP: { goLiveSAP: "YYYY-MM-DD" }. Los folios ANTERIORES a esa fecha son
+  // HISTÓRICO: se conservan y se ven, pero la app NUNCA los manda a SAP (ya se registraron por
+  // fuera). Vacío = sin corte (no bloquea nada). Reversible: solo se cambia la fecha.
+  configEmpaque: { tipo: "kv", seed: { goLiveSAP: "" } },
 };
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
@@ -475,6 +479,7 @@ export function DatosProvider({ children }) {
   const [rezagas, setRezagas] = useState(guardado.rezagas ?? []); // rezagas sueltas (Historial Mermado)
   const [proyectos, setProyectos] = useState(guardado.proyectos ?? []); // catálogo SAP: proyecto → ranchos + responsables
   const [proveedores, setProveedores] = useState(guardado.proveedores ?? []); // catálogo SAP: fleteros
+  const [configEmpaque, setConfigEmpaque] = useState(guardado.configEmpaque ?? { goLiveSAP: "" }); // línea de corte SAP
 
   const [fuente, setFuente] = useState("local"); // "local" | "backend"
   const [cargando, setCargando] = useState(true);
@@ -489,8 +494,9 @@ export function DatosProvider({ children }) {
     materiales: setMateriales, contenedores: setContenedores, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
     inspectoresCalidad: setInspectoresCalidad, lugaresCalidad: setLugaresCalidad,
     zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
+    configEmpaque: setConfigEmpaque,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -554,7 +560,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -573,6 +579,7 @@ export function DatosProvider({ children }) {
     zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,
     proyectos: Array.isArray(proyectos) ? proyectos : [], setProyectos, // coerción defensiva a array
     proveedores: Array.isArray(proveedores) ? proveedores : [], setProveedores,
+    configEmpaque: configEmpaque && typeof configEmpaque === "object" ? configEmpaque : { goLiveSAP: "" }, setConfigEmpaque,
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, contenedores: Array.isArray(contenedores) ? contenedores : CONTENEDORES_INICIAL, setContenedores, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,

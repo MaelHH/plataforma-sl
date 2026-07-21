@@ -73,3 +73,14 @@ export const kgEnviadosSAP = (m) =>
   + (m?.vaciado?.ajustes || []).reduce((a, x) => a + (x?.sapEnvio?.netoKg || 0), 0);
 // kg ya vaciados que AÚN no se han reportado a SAP (lo que falta por mandar).
 export const kgPendienteSAP = (m) => Math.max(0, kgVaciadosDe(m) - kgEnviadosSAP(m));
+
+// ── LÍNEA DE CORTE (go-live SAP) ──
+// Un folio es HISTÓRICO si su fecha es ANTERIOR a la fecha de corte: se conserva y se ve en los
+// reportes, pero la app NUNCA lo manda a SAP (ese periodo ya se registró por fuera, a mano).
+// Sin fecha de corte configurada → nada es histórico (no bloquea nada).
+// Folio sin fecha → se trata como HISTÓRICO (no se puede ubicar en el tiempo → mejor no mandarlo).
+export const esHistoricoSAP = (m, goLiveSAP) => {
+  if (!goLiveSAP) return false;
+  const f = m?.fecha || "";
+  return !f || f < goLiveSAP;
+};
