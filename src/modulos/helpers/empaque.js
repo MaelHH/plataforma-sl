@@ -1,0 +1,54 @@
+// Helpers PUROS del vaciado a empaque (Modulo9). Se extrajeron aquí para poder REUSARLOS en el
+// Dashboard y reportes sin duplicar lógica ni depender del componente. NO importan nada de
+// Modulo9 (evita ciclos) y no tocan estado de React: reciben el movimiento `m` y devuelven números.
+//
+// Nota: `ordenSAPde/loteDe/porHora/porLote` NO están aquí porque dependen de `proyectos`/estado del
+// componente. Y `KG_POR_BIN_TEO/TARA_*/fmt/sumar` se quedan en Modulo9 (los usa el JSX/form).
+
+// Cajas por parrilla (para estimar parrillas cuando no se capturan). También lo usa el modal de
+// recepción en Modulo9, por eso se exporta.
+export const CAJAS_POR_PARRILLA = 64;
+
+// Destare de una recepción: { aplicar, bruto, parrillas, cajas, taraParrillas, taraCajas, taraTotal, neto }.
+export const destareDe = (m) => {
+  const r = m.recepcion || {};
+  const bruto = (parseFloat(r.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+  const cajas = parseFloat(r.bultosRecibidos) || 0;
+  // parrillas: las capturadas; si no hay, se estiman por la razón cajas/parrilla.
+  const parrillas = (parseFloat(r.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
+  // Pesos: lo capturado; vacío o 0 = sin tara de ese elemento (el form los prellena con los defaults).
+  const pK = parseFloat(r.destareParrillaKg) || 0;
+  const cK = parseFloat(r.destareCajaKg) || 0;
+  const taraParrillas = parrillas * pK;
+  const taraCajas = cajas * cK;
+  const taraTotal = taraParrillas + taraCajas;
+  const neto = Math.max(0, bruto - taraTotal);
+  return { aplicar: !!r.destareAplicar, bruto, parrillas, cajas, parrillaKg: pK, cajaKg: cK, taraParrillas, taraCajas, taraTotal, neto };
+};
+// kg recibido para vaciar: el override manual, o el ejote NETO si hay destare, o el bruto
+// (peso de recepción / báscula).
+export const kgRecibidosDe = (m) => {
+  if (m.vaciado && "kgRecibidos" in m.vaciado) return parseFloat(m.vaciado.kgRecibidos) || 0;
+  if (m.recepcion?.destareAplicar) return destareDe(m).neto;
+  return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+};
+// ── Vaciado POR HORA ── Cada pesada se pesa CON el contenedor: neto = bruto − (Nº contenedores × tara).
+export const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((parseFloat(p.num) || 1) * (parseFloat(p.tara) || 0)));
+export const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
+export const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
+export const cubetasDe = (kg, kgPorCubeta = 6) => Math.round((kg || 0) / (kgPorCubeta || 6));
+// Vaciado total = eventos legacy (vaciado simple) + neto de todas las pesadas de todas las horas.
+export const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0) + kgHorasDe(m);
+// Modo del folio: si ya tiene horas → "hora"; si ya se mandó el total a SAP → "total". Candado mutuo.
+export const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
+export const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
+// G2: ¿el folio ya tuvo CUALQUIER envío a SAP? (total, por hora o faltante) → no se puede
+// reabrir ni rechazar (borraría lo enviado y desincronizaría con SAP → riesgo de doble envío).
+export const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio
+  || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio)
+  || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio);
+// G3: ¿el folio usa envío PARCIAL (por hora o faltante)? → bloquea el envío TOTAL (evita doble conteo).
+export const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).length > 0;
+// Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
+export const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
+export const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));

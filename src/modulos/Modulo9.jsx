@@ -4,6 +4,10 @@ import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban,
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
+import {
+  CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, cubetasDe,
+  kgVaciadosDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe, kgEnPisoDe,
+} from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
@@ -37,54 +41,11 @@ const KG_POR_BIN_TEO = 240;
 // obtener el ejote neto. Defaults editables por recepción.
 const TARA_PARRILLA = 14.8; // kg por parrilla
 const TARA_CAJA = 0.85;     // kg por caja
-const CAJAS_POR_PARRILLA = 64;
 const fmt = (n) => Math.round(n || 0).toLocaleString();
 
-// Destare de una recepción: { aplicar, bruto, parrillas, cajas, taraParrillas, taraCajas, taraTotal, neto }.
-const destareDe = (m) => {
-  const r = m.recepcion || {};
-  const bruto = (parseFloat(r.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
-  const cajas = parseFloat(r.bultosRecibidos) || 0;
-  // parrillas: las capturadas; si no hay, se estiman por la razón cajas/parrilla.
-  const parrillas = (parseFloat(r.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
-  // Pesos: lo capturado; vacío o 0 = sin tara de ese elemento (el form los prellena con los defaults).
-  const pK = parseFloat(r.destareParrillaKg) || 0;
-  const cK = parseFloat(r.destareCajaKg) || 0;
-  const taraParrillas = parrillas * pK;
-  const taraCajas = cajas * cK;
-  const taraTotal = taraParrillas + taraCajas;
-  const neto = Math.max(0, bruto - taraTotal);
-  return { aplicar: !!r.destareAplicar, bruto, parrillas, cajas, parrillaKg: pK, cajaKg: cK, taraParrillas, taraCajas, taraTotal, neto };
-};
-// kg recibido para vaciar: el override manual, o el ejote NETO si hay destare, o el bruto
-// (peso de recepción / báscula).
-const kgRecibidosDe = (m) => {
-  if (m.vaciado && "kgRecibidos" in m.vaciado) return parseFloat(m.vaciado.kgRecibidos) || 0;
-  if (m.recepcion?.destareAplicar) return destareDe(m).neto;
-  return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
-};
-// ── Vaciado POR HORA ── El catálogo de CONTENEDORES (tara editable) vive en el store
-// (`contenedores`), así el usuario le pone el peso que quiera y se guarda en la BD.
-// Cada pesada se pesa CON el contenedor: neto = bruto − (Nº contenedores × tara).
-const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((parseFloat(p.num) || 1) * (parseFloat(p.tara) || 0)));
-const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
-const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
-const cubetasDe = (kg, kgPorCubeta = 6) => Math.round((kg || 0) / (kgPorCubeta || 6));
-// Vaciado total = eventos legacy (vaciado simple) + neto de todas las pesadas de todas las horas.
-const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0) + kgHorasDe(m);
-// Modo del folio: si ya tiene horas → "hora"; si ya se mandó el total a SAP → "total". Candado mutuo.
-const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
-const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
-// G2: ¿el folio ya tuvo CUALQUIER envío a SAP? (total, por hora o faltante) → no se puede
-// reabrir ni rechazar (borraría lo enviado y desincronizaría con SAP → riesgo de doble envío).
-const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio
-  || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio)
-  || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio);
-// G3: ¿el folio usa envío PARCIAL (por hora o faltante)? → bloquea el envío TOTAL (evita doble conteo).
-const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).length > 0;
-// Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
-const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
-const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
+// Helpers PUROS de vaciado (destareDe, kgRecibidosDe, netoPesada/Hora, kgHorasDe, cubetasDe,
+// kgVaciadosDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe, kgEnPisoDe) y
+// CAJAS_POR_PARRILLA → viven en ./helpers/empaque (reusables en Dashboard/reportes). Se importan arriba.
 
 // ── Inspección de vehículo y producto (REG-EMP-24) ──
 // Texto de los productos del flete para prellenar el campo "Producto".
