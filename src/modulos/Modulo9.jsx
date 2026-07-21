@@ -709,7 +709,14 @@ export default function Modulo9() {
                       const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
                       return (
                         <tr key={lote} className="border-b border-gray-50 last:border-0">
-                          <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}</td>
+                          <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}
+                            {v.vac > v.rec && (
+                              <span title="Se vació MÁS de lo recibido — revisa si llegó más, si el recibido se capturó de menos, o si hay doble captura"
+                                className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle">
+                                <AlertTriangle size={10} /> revisar
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.rec)}</td>
                           <td className="px-3 py-1.5 text-right text-green-700">{fmt(v.vac)}</td>
                           <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
