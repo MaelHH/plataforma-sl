@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
@@ -93,6 +93,7 @@ export default function Modulo9() {
   const [mermarComentario, setMermarComentario] = useState("");
   const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
+  const [loteAbierto, setLoteAbierto] = useState(null);   // lote con el detalle de "revisar" desplegado
   const [q, setQ] = useState("");
   const [fDestino, setFDestino] = useState(""); // filtro dropdown por Destino (aplica a la pestaña activa)
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
@@ -618,11 +619,15 @@ export default function Modulo9() {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0 };
-      acc[lote].rec += kgRecibidosDe(m);
-      acc[lote].vac += kgVaciadosDe(m);
+      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0, malos: [] };
+      const rec = kgRecibidosDe(m);
+      const vac = kgVaciadosDe(m);
+      acc[lote].rec += rec;
+      acc[lote].vac += vac;
       acc[lote].mer += kgMermadosDe(m);
       acc[lote].piso += kgEnPisoDe(m);
+      // Folios donde se vació MÁS de lo recibido → son los que causan el "revisar" del lote.
+      if (vac > rec) acc[lote].malos.push({ id: m.id, folio: m.folio || m.remision || m.id, rec, vac, dif: vac - rec });
     });
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
   })();
@@ -806,22 +811,48 @@ export default function Modulo9() {
                     {porLote.map(([lote, v]) => {
                       const disp = v.vac + v.mer;
                       const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
+                      const malo = v.vac > v.rec;
+                      const abierto = loteAbierto === lote;
                       return (
-                        <tr key={lote} className="border-b border-gray-50 last:border-0">
-                          <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}
-                            {v.vac > v.rec && (
-                              <span title="Se vació MÁS de lo recibido — revisa si llegó más, si el recibido se capturó de menos, o si hay doble captura"
-                                className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle">
-                                <AlertTriangle size={10} /> revisar
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.rec)}</td>
-                          <td className="px-3 py-1.5 text-right text-green-700">{fmt(v.vac)}</td>
-                          <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
-                          <td className="px-3 py-1.5 text-right text-gray-600">{pct ? pct.toFixed(0) + "%" : "—"}</td>
-                          <td className="px-3 py-1.5 text-right font-semibold text-amber-700">{fmt(v.piso)}</td>
-                        </tr>
+                        <Fragment key={lote}>
+                          <tr className="border-b border-gray-50 last:border-0">
+                            <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}
+                              {malo && (
+                                <button onClick={() => setLoteAbierto(abierto ? null : lote)}
+                                  title="Ver qué folios tienen vaciado mayor que recibido"
+                                  className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle hover:bg-amber-100">
+                                  <AlertTriangle size={10} /> revisar ({v.malos.length}) {abierto ? "▾" : "▸"}
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5 text-right text-gray-700">{fmt(v.rec)}</td>
+                            <td className="px-3 py-1.5 text-right text-green-700">{fmt(v.vac)}</td>
+                            <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-600">{pct ? pct.toFixed(0) + "%" : "—"}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold text-amber-700">{fmt(v.piso)}</td>
+                          </tr>
+                          {malo && abierto && (
+                            <tr className="bg-amber-50/50 border-b border-amber-100">
+                              <td colSpan={6} className="px-3 py-2">
+                                <div className="text-[11px] text-amber-800 mb-1.5">
+                                  En <b>{lote}</b> se vació <b>{fmt(v.vac - v.rec)} kg de más</b>. Estos son los folios que lo causan.
+                                  Revisa si el ejote se capturó <b>dos veces</b> (con "Vaciar" simple <i>y además</i> "Vaciar por hora")
+                                  o si el <b>Recibido</b> quedó capturado de menos.
+                                </div>
+                                <div className="space-y-1">
+                                  {[...v.malos].sort((a, b) => b.dif - a.dif).map((f) => (
+                                    <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 flex-wrap">
+                                      <span className="font-semibold text-gray-800">Folio {f.folio}</span>
+                                      <span className="text-gray-600">
+                                        recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b> · sobra <b className="text-amber-700">{fmt(f.dif)} kg</b>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
                       );
                     })}
                     <tr className="bg-gray-50 font-semibold text-gray-800">
