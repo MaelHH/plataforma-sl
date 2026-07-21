@@ -559,8 +559,17 @@ export default function Modulo9() {
   const mermadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgMermadosDe(m) > 0);  // NO entraron (merma)
   // Filtro de Destino (dropdown): aplica a la lista VISIBLE de la pestaña activa.
   const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  // Búsqueda libre en las tablas de vaciado: folio, remisión, lote/rancho, producto, destino, línea, chofer.
+  const buscaVac = (m) => {
+    const t = q.trim().toLowerCase();
+    if (!t) return true;
+    const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(" ");
+    return [m.folio, m.remision, m.lote, m.rancho, m.consignado, m.distribuidor, m.destino, m.linea, m.chofer, prod]
+      .filter(Boolean).join(" ").toLowerCase().includes(t);
+  };
   const filasVac = (tabRec === "histVaciado" ? vaciadosHist : tabRec === "histMermado" ? mermadosHist : enPisoLista)
-    .filter((m) => !fDestino || m.destino === fDestino);
+    .filter((m) => !fDestino || m.destino === fDestino)
+    .filter(buscaVac);
   const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
   const pendientes = movimientos.filter((m) => !atendido(m));
   const historialArr = movimientos.filter(atendido);
@@ -971,10 +980,12 @@ export default function Modulo9() {
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, lote, producto…"
+                className="w-full sm:w-56 min-w-0 text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
               <div className="w-full sm:w-44 min-w-0"><SearchSelect className={INP_FILTRO} value={fDestino} onChange={setFDestino} placeholder="Destino: todos"
                 options={[{ value: "", label: "Destino: todos" }, ...destinosMov.map((d) => ({ value: d, label: d }))]} /></div>
-              {fDestino && <button onClick={() => setFDestino("")} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 whitespace-nowrap">Limpiar filtros</button>}
-              <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{fDestino ? " (filtrado)" : ""}</button>
+              {(fDestino || q) && <button onClick={() => { setFDestino(""); setQ(""); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 whitespace-nowrap">Limpiar filtros</button>}
+              <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center gap-1 whitespace-nowrap"><FileText size={14} /> Excel{(fDestino || q) ? " (filtrado)" : ""}</button>
               {tabRec === "histMermado" && (
                 <button onClick={abrirRezaga} className="inline-flex items-center gap-1 text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-red-700 whitespace-nowrap"><Plus size={14} /> Registrar rezaga</button>
               )}
