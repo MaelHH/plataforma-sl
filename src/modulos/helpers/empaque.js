@@ -52,3 +52,13 @@ export const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).leng
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
 export const kgMermadosDe = (m) => (m.vaciado?.mermas || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 export const kgEnPisoDe = (m) => Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m));
+
+// ── Para el Dashboard (Dirección): predicados/agregados reusables ──
+// ¿el folio está RECIBIDO en empaque (no cliente directo)? — mismo predicado que usa Empaque (M9),
+// para que los números del dashboard cuadren EXACTO con el módulo.
+export const esRecibidoEmpaque = (m) => m?.recepcion?.estado === "recibido" && !m?.recepcion?.clienteDirecto;
+// Cubetas ya enviadas a SAP de un folio: total + por hora + faltante (ajustes).
+export const cubetasEnviadasSAP = (m) =>
+  (m?.recepcion?.sapEnvio?.cubetas || 0)
+  + (m?.vaciado?.horas || []).reduce((a, h) => a + (h?.sapEnvio?.cubetas || 0), 0)
+  + (m?.vaciado?.ajustes || []).reduce((a, x) => a + (x?.sapEnvio?.cubetas || 0), 0);

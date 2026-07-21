@@ -1,33 +1,12 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight, PackageOpen, FileSpreadsheet } from "lucide-react";
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
-
-// DATOS DEMO — BORRAR AL CONECTAR BACKEND
-const TENDENCIA_DEMO = {
-  semanal: [
-    { periodo: "Sem 18", costo: 0.412 },
-    { periodo: "Sem 19", costo: 0.438 },
-    { periodo: "Sem 20", costo: 0.401 },
-    { periodo: "Sem 21", costo: 0.455 },
-    { periodo: "Sem 22", costo: 0.447 },
-  ],
-  mensual: [
-    { periodo: "Ene", costo: 0.392 },
-    { periodo: "Feb", costo: 0.421 },
-    { periodo: "Mar", costo: 0.408 },
-    { periodo: "Abr", costo: 0.439 },
-    { periodo: "May", costo: 0.447 },
-  ],
-  temporada: [
-    { periodo: "2023-24", costo: 0.385 },
-    { periodo: "2024-25", costo: 0.412 },
-    { periodo: "2025-26", costo: 0.431 },
-  ],
-};
-// FIN DATOS DEMO
-
-import { lunesActual } from "../utils/fecha";
+import { hoyISO, lunesActual } from "../utils/fecha";
+import {
+  esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, netoPesada,
+} from "./helpers/empaque";
 
 // Semáforo vs promedio
 function semaforo(valor, promedio) {
@@ -51,15 +30,10 @@ const SEMAFORO_BG = {
 };
 
 export default function Dashboard() {
-  const { trailers, requerimientoGen, cargasEmbarques, monitoreo, catalogo } = useDatos();
+  const { trailers, requerimientoGen, cargasEmbarques, monitoreo, catalogo, movimientos } = useDatos();
   const [semana, setSemana] = useState(lunesActual());
   const [vistaCosto, setVistaCosto] = useState("linea");
-  const [vistaTendencia, setVistaTendencia] = useState("semanal"); // DATOS DEMO
-  // DATOS DEMO — cálculos de la tendencia de ejemplo
-  const dataTendencia = TENDENCIA_DEMO[vistaTendencia];
-  const promPeriodo = dataTendencia.reduce((a, p) => a + p.costo, 0) / dataTendencia.length;
-  const minPeriodo = Math.min(...dataTendencia.map((p) => p.costo));
-  const maxPeriodo = Math.max(...dataTendencia.map((p) => p.costo));
+  const [empDestino, setEmpDestino] = useState("");   // filtro por empaque destino (sección Empaque)
 
   const reqSemana = requerimientoGen[semana] || [];
 
@@ -177,6 +151,68 @@ export default function Dashboard() {
     blue: "bg-blue-50 border-blue-200 text-blue-800",
     red: "bg-red-50 border-red-200 text-red-800",
   };
+
+  // ── EMPAQUE · Vaciado a producción (lee `movimientos` con los MISMOS helpers del módulo → cuadra) ──
+  const hoyEmp = hoyISO();
+  const recibidosEmp = (movimientos || []).filter(esRecibidoEmpaque);
+  const empLoteDe = (m) => m.lote || m.rancho || m.consignado || "—";
+  const empDestinoDe = (m) => m.consignado || m.distribuidor || m.destino || "—";
+  const empDestinos = [...new Set(recibidosEmp.map(empDestinoDe).filter((d) => d && d !== "—"))].sort();
+  const empList = empDestino ? recibidosEmp.filter((m) => empDestinoDe(m) === empDestino) : recibidosEmp;
+
+  // kg vaciado de un día (eventos simples + pesadas por hora de ese día).
+  const kgVacDiaDe = (m, dia) =>
+    (m.vaciado?.eventos || []).filter((e) => (e.fecha || dia) === dia).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0)
+    + (m.vaciado?.horas || []).flatMap((h) => h.pesadas || []).filter((p) => (p.fecha || dia) === dia).reduce((a, p) => a + netoPesada(p), 0);
+
+  const empVaciadoHoy = empList.reduce((a, m) => a + kgVacDiaDe(m, hoyEmp), 0);
+  const empEnPiso = empList.reduce((a, m) => a + kgEnPisoDe(m), 0);
+  const empVacTot = empList.reduce((a, m) => a + kgVaciadosDe(m), 0);
+  const empMerma = empList.reduce((a, m) => a + kgMermadosDe(m), 0);
+  const empMermaPct = (empVacTot + empMerma) > 0 ? (empMerma / (empVacTot + empMerma)) * 100 : 0;
+  const empCubetasSAP = empList.reduce((a, m) => a + cubetasEnviadasSAP(m), 0);
+  const empPendientes = empList.filter((m) => kgEnPisoDe(m) > 0).length;
+
+  const empPorLote = (() => {
+    const acc = {};
+    empList.forEach((m) => {
+      const lote = empLoteDe(m);
+      if (!acc[lote]) acc[lote] = { lote, rec: 0, vac: 0, mer: 0, piso: 0, cub: 0 };
+      acc[lote].rec += kgRecibidosDe(m); acc[lote].vac += kgVaciadosDe(m);
+      acc[lote].mer += kgMermadosDe(m); acc[lote].piso += kgEnPisoDe(m); acc[lote].cub += cubetasEnviadasSAP(m);
+    });
+    return Object.values(acc).sort((a, b) => a.lote.localeCompare(b.lote));
+  })();
+  const empTot = empPorLote.reduce((t, l) => ({ rec: t.rec + l.rec, vac: t.vac + l.vac, mer: t.mer + l.mer, piso: t.piso + l.piso, cub: t.cub + l.cub }), { rec: 0, vac: 0, mer: 0, piso: 0, cub: 0 });
+
+  // Tendencia real: kg vaciados por día (últimos 7 días).
+  const empTendencia = (() => {
+    const base = new Date(hoyEmp + "T00:00:00");   // medianoche LOCAL de hoy
+    const dias = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(base); d.setDate(base.getDate() - i);
+      dias.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+    const mapa = Object.fromEntries(dias.map((d) => [d, 0]));
+    empList.forEach((m) => {
+      (m.vaciado?.eventos || []).forEach((e) => { const f = e.fecha || hoyEmp; if (f in mapa) mapa[f] += parseFloat(e.kg) || 0; });
+      (m.vaciado?.horas || []).forEach((h) => (h.pesadas || []).forEach((p) => { const f = p.fecha || hoyEmp; if (f in mapa) mapa[f] += netoPesada(p); }));
+    });
+    return dias.map((d) => ({ dia: d.slice(5), kg: Math.round(mapa[d]) }));
+  })();
+
+  const exportarEmpExcel = () => {
+    const rows = empPorLote.map((l) => ({
+      Lote: l.lote, "Recibido (kg)": Math.round(l.rec), "Vaciado (kg)": Math.round(l.vac),
+      "Mermado (kg)": Math.round(l.mer), "En piso (kg)": Math.round(l.piso), "Cubetas a SAP": Math.round(l.cub),
+      Revisar: l.vac > l.rec ? "vaciado > recibido" : "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Lote: "(sin datos)" }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario por lote");
+    XLSX.writeFile(wb, `empaque-inventario-${hoyEmp}.xlsx`);
+  };
+  const fmtKg = (n) => Math.round(n || 0).toLocaleString();
 
   return (
     <div>
@@ -303,6 +339,101 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* ─── EMPAQUE · Vaciado a producción ─── */}
+      <div className="border-t border-gray-200 pt-5 mt-2 mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-2 gap-y-2 mb-3">
+          <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1"><PackageOpen size={16} /> Empaque · Vaciado a producción</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select value={empDestino} onChange={(e) => setEmpDestino(e.target.value)} className="text-xs px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-700">
+              <option value="">Empaque: todos</option>
+              {empDestinos.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <button onClick={exportarEmpExcel} className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700"><FileSpreadsheet size={14} /> Excel</button>
+          </div>
+        </div>
+
+        {recibidosEmp.length === 0 ? (
+          <div className="bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center text-xs text-gray-400">Aún no hay fletes recibidos en empaque.</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <div className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">Vaciado hoy</div>
+                <div className="text-2xl font-bold text-blue-600">{fmtKg(empVaciadoHoy)} <span className="text-xs font-medium text-gray-400">kg</span></div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">Cubetas a SAP</div>
+                <div className="text-2xl font-bold text-green-700">{empCubetasSAP.toLocaleString()}</div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">En piso (inventario)</div>
+                <div className="text-2xl font-bold text-amber-600">{fmtKg(empEnPiso)} <span className="text-xs font-medium text-gray-400">kg</span></div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">% merma</div>
+                <div className="text-2xl font-bold text-gray-900">{empMermaPct.toFixed(1)}%</div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">Folios por terminar</div>
+                <div className="text-2xl font-bold text-gray-900">{empPendientes}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-white border border-gray-200 rounded-xl p-4">
+                <div className="text-sm font-semibold text-gray-900 mb-3 inline-flex items-center gap-1"><TrendingUp size={16} /> Vaciado por día <span className="text-xs font-normal text-gray-400">· últimos 7 días · kg</span></div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={empTendencia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "#6b7280" }} />
+                    <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                    <Tooltip formatter={(v) => [`${v.toLocaleString()} kg`, "Vaciado"]} />
+                    <Line type="monotone" dataKey="kg" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3, fill: "#2563eb" }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                <div className="text-sm font-semibold text-gray-900 px-4 pt-4 pb-2">Inventario por lote <span className="text-xs font-normal text-gray-400">· en piso = recibido − vaciado − merma</span></div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs" style={{ minWidth: 520 }}>
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-400 uppercase tracking-wide">
+                        <th className="text-left px-3 py-2 font-medium">Lote</th>
+                        <th className="text-right px-3 py-2 font-medium">Recibido</th>
+                        <th className="text-right px-3 py-2 font-medium">Vaciado</th>
+                        <th className="text-right px-3 py-2 font-medium">Cub SAP</th>
+                        <th className="text-right px-3 py-2 font-medium">En piso</th>
+                      </tr>
+                    </thead>
+                    <tbody className="tabular-nums">
+                      {empPorLote.map((l) => (
+                        <tr key={l.lote} className="border-t border-gray-100">
+                          <td className="px-3 py-2 font-medium text-gray-800">{l.lote}
+                            {l.vac > l.rec && <span className="ml-2 inline-flex items-center gap-0.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full"><AlertTriangle size={10} /> revisar</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-600">{fmtKg(l.rec)}</td>
+                          <td className="px-3 py-2 text-right text-green-700 font-medium">{fmtKg(l.vac)}</td>
+                          <td className="px-3 py-2 text-right text-gray-600">{Math.round(l.cub).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right text-amber-600 font-medium">{fmtKg(l.piso)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold text-gray-800">
+                        <td className="px-3 py-2">Total</td>
+                        <td className="px-3 py-2 text-right">{fmtKg(empTot.rec)}</td>
+                        <td className="px-3 py-2 text-right">{fmtKg(empTot.vac)}</td>
+                        <td className="px-3 py-2 text-right">{Math.round(empTot.cub).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right">{fmtKg(empTot.piso)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       {/* ─── ANÁLISIS DE COSTOS ─── */}
       <div className="border-t border-gray-200 pt-5 mt-2">
         <div className="text-sm font-bold text-gray-900 mb-3 inline-flex items-center gap-1"><DollarSign size={16} /> Análisis de Costos · costo por libra</div>
@@ -391,49 +522,8 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ─── TENDENCIA DE COSTO (DATOS DEMO — BORRAR AL CONECTAR BACKEND) ─── */}
-        <div className="mt-5">
-          <div className="flex items-center justify-between flex-wrap gap-2 gap-y-3 mb-3">
-            <div className="text-sm font-bold text-gray-900 inline-flex items-center gap-1"><TrendingUp size={16} /> Tendencia de costo por libra</div>
-            <div className="flex gap-2 flex-wrap">
-              {[["semanal", "Semanal"], ["mensual", "Mensual"], ["temporada", "Temporada"]].map(([id, lbl]) => (
-                <button key={id} onClick={() => setVistaTendencia(id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium ${vistaTendencia === id ? "bg-indigo-100 text-indigo-700" : "bg-white text-gray-500 border border-gray-200"}`}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* KPIs del periodo */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="text-xs text-gray-500 mb-1">Promedio del periodo</div>
-              <div className="text-xl font-bold text-gray-900">${promPeriodo.toFixed(3)}</div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="text-xs text-gray-500 mb-1">Más bajo</div>
-              <div className="text-xl font-bold text-green-600">${minPeriodo.toFixed(3)}</div>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-3">
-              <div className="text-xs text-gray-500 mb-1">Más alto</div>
-              <div className="text-xl font-bold text-red-600">${maxPeriodo.toFixed(3)}</div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={dataTendencia} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="periodo" tick={{ fontSize: 12, fill: "#6b7280" }} />
-                <YAxis tick={{ fontSize: 12, fill: "#6b7280" }} domain={["auto", "auto"]} tickFormatter={(v) => `$${v.toFixed(2)}`} />
-                <Tooltip formatter={(v) => [`$${v.toFixed(3)}/lb`, "Costo"]} />
-                <Line type="monotone" dataKey="costo" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 4, fill: "#4f46e5" }} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="text-xs text-amber-600 mt-2 italic inline-flex items-center gap-1"><AlertTriangle size={14} /> Datos de ejemplo — se reemplazan con el histórico real al conectar la base de datos.</div>
-        </div>
+        {/* Tendencia de costo/lb con histórico real: pendiente hasta tener esa data en BD.
+            (Se quitaron los DATOS DEMO). La tendencia real de EMPAQUE está arriba: "Vaciado por día". */}
       </div>
     </div>
   );
