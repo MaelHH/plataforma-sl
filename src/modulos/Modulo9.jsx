@@ -882,12 +882,17 @@ export default function Modulo9() {
     ];
   };
 
-  const stat = (l, v, c) => (
-    <div className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
-      <div className="text-xs text-gray-500 mb-1">{l}</div>
-      <div className={`text-xl font-semibold ${c}`}>{v}</div>
-    </div>
-  );
+  // Indicador de arriba. `dot` pinta el mismo código de color que se usa en todo el módulo, y al
+  // hacer clic lleva a la pestaña donde están esos fletes (si aplica).
+  const stat = (l, v, c, dot, tab) => {
+    const clic = tab ? { onClick: () => setTabRec(tab), role: "button", tabIndex: 0, title: `Ver ${l.toLowerCase()}` } : {};
+    return (
+      <div {...clic} className={`bg-white border border-gray-200 rounded-xl px-3 py-2.5 ${tab ? "cursor-pointer hover:border-indigo-300 hover:shadow-sm transition" : ""}`}>
+        <div className="text-xs text-gray-500 mb-1 inline-flex items-center gap-1.5">{dot && <span className={`w-2 h-2 rounded-full ${dot}`}></span>}{l}</div>
+        <div className={`text-xl font-semibold ${c}`}>{v}</div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -903,11 +908,11 @@ export default function Modulo9() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
-        {stat("Total fletes", movimientos.length, "text-gray-900")}
-        {stat("Por recibir", pendientes.length, "text-orange-600")}
-        {stat("Recibidos", recibidos.length, "text-green-700")}
-        {stat("Rechazados", rechazados.length, "text-red-600")}
-        {stat("Con novedad", conNovedad.length, "text-amber-600")}
+        {stat("Total fletes", movimientos.length, "text-gray-900", "bg-gray-400")}
+        {stat("Por recibir", pendientes.length, "text-orange-600", "bg-orange-500", "pendientes")}
+        {stat("Recibidos", recibidos.length, "text-green-700", "bg-green-500", "historial")}
+        {stat("Rechazados", rechazados.length, "text-red-600", "bg-red-500", "historial")}
+        {stat("Con novedad", conNovedad.length, "text-amber-600", "bg-amber-500", "historial")}
       </div>
 
       {/* ── LÍNEA DE CORTE SAP (solo encargada/admin) ── Folios anteriores = HISTÓRICO: se ven y se
@@ -945,15 +950,15 @@ export default function Modulo9() {
             <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Resumen del día (kg)</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
-                ["Vaciado a empaque (día)", totKgVacDia, "text-green-700"],
-                ["Mermado (día)", totKgMerDia, "text-red-700"],
-                ["En piso (inventario actual)", totKgPiso, "text-amber-700"],
-                ["Recibido (total)", totKgRec, "text-gray-900"],
-              ].map(([l, k, c]) => (
-                <div key={l} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
-                  <div className="text-[10px] text-gray-500 mb-1">{l}</div>
+                ["Vaciado a empaque (día)", totKgVacDia, "text-green-700", "border-green-200", "bg-green-500"],
+                ["Mermado (día)", totKgMerDia, "text-red-700", "border-red-200", "bg-red-400"],
+                ["En piso (inventario actual)", totKgPiso, "text-amber-700", "border-amber-200", "bg-amber-500"],
+                ["Recibido (total)", totKgRec, "text-gray-900", "border-gray-200", "bg-gray-400"],
+              ].map(([l, k, c, bd, dot]) => (
+                <div key={l} className={`bg-white border rounded-xl px-3 py-2.5 text-center ${bd}`}>
+                  <div className="text-[10px] text-gray-500 mb-1 inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${dot}`}></span>{l}</div>
                   <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
-                  <div className="text-[10px] text-gray-400">≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
+                  <div className="text-[10px] text-gray-400">≈ {cubetasDe(k).toLocaleString()} cubetas · ≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
                 </div>
               ))}
             </div>
@@ -966,15 +971,16 @@ export default function Modulo9() {
               <div className="text-xs text-gray-400 italic py-2">Aún no hay recibidos hoy.</div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                <table className="w-full text-xs" style={{ minWidth: "460px" }}>
+                <table className="w-full text-xs" style={{ minWidth: "620px" }}>
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
-                      <th className="text-left px-3 py-1.5 font-medium">Lote</th>
-                      <th className="text-right px-3 py-1.5 font-medium">Recibido</th>
-                      <th className="text-right px-3 py-1.5 font-medium">Vaciado</th>
-                      <th className="text-right px-3 py-1.5 font-medium">Mermado</th>
-                      <th className="text-right px-3 py-1.5 font-medium">% merma</th>
-                      <th className="text-right px-3 py-1.5 font-medium">En piso</th>
+                    <tr className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                      <th className="text-left px-3 py-2 font-semibold">Lote</th>
+                      <th className="text-right px-3 py-2 font-semibold">Recibido</th>
+                      <th className="text-right px-3 py-2 font-semibold">Vaciado</th>
+                      <th className="text-right px-3 py-2 font-semibold">Mermado</th>
+                      <th className="text-right px-3 py-2 font-semibold">% merma</th>
+                      <th className="text-right px-3 py-2 font-semibold">En piso</th>
+                      <th className="text-left px-3 py-2 font-semibold w-40">Avance</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1000,10 +1006,24 @@ export default function Modulo9() {
                             <td className="px-3 py-1.5 text-right text-red-700">{fmt(v.mer)}</td>
                             <td className="px-3 py-1.5 text-right text-gray-600">{pct ? pct.toFixed(0) + "%" : "—"}</td>
                             <td className="px-3 py-1.5 text-right font-semibold text-amber-700">{fmt(v.piso)}</td>
+                            {/* Barra de avance del lote: mismo lenguaje de colores que la tarjeta del folio. */}
+                            <td className="px-3 py-1.5">
+                              {(() => {
+                                const bse = Math.max(1, v.rec, v.vac + v.mer);
+                                const an = (x) => `${Math.max(0, Math.min(100, (x / bse) * 100))}%`;
+                                return (
+                                  <div title={`Vaciado ${fmt(v.vac)} · mermado ${fmt(v.mer)} · en piso ${fmt(v.piso)} kg`}
+                                    className="h-2 rounded-full bg-gray-200 overflow-hidden flex min-w-[80px]">
+                                    <span className="h-full bg-green-500" style={{ width: an(v.vac) }}></span>
+                                    <span className="h-full bg-red-400" style={{ width: an(v.mer) }}></span>
+                                  </div>
+                                );
+                              })()}
+                            </td>
                           </tr>
                           {malo && abierto && (
                             <tr className="bg-amber-50/50 border-b border-amber-100">
-                              <td colSpan={6} className="px-3 py-2">
+                              <td colSpan={7} className="px-3 py-2">
                                 <div className="text-[11px] text-amber-800 mb-1.5">
                                   En <b>{lote}</b> se vació <b>{fmt(v.vac - v.rec)} kg de más</b>. Estos son los folios que lo causan.
                                   Revisa si el ejote se capturó <b>dos veces</b> (con "Vaciar" simple <i>y además</i> "Vaciar por hora")
@@ -1025,13 +1045,18 @@ export default function Modulo9() {
                         </Fragment>
                       );
                     })}
-                    <tr className="bg-gray-50 font-semibold text-gray-800">
-                      <td className="px-3 py-1.5">Total</td>
-                      <td className="px-3 py-1.5 text-right">{fmt(totKgRec)}</td>
-                      <td className="px-3 py-1.5 text-right text-green-700">{fmt(totKgVac)}</td>
-                      <td className="px-3 py-1.5 text-right text-red-700">{fmt(totKgMer)}</td>
-                      <td className="px-3 py-1.5 text-right">{totMermaPct ? totMermaPct.toFixed(0) + "%" : "—"}</td>
-                      <td className="px-3 py-1.5 text-right text-amber-700">{fmt(totKgPiso)}</td>
+                    <tr className="bg-gray-50 font-semibold text-gray-800 border-t-2 border-gray-200">
+                      <td className="px-3 py-2">Total</td>
+                      <td className="px-3 py-2 text-right">{fmt(totKgRec)}</td>
+                      <td className="px-3 py-2 text-right text-green-700">{fmt(totKgVac)}</td>
+                      <td className="px-3 py-2 text-right text-red-700">{fmt(totKgMer)}</td>
+                      <td className="px-3 py-2 text-right">{totMermaPct ? totMermaPct.toFixed(0) + "%" : "—"}</td>
+                      <td className="px-3 py-2 text-right text-amber-700">{fmt(totKgPiso)}</td>
+                      <td className="px-3 py-2 text-[10px] font-normal text-gray-400">
+                        <span className="inline-flex items-center gap-1 mr-2"><span className="w-2 h-2 rounded-full bg-green-500"></span>vaciado</span>
+                        <span className="inline-flex items-center gap-1 mr-2"><span className="w-2 h-2 rounded-full bg-red-400"></span>merma</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300"></span>piso</span>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -1055,28 +1080,35 @@ export default function Modulo9() {
               <div className="text-xs text-gray-400 italic py-2">No hay vaciados registrados el día seleccionado.</div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-                <table className="w-full text-xs" style={{ minWidth: `${350 + lotesHora.length * 90}px` }}>
+                <table className="w-full text-xs" style={{ minWidth: `${470 + lotesHora.length * 90}px` }}>
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
-                      <th className="text-left px-3 py-1.5 font-medium">Hora</th>
+                    <tr className="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                      <th className="text-left px-3 py-2 font-semibold">Hora</th>
                       {lotesHora.map((lote) => (
-                        <th key={lote} className="text-right px-3 py-1.5 font-medium whitespace-nowrap">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
+                        <th key={lote} className="text-right px-3 py-2 font-semibold whitespace-nowrap normal-case">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
                       ))}
-                      <th className="text-right px-3 py-1.5 font-medium bg-gray-100">Total (kg)</th>
-                      <th className="text-right px-3 py-1.5 font-semibold bg-indigo-50 text-indigo-700 whitespace-nowrap">Cubetas</th>
+                      <th className="text-right px-3 py-2 font-semibold bg-gray-100">Total (kg)</th>
+                      <th className="text-right px-3 py-2 font-bold bg-indigo-50 text-indigo-600 whitespace-nowrap">Cubetas</th>
+                      <th className="text-left px-3 py-2 font-semibold w-28">Ritmo</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {porHora.map(([h, v]) => (
-                      <tr key={h} className="border-b border-gray-50 last:border-0">
+                    {(() => { const maxH = Math.max(1, ...porHora.map(([, v]) => v.kg)); return porHora.map(([h, v]) => (
+                      <tr key={h} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                         <td className="px-3 py-1.5 font-medium text-gray-700 whitespace-nowrap">{h}:00 – {String(Number(h) + 1).padStart(2, "0")}:00</td>
                         {lotesHora.map((lote) => (
                           <td key={lote} className="px-3 py-1.5 text-right text-gray-700">{v.lotes[lote] ? fmt(v.lotes[lote]) : <span className="text-gray-300">—</span>}</td>
                         ))}
                         <td className="px-3 py-1.5 text-right font-semibold text-gray-800 bg-gray-50">{fmt(v.kg)}</td>
                         <td className="px-3 py-1.5 text-right font-bold text-indigo-700 bg-indigo-50/50">{cubetasDe(v.kg).toLocaleString()}</td>
+                        {/* Ritmo: qué tan cargada estuvo esa hora contra la hora más fuerte del día. */}
+                        <td className="px-3 py-1.5">
+                          <div title={`${fmt(v.kg)} kg — ${Math.round((v.kg / maxH) * 100)}% de la hora más fuerte`} className="h-2 rounded-full bg-gray-200 overflow-hidden min-w-[60px]">
+                            <div className={`h-full rounded-full ${v.kg >= maxH ? "bg-indigo-600" : "bg-indigo-400"}`} style={{ width: `${Math.max(4, (v.kg / maxH) * 100)}%` }}></div>
+                          </div>
+                        </td>
                       </tr>
-                    ))}
+                    )); })()}
                     <tr className="bg-gray-100 font-semibold text-gray-800">
                       <td className="px-3 py-1.5">Total (kg)</td>
                       {lotesHora.map((lote) => {
@@ -1085,6 +1117,7 @@ export default function Modulo9() {
                       })}
                       <td className="px-3 py-1.5 text-right">{fmt(totKgVacDia)}</td>
                       <td className="px-3 py-1.5 text-right text-indigo-700 bg-indigo-100/60">{cubetasDe(totKgVacDia).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-[10px] font-normal text-gray-400">hora más fuerte</td>
                     </tr>
                     <tr className="bg-gray-50 text-gray-500 text-[10px]">
                       <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
@@ -1094,6 +1127,7 @@ export default function Modulo9() {
                       })}
                       <td className="px-3 py-1 text-right">≈{(totKgVacDia / KG_POR_BIN_TEO).toFixed(1)}</td>
                       <td className="px-3 py-1 text-right text-indigo-400">= kg ÷ 6</td>
+                      <td className="px-3 py-1"></td>
                     </tr>
                   </tbody>
                 </table>
