@@ -37,8 +37,12 @@ export const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((pars
 export const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
 export const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
 export const cubetasDe = (kg, kgPorCubeta = 6) => Math.round((kg || 0) / (kgPorCubeta || 6));
-// Vaciado total = eventos legacy (vaciado simple) + neto de todas las pesadas de todas las horas.
-export const kgVaciadosDe = (m) => (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0) + kgHorasDe(m);
+// FALTANTE (ajuste): kg que SÍ entraron a producción pero no se alcanzaron a pesar por hora.
+// Cuenta como vaciado desde que se registra (reserva) → el "en piso" baja.
+export const kgAjustesDe = (m) => (m?.vaciado?.ajustes || []).reduce((a, x) => a + (parseFloat(x?.kg) || 0), 0);
+// Vaciado total = eventos legacy (vaciado simple) + pesadas de las horas + faltantes (ajustes).
+export const kgVaciadosDe = (m) =>
+  (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0) + kgHorasDe(m) + kgAjustesDe(m);
 // Modo del folio: si ya tiene horas → "hora"; si ya se mandó el total a SAP → "total". Candado mutuo.
 export const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
 export const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;

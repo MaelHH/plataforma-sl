@@ -254,6 +254,105 @@ export default function Modulo9() {
     finally { setHoraEnviando(false); }
   };
 
+  // ── FALTANTE (ajuste) ── kg que SÍ entraron a producción pero no se alcanzaron a pesar por hora.
+  // Se manda a SAP de una vez (cubetas = kg/6) con el MISMO candado: aprobación de 2 personas +
+  // clave de idempotencia DETERMINISTA `${m.id}_ajuste_${seq}` (si se pierde el estado y se recrea,
+  // conserva su clave → SAP no recibe doble). Máx. 1 faltante sin enviar por folio.
+  const [faltanteMov, setFaltanteMov] = useState(null);
+  const [faltanteKg, setFaltanteKg] = useState("");
+  const [faltanteEnviando, setFaltanteEnviando] = useState(false);
+  const [faltanteError, setFaltanteError] = useState("");
+
+  const ajustePendienteDe = (m) => (m?.vaciado?.ajustes || []).find((a) => !a.sapEnvio) || null;
+
+  const abrirFaltante = (m) => {
+    setFaltanteError("");
+    const pend = ajustePendienteDe(m);
+    setFaltanteKg(pend ? String(Math.round(pend.kg)) : String(Math.round(kgEnPisoDe(m))));
+    setFaltanteMov(m);
+  };
+
+  // Crea o corrige el faltante PENDIENTE. Si se corrige el kg, se invalida la aprobación (hay que re-aprobar).
+  const guardarFaltante = (m) => {
+    const kg = parseFloat(faltanteKg) || 0;
+    if (!(kg > 0)) { setFaltanteError("Escribe los kilos faltantes."); return; }
+    setFaltanteError("");
+    setMovimientos((prev) => prev.map((x) => {
+      if (x.id !== m.id) return x;
+      const vac = baseVac(x);
+      const list = vac.ajustes || [];
+      const pend = list.find((a) => !a.sapEnvio);
+      if (pend) {
+        return { ...x, vaciado: { ...vac, ajustes: list.map((a) => (a.id === pend.id
+          ? { ...a, kg, aprobacion: a.kg === kg ? a.aprobacion : undefined } : a)) } };
+      }
+      const seq = vac.nextAjusteSeq || 1;   // contador estable; NUNCA se reutiliza
+      return { ...x, vaciado: { ...vac, nextAjusteSeq: seq + 1,
+        ajustes: [...list, { id: nuevoId("AJ"), seq, kg, creado: new Date().toISOString() }] } };
+    }));
+  };
+
+  const aprobarFaltante = async (m, aj) => {
+    if (!puedeAprobar) {
+      await dlg.alerta({ title: "No puedes aprobar", message: "Solo la encargada (gerente o admin) puede aprobar el cálculo y habilitar el envío a SAP. Pídele que revise y apruebe desde su cuenta." });
+      return;
+    }
+    const ord = ordenSAPde(m);
+    const cub = cubetasDe(aj.kg);
+    const ok = await dlg.confirm({
+      title: "Aprobar el faltante antes de SAP",
+      message: `¿Segura que el faltante es correcto? Se enviarán ${cub} cubetas (${Math.round(aj.kg)} kg ÷ 6) a la orden #${(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}. Quedará registrado a TU nombre como responsable. Al aprobar se habilita el botón de mandar a SAP.`,
+      confirmText: "Sí, es correcto — aprobar",
+    });
+    if (!ok) return;
+    const por = usuarioActual?.full_name || usuarioActual?.email || "encargado";
+    const aprobacion = { por, porId: usuarioActual?.id ?? null, tipo: usuarioActual?.tipo_nombre ?? null, ts: new Date().toISOString() };
+    setMovimientos((prev) => prev.map((x) => (x.id === m.id
+      ? { ...x, vaciado: { ...baseVac(x), ajustes: (x.vaciado?.ajustes || []).map((a) => (a.id === aj.id ? { ...a, aprobacion } : a)) } }
+      : x)));
+    registrarEvento?.({ evento: "faltante_aprobado", modulo: "M9", actor: por, destino: m.folio, ref: m.id,
+      detalle: `Faltante #${aj.seq}: ${Math.round(aj.kg)} kg (${cub} cub) aprobado por ${por} [${aprobacion.tipo || "?"}]`,
+      meta: { ajusteId: aj.id, kg: aj.kg, cubetas: cub, porId: aprobacion.porId } });
+  };
+
+  const enviarFaltanteSAP = async (m, aj) => {
+    const mv = movimientos.find((x) => x.id === m.id) || m;                      // datos VIVOS
+    const aju = (mv.vaciado?.ajustes || []).find((a) => a.id === aj.id) || aj;
+    const ord = ordenSAPde(mv);
+    const cub = cubetasDe(aju.kg);
+    if (!aju.aprobacion) { setFaltanteError("Falta APROBAR el faltante antes de mandar a SAP."); return; }
+    if (usoTotalSAP(mv)) { setFaltanteError("Este folio ya se mandó COMPLETO a SAP; no se puede mandar un faltante (evita doble conteo)."); return; }
+    if (!ord) { setFaltanteError("Este folio no tiene orden de fabricación en SAP."); return; }
+    if (!(cub > 0)) { setFaltanteError("La cantidad calculada es 0."); return; }
+    setFaltanteEnviando(true); setFaltanteError("");
+    try {
+      const res = await reciboProduccionSAP({
+        absoluteEntry: ord.absoluteEntry, cantidad: cub, movimientoId: mv.id,
+        claveEnvio: `${mv.id}_ajuste_${aju.seq}`,   // DETERMINISTA → idempotente aunque se recree
+        aprobadoPor: aju.aprobacion?.por,
+        aprobadoPorId: aju.aprobacion?.porId != null ? String(aju.aprobacion.porId) : undefined,
+      });
+      setMovimientos((prev) => prev.map((x) => (x.id === mv.id
+        ? { ...x, vaciado: { ...baseVac(x), ajustes: (x.vaciado?.ajustes || []).map((a) => (a.id === aju.id
+            ? { ...a, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: 6, netoKg: aju.kg, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
+            : a)) } }
+        : x)));
+      registrarEvento?.({ evento: "recibo_faltante_sap", modulo: "M9", actor: "Empaque", destino: mv.folio, ref: mv.id,
+        detalle: `Faltante #${aju.seq}: ${cub} cubetas (${Math.round(aju.kg)} kg ÷ 6) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`,
+        meta: { ajusteId: aju.id, cubetas: cub, netoKg: aju.kg, docNum: res.docNum } });
+      setFaltanteMov(null);
+    } catch (e) { setFaltanteError(String(e?.message || e)); }
+    finally { setFaltanteEnviando(false); }
+  };
+
+  const quitarFaltante = async (m, aj) => {
+    if (aj.sapEnvio) return;   // ya está en SAP → no se quita
+    if (!(await dlg.confirm({ title: "Quitar faltante", message: "¿Quitar este faltante? El \"en piso\" volverá a subir.", confirmText: "Quitar", danger: true }))) return;
+    setMovimientos((prev) => prev.map((x) => (x.id === m.id
+      ? { ...x, vaciado: { ...baseVac(x), ajustes: (x.vaciado?.ajustes || []).filter((a) => a.id !== aj.id) } } : x)));
+    setFaltanteMov(null);
+  };
+
   // ── Muestreo de calidad ──
   const [muestreoMov, setMuestreoMov] = useState(null); // movimiento al que se le hace muestreo
   const [muestreos, setMuestreos] = useState([]); // muestreos en edición (hasta 3)
@@ -1160,6 +1259,21 @@ export default function Modulo9() {
                                   <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed"><Ban size={14} /> Sin permiso SAP</span>
                                 )
                               ) : null}
+                              {/* Faltante: mandar lo que no se alcanzó a capturar por hora (no si ya se mandó el TOTAL) */}
+                              {ordenSAPde(m) && !usoTotalSAP(m) && (() => {
+                                const pend = ajustePendienteDe(m);
+                                const nEnv = (m.vaciado?.ajustes || []).filter((a) => a.sapEnvio).length;
+                                const cls = pend
+                                  ? (pend.aprobacion ? "border-green-300 text-green-700 bg-green-50" : "border-amber-300 text-amber-700 bg-amber-50")
+                                  : (nEnv ? "border-green-200 text-green-700 bg-green-50" : "border-gray-200 text-gray-600 bg-white hover:bg-gray-50");
+                                const txt = pend ? (pend.aprobacion ? "Faltante: mandar" : "Faltante: aprobar") : (nEnv ? `Faltante (${nEnv})` : "Enviar faltante");
+                                return (
+                                  <button onClick={() => abrirFaltante(m)} title="Mandar a SAP los kg que faltaron por registrar (sin dividirlos por hora)"
+                                    className={`inline-flex items-center justify-center gap-1 text-xs px-2 py-1 rounded-lg font-medium border ${cls}`}>
+                                    <Plus size={14} /> {txt}
+                                  </button>
+                                );
+                              })()}
                               {tieneEnvioSAP(m) ? (
                                 <span title="No se puede reabrir: el folio ya tuvo envíos a SAP (total, por hora o faltante)" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
                               ) : (
@@ -1905,6 +2019,108 @@ export default function Modulo9() {
           </div>
         </div>
       )}
+
+      {/* ── Faltante: mandar a SAP lo que no se alcanzó a capturar por hora ── */}
+      {faltanteMov && (() => {
+        const m = movimientos.find((x) => x.id === faltanteMov.id) || faltanteMov;
+        const ord = ordenSAPde(m);
+        const list = m.vaciado?.ajustes || [];
+        const pend = list.find((a) => !a.sapEnvio);
+        const enviados = list.filter((a) => a.sapEnvio);
+        const piso = kgEnPisoDe(m);
+        const kgNum = parseFloat(faltanteKg) || 0;
+        const cub = cubetasDe(kgNum);
+        const excede = kgNum > piso + (pend?.kg || 0);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setFaltanteMov(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><Plus size={16} /> Enviar faltante — Folio {m.folio || m.remision || "—"}</div>
+                  <div className="text-xs text-gray-400 truncate">{ord?.temporada || m.proyecto || ""}{loteDe(m) !== "—" ? ` · ${loteDe(m)}` : ""} · orden SAP #{(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}</div>
+                </div>
+                <button onClick={() => setFaltanteMov(null)} className="text-gray-400 hover:text-gray-700 shrink-0"><X size={18} /></button>
+              </div>
+
+              <div className="px-5 py-4 space-y-3">
+                <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                  Úsalo cuando <b>no se alcanzó a capturar todo por hora</b>: manda de una vez los kg que faltaron.
+                  Cuentan como vaciado (baja el "en piso") y se registran en SAP como cubetas.
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div><div className="text-gray-400">Recibido</div><div className="font-semibold">{fmt(kgRecibidosDe(m))} kg</div></div>
+                  <div><div className="text-gray-400">Vaciado</div><div className="font-semibold text-green-700">{fmt(kgVaciadosDe(m))} kg</div></div>
+                  <div><div className="text-gray-400">En piso</div><div className="font-semibold text-amber-700">{fmt(piso)} kg</div></div>
+                </div>
+
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[130px]">
+                    <label className="text-[11px] text-gray-500 block mb-0.5">Kilos faltantes</label>
+                    <input type="number" value={faltanteKg} onChange={(e) => setFaltanteKg(e.target.value)}
+                      className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" placeholder="kg" />
+                  </div>
+                  <div className="text-sm text-gray-600 pb-1.5">÷ 6 = <b className="text-indigo-700">{cub} cubetas</b></div>
+                </div>
+                {excede && <div className="text-[11px] text-amber-600 inline-flex items-center gap-1"><AlertTriangle size={13} /> Es MÁS de lo que hay en piso ({fmt(piso)} kg) — revísalo antes de aprobar.</div>}
+
+                {!pend ? (
+                  <button onClick={() => guardarFaltante(m)} disabled={!(kgNum > 0)}
+                    className="w-full text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center justify-center gap-1">
+                    <Plus size={14} /> Registrar faltante
+                  </button>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-800">Faltante #{pend.seq} · {fmt(pend.kg)} kg · {cubetasDe(pend.kg)} cub</span>
+                      {pend.aprobacion
+                        ? <span className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Aprobado por {pend.aprobacion.por}</span>
+                        : <span className="text-[11px] text-amber-700">Falta aprobar</span>}
+                    </div>
+                    {Math.round(kgNum) !== Math.round(pend.kg) && kgNum > 0 && (
+                      <button onClick={() => guardarFaltante(m)} className="text-xs px-3 py-1.5 border border-indigo-300 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50">
+                        Guardar {fmt(kgNum)} kg (habrá que re-aprobar)
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <button onClick={() => quitarFaltante(m, pend)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><Trash2 size={14} /> Quitar</button>
+                      {!pend.aprobacion && (puedeAprobar ? (
+                        <button onClick={() => aprobarFaltante(m, pend)} className="text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 inline-flex items-center gap-1"><Check size={14} /> Aprobar cálculo</button>
+                      ) : (
+                        <span title="Solo la encargada (gerente o admin) puede aprobar" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Solo la encargada puede aprobar</span>
+                      ))}
+                      {pend.aprobacion ? (puedeEnviarSap ? (
+                        <button onClick={() => enviarFaltanteSAP(m, pend)} disabled={faltanteEnviando}
+                          className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
+                          <Send size={14} /> {faltanteEnviando ? "Enviando…" : `Mandar a SAP (${cubetasDe(pend.kg)} cub)`}
+                        </button>
+                      ) : (
+                        <span title="No tienes permiso para mandar a SAP" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Sin permiso para enviar</span>
+                      )) : (
+                        <span title="Falta que la encargada apruebe el cálculo" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {enviados.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Faltantes ya enviados</div>
+                    {enviados.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 text-xs bg-green-50 border border-green-200 rounded-lg px-2 py-1.5 flex-wrap">
+                        <span className="text-gray-700">Faltante #{a.seq} · {fmt(a.kg)} kg · {a.sapEnvio?.cubetas} cub</span>
+                        <span className="text-green-700 font-semibold inline-flex items-center gap-1"><Check size={13} /> SAP #{a.sapEnvio?.docNum}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {faltanteError && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{faltanteError}</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
