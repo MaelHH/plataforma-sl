@@ -220,6 +220,17 @@ export default function Dashboard() {
   const tienePendiente = tienePendienteSAP;   // helper compartido con el módulo
   const folioDe = (m) => m.remision || m.folio || "—";
 
+  // Merma POR MOTIVO: saber cuánto se descarta no sirve si no se sabe POR QUÉ (calidad vs
+  // inexistencia se atacan de formas distintas).
+  const empMermaMotivos = (() => {
+    const acc = {};
+    empList.forEach((m) => (m.vaciado?.mermas || []).forEach((e) => {
+      const k = (e.motivo || "").trim() || "Sin motivo";
+      acc[k] = (acc[k] || 0) + (parseFloat(e.kg) || 0);
+    }));
+    return Object.entries(acc).map(([motivo, kg]) => ({ motivo, kg })).sort((a, b) => b.kg - a.kg);
+  })();
+
   const empAlertas = [
     { clave: "pend", tono: "amber", titulo: "Envíos sin confirmar",
       ayuda: "Se cortó la conexión al mandar a SAP. Hay que verificar en SAP si quedó (nunca reenviar a ciegas).",
@@ -478,6 +489,16 @@ export default function Dashboard() {
                 <div className="text-xs text-gray-500 mb-1">% merma</div>
                 <div className="text-2xl font-bold text-gray-900">{empMermaPct.toFixed(1)}%</div>
                 <div className="text-[10px] text-gray-400">{fmtKg(empMerma)} kg no entraron</div>
+                {empMermaMotivos.length > 0 && (
+                  <div className="mt-1.5 space-y-0.5">
+                    {empMermaMotivos.slice(0, 3).map((x) => (
+                      <div key={x.motivo} className="flex items-center justify-between gap-2 text-[10px]">
+                        <span className="text-gray-500 truncate" title={x.motivo}>{x.motivo.replace(/^Merma por /, "")}</span>
+                        <span className="text-red-700 font-semibold whitespace-nowrap">{fmtKg(x.kg)} kg</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

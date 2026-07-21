@@ -91,6 +91,7 @@ export default function Modulo9() {
   const [mermarHora, setMermarHora] = useState("");
   const [mermarMotivo, setMermarMotivo] = useState("");
   const [mermarComentario, setMermarComentario] = useState("");
+  const [mermarError, setMermarError] = useState("");
   const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [loteAbierto, setLoteAbierto] = useState(null);   // lote con el detalle de "revisar" desplegado
@@ -563,21 +564,36 @@ export default function Modulo9() {
       : m)));
 
   // ── Mermado (no entró a empaque) ── también descuenta del piso.
-  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarComentario(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarMov(m); };
+  const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarComentario(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarError(""); setMermarMov(m); };
+  // Mermar es DESCARTAR producto: se valida como el resto del apartado (tope al piso, motivo
+  // obligatorio) y queda registrado QUIÉN lo hizo, igual que la aprobación y el cierre.
   const confirmarMerma = () => {
     const kg = parseFloat(mermarKg) || 0;
-    if (kg <= 0) { setMermarMov(null); return; }
-    const ev = { kg, fecha: mermarFecha || hoyISO(), hora: mermarHora || ahoraHM(), motivo: mermarMotivo.trim(), comentario: mermarComentario.trim() };
+    const piso = kgEnPisoDe(mermarMov);
+    if (!(kg > 0)) { setMermarError("Escribe los kilos que se van a mermar."); return; }
+    if (!mermarMotivo.trim()) { setMermarError("Elige el motivo: sin motivo no se puede descartar producto."); return; }
+    if (kg > piso) { setMermarError(`No puedes mermar ${fmt(kg)} kg: en piso solo quedan ${fmt(piso)} kg.`); return; }
+    const por = usuarioActual?.full_name || usuarioActual?.email || "—";
+    const ev = { kg, fecha: mermarFecha || hoyISO(), hora: mermarHora || ahoraHM(), motivo: mermarMotivo.trim(), comentario: mermarComentario.trim(), por, porId: usuarioActual?.id ?? null };
     setMovimientos((prev) => prev.map((m) => (m.id === mermarMov.id
       ? { ...m, vaciado: { ...baseVac(m), mermas: [...(m.vaciado?.mermas || []), ev] } }
       : m)));
-    setMermarMov(null); setMermarKg(""); setMermarMotivo(""); setMermarComentario("");
+    registrarEvento?.({ evento: "merma_registrada", modulo: "M9", actor: por, destino: mermarMov.folio, ref: mermarMov.id,
+      detalle: `Merma de ${fmt(kg)} kg · ${ev.motivo}${ev.comentario ? ` — ${ev.comentario}` : ""} (registrada por ${por})`,
+      meta: { kg, motivo: ev.motivo, fecha: ev.fecha } });
+    setMermarMov(null); setMermarKg(""); setMermarMotivo(""); setMermarComentario(""); setMermarError("");
   };
-  // Cancela una merma registrada: vuelve al piso.
-  const cancelarMerma = (movId, idx) =>
+  // Cancela una merma registrada: vuelve al piso. También queda en la bitácora (es producto que
+  // se había dado por perdido y regresa al inventario).
+  const cancelarMerma = (movId, idx) => {
+    const mv = movimientos.find((x) => x.id === movId);
+    const ev = (mv?.vaciado?.mermas || [])[idx];
     setMovimientos((prev) => prev.map((m) => (m.id === movId
       ? { ...m, vaciado: { ...m.vaciado, mermas: (m.vaciado?.mermas || []).filter((_, i) => i !== idx) } }
       : m)));
+    if (ev) registrarEvento?.({ evento: "merma_cancelada", modulo: "M9", actor: usuarioActual?.full_name || "—", destino: mv?.folio, ref: movId,
+      detalle: `Se canceló una merma de ${fmt(ev.kg)} kg (${ev.motivo || "sin motivo"}): esos kg vuelven al piso.`, meta: { kg: ev.kg } });
+  };
 
   // Devolver un manifiesto a "Vaciado a Empaque" (deshace vaciados y mermas; el piso vuelve completo).
   // ── TERMINAR el vaciado de un folio (cierre a mano) ──
@@ -1301,8 +1317,8 @@ export default function Modulo9() {
                               <span className="font-semibold text-red-700">{fmt(merK)} kg</span>
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {mer.map((e, i) => (
-                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={[e.motivo, e.comentario].filter(Boolean).join(" — ")}>
-                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}{e.comentario ? <MessageCircle size={14} className="ml-1" /> : ""}
+                                  <span key={i} className="inline-flex items-center gap-1 text-[10px] bg-red-50 text-red-600 rounded px-1.5 py-0.5" title={[e.motivo, e.comentario, e.por ? `registró: ${e.por}` : ""].filter(Boolean).join(" — ")}>
+                                    {e.fecha ? `${e.fecha} ` : ""}{e.hora} · {fmt(e.kg)} kg{e.motivo ? ` · ${e.motivo}` : ""}{e.por ? ` · ${e.por}` : ""}{e.comentario ? <MessageCircle size={14} className="ml-1" /> : ""}
                                     <button onClick={() => cancelarMerma(m.id, i)} title="Cancelar esta merma (regresa al piso)" className="text-red-400 hover:text-red-700 font-bold leading-none text-xs">×</button>
                                   </span>
                                 ))}
@@ -1362,36 +1378,27 @@ export default function Modulo9() {
               {rezagas.length === 0 ? (
                 <div className="text-xs text-gray-400 text-center py-6 italic">Sin rezagas. Usa “+ Registrar rezaga”.</div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs" style={{ minWidth: "720px" }}>
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
-                        <th className="text-left px-3 py-2 font-medium">Fecha</th>
-                        <th className="text-left px-3 py-2 font-medium">Tipo</th>
-                        <th className="text-left px-3 py-2 font-medium">De dónde viene</th>
-                        <th className="text-right px-3 py-2 font-medium">Kg</th>
-                        <th className="text-left px-3 py-2 font-medium">Comentario</th>
-                        <th className="text-center px-3 py-2 font-medium"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rezagas.map((rz) => (
-                        <tr key={rz.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-2 whitespace-nowrap text-gray-700">{rz.fecha}{rz.hora ? ` ${rz.hora}` : ""}</td>
-                          <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${rz.tipo === "Rezaga muerta" ? "bg-gray-800 text-white" : "bg-amber-100 text-amber-700"}`}>{rz.tipo || "—"}</span></td>
-                          <td className="px-3 py-2 text-gray-700">{rz.origen || "—"}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-red-700">{rz.kg ? fmt(rz.kg) + " kg" : "—"}</td>
-                          <td className="px-3 py-2 text-gray-600">{rz.comentario || "—"}</td>
-                          <td className="px-3 py-2 text-center"><button onClick={() => eliminarRezaga(rz.id)} className="inline-flex items-center justify-center text-xs px-2 py-1 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500"><Trash2 size={14} /></button></td>
-                        </tr>
-                      ))}
-                      <tr className="bg-gray-50 font-semibold text-gray-800">
-                        <td className="px-3 py-2" colSpan={3}>Total rezaga</td>
-                        <td className="px-3 py-2 text-right text-red-700">{fmt(rezagas.reduce((a, r) => a + (parseFloat(r.kg) || 0), 0))} kg</td>
-                        <td colSpan={2}></td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <div className="p-3 space-y-2 bg-gray-50/70">
+                  {rezagas.map((rz) => (
+                    <div key={rz.id} className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${rz.tipo === "Rezaga muerta" ? "bg-gray-800 text-white" : "bg-amber-100 text-amber-700"}`}>{rz.tipo || "—"}</span>
+                          <span className="text-base font-bold text-red-700">{rz.kg ? fmt(rz.kg) + " kg" : "—"}</span>
+                          <span className="text-[11px] text-gray-500">{rz.fecha}{rz.hora ? ` · ${rz.hora}` : ""}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">
+                          <span className="text-gray-400">de dónde viene:</span> <b className="text-gray-700">{rz.origen || "—"}</b>
+                          {rz.comentario ? <> · {rz.comentario}</> : null}
+                        </div>
+                      </div>
+                      <button onClick={() => eliminarRezaga(rz.id)} title="Eliminar esta rezaga" className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-200 rounded-lg bg-white hover:bg-red-50 text-red-500 whitespace-nowrap"><Trash2 size={14} /> Eliminar</button>
+                    </div>
+                  ))}
+                  <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex items-center justify-between font-semibold text-gray-800 text-xs">
+                    <span>Total rezaga ({rezagas.length})</span>
+                    <span className="text-red-700 text-base">{fmt(rezagas.reduce((a, r) => a + (parseFloat(r.kg) || 0), 0))} kg</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -2020,10 +2027,14 @@ export default function Modulo9() {
                 </div>
               )}
               {mermarFecha && mermarFecha !== hoyISO() && <div className="inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={14} /> Fecha distinta a hoy: esta merma contará en el día {mermarFecha}.</div>}
+              <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                Estos kg <b>salen del piso y no entran a empaque</b>, así que <b>no van a SAP</b>. Quedará registrado a tu nombre ({usuarioActual?.full_name || usuarioActual?.email || "—"}).
+              </div>
+              {mermarError && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{mermarError}</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => setMermarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={confirmarMerma} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Registrar merma</button>
+              <button onClick={confirmarMerma} disabled={!(parseFloat(mermarKg) > 0) || !mermarMotivo} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">Registrar merma</button>
             </div>
           </div>
         </div>
