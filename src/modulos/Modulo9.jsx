@@ -5,8 +5,9 @@ import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, 
 import { reciboProduccionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
-  CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, cubetasDe,
-  kgVaciadosDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe, kgEnPisoDe,
+  CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
+  kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe,
+  kgEnPisoDe, cubetasEnviadasSAP, kgPendienteSAP,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
@@ -1009,6 +1010,11 @@ export default function Modulo9() {
                     const merK = kgMermadosDe(m);
                     const ev = m.vaciado?.eventos || [];
                     const mer = m.vaciado?.mermas || [];
+                    // Desglose del vaciado: por hora + faltantes, y cuánto de eso ya está en SAP.
+                    const horasM = m.vaciado?.horas || [];
+                    const ajustesM = m.vaciado?.ajustes || [];
+                    const cubSAP = cubetasEnviadasSAP(m);
+                    const pendKg = kgPendienteSAP(m);
                     const prod = (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || "—";
                     const completo = recK > 0 && pisoK === 0;  // kg manda
                     const rcp = m.recepcion || {};
@@ -1050,6 +1056,51 @@ export default function Modulo9() {
                                   </span>
                                 ))}
                               </div>
+
+                              {/* Desglose POR HORA (con su estado en SAP) */}
+                              {horasM.length > 0 && (
+                                <div className="mt-1.5">
+                                  <div className="text-[10px] text-gray-500 inline-flex items-center gap-1"><Clock size={11} /> Por hora: <b className="text-gray-700">{horasM.length} h · {fmt(kgHorasDe(m))} kg</b></div>
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {horasM.map((h) => {
+                                      const nk = netoHora(h);
+                                      const cls = h.sapEnvio ? "bg-green-50 text-green-700 border-green-200"
+                                        : h.estado === "abierta" ? "bg-blue-50 text-blue-600 border-blue-200"
+                                        : "bg-amber-50 text-amber-700 border-amber-200";
+                                      const est = h.sapEnvio ? `SAP #${h.sapEnvio.docNum}` : h.estado === "abierta" ? "abierta" : (h.aprobacion ? "aprobada, sin enviar" : "falta aprobar");
+                                      return (
+                                        <span key={h.id} className={`inline-flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${cls}`}>
+                                          {h.etiqueta}: {fmt(nk)} kg · {cubetasDe(nk)} cub · {est}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Faltantes (ajustes) */}
+                              {ajustesM.length > 0 && (
+                                <div className="mt-1.5">
+                                  <div className="text-[10px] text-gray-500">Faltante: <b className="text-gray-700">{fmt(kgAjustesDe(m))} kg</b></div>
+                                  <div className="flex flex-wrap gap-1 mt-0.5">
+                                    {ajustesM.map((a) => (
+                                      <span key={a.id} className={`inline-flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${a.sapEnvio ? "bg-green-50 text-green-700 border-green-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                                        Faltante #{a.seq}: {fmt(a.kg)} kg · {cubetasDe(a.kg)} cub · {a.sapEnvio ? `SAP #${a.sapEnvio.docNum}` : (a.aprobacion ? "aprobado, sin enviar" : "falta aprobar")}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Progreso a SAP: cuánto se envió y cuánto falta */}
+                              {(cubSAP > 0 || pendKg > 0) && (
+                                <div className="mt-1.5 text-[10px] flex flex-wrap items-center gap-1">
+                                  <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Send size={11} /> SAP: {cubSAP.toLocaleString()} cub</span>
+                                  {pendKg > 0
+                                    ? <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">faltan {cubetasDe(pendKg).toLocaleString()} cub ({fmt(pendKg)} kg)</span>
+                                    : <span className="text-green-600">· todo enviado</span>}
+                                </div>
+                              )}
                             </div>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
@@ -1296,6 +1347,14 @@ export default function Modulo9() {
                           {recibido ? (
                             <>
                               <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> Ver</button>
+                              {/* Progreso a SAP del folio: cubetas ya reportadas y cuánto falta */}
+                              {(cubetasEnviadasSAP(m) > 0 || kgPendienteSAP(m) > 0) && (
+                                <span title="Cubetas ya reportadas a SAP · lo que falta por mandar de lo ya vaciado"
+                                  className="inline-flex items-center justify-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 whitespace-nowrap">
+                                  <Send size={11} className="text-green-600" /> {cubetasEnviadasSAP(m).toLocaleString()} cub
+                                  {kgPendienteSAP(m) > 0 && <b className="text-amber-700">· faltan {cubetasDe(kgPendienteSAP(m)).toLocaleString()}</b>}
+                                </span>
+                              )}
                               {m.recepcion?.sapEnvio ? (
                                 <span title="Recibo de producción enviado a SAP" className="inline-flex items-center justify-center gap-1 text-xs px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 text-center font-medium"><Check size={14} /> SAP #{m.recepcion.sapEnvio.docNum}</span>
                               ) : usaParcial(m) ? (

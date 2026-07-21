@@ -66,3 +66,10 @@ export const cubetasEnviadasSAP = (m) =>
   (m?.recepcion?.sapEnvio?.cubetas || 0)
   + (m?.vaciado?.horas || []).reduce((a, h) => a + (h?.sapEnvio?.cubetas || 0), 0)
   + (m?.vaciado?.ajustes || []).reduce((a, x) => a + (x?.sapEnvio?.cubetas || 0), 0);
+// kg que YA se reportaron a SAP (los netos de cada envío: total + por hora + faltantes).
+export const kgEnviadosSAP = (m) =>
+  (m?.recepcion?.sapEnvio?.netoKg || 0)
+  + (m?.vaciado?.horas || []).reduce((a, h) => a + (h?.sapEnvio?.netoKg || 0), 0)
+  + (m?.vaciado?.ajustes || []).reduce((a, x) => a + (x?.sapEnvio?.netoKg || 0), 0);
+// kg ya vaciados que AÚN no se han reportado a SAP (lo que falta por mandar).
+export const kgPendienteSAP = (m) => Math.max(0, kgVaciadosDe(m) - kgEnviadosSAP(m));
