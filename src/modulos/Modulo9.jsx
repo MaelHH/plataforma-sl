@@ -1,13 +1,13 @@
 import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
-import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search } from "lucide-react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search, ArrowRight } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
   kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, usaParcial, kgMermadosDe,
-  kgEnPisoDe, cubetasEnviadasSAP, kgPendienteSAP, esHistoricoSAP,
+  kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
@@ -2050,15 +2050,53 @@ export default function Modulo9() {
                 </div>
                 <button onClick={cerrarPanelHoras} className="text-gray-400 hover:text-gray-700 shrink-0"><X size={18} /></button>
               </div>
-              {/* Avance vs recibido */}
+              {/* Barra de flujo (diseño aprobado): de un vistazo, en qué va el folio.
+                  Recibido → Vaciado → En piso → Enviado a SAP. Solo LECTURA: los mismos helpers
+                  de siempre, nada de cálculos nuevos. */}
               <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-                <div className="flex items-center justify-between text-xs mb-1 flex-wrap gap-1">
-                  <span className="font-semibold text-gray-700">Vaciado {fmt(vaciado)} / {fmt(recibido)} kg ({pct}%)</span>
-                  <span className="text-gray-500">{cubTot.toLocaleString()} cubetas · en piso {fmt(enPiso)} kg</span>
-                </div>
-                <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                  <div className={`h-full rounded-full ${excede ? "bg-amber-500" : pct >= 100 ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${Math.min(100, pct)}%` }}></div>
-                </div>
+                {(() => {
+                  const enviadoKg = Math.min(kgEnviadosSAP(m), vaciado);
+                  const sinEnviarKg = Math.max(0, vaciado - enviadoKg);
+                  const mermaKg = kgMermadosDe(m);
+                  // Base de la barra: lo recibido, salvo que se haya vaciado de más (entonces no se desborda).
+                  const base = Math.max(1, recibido, vaciado + mermaKg);
+                  const anch = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
+                  const cubSap = cubetasEnviadasSAP(m);
+                  const horasEnv = horas.filter((h) => h.sapEnvio).length;
+                  const paso = (etiqueta, valor, unidad, sub, color) => (
+                    <div className="px-1">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{etiqueta}</div>
+                      <div className={`text-lg font-bold leading-tight ${color || "text-gray-800"}`}>{valor} <span className="text-[11px] font-semibold text-gray-400">{unidad}</span></div>
+                      <div className="text-[10px] text-gray-500">{sub}</div>
+                    </div>
+                  );
+                  const flecha = <div className="hidden sm:grid place-items-center text-gray-300"><ArrowRight size={16} /></div>;
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-y-3 sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] sm:gap-y-0 items-center">
+                        {paso("Recibido", fmt(recibido), "kg", `≈ ${cubetasDe(recibido).toLocaleString()} cub`)}
+                        {flecha}
+                        {paso("Vaciado", fmt(vaciado), "kg", `≈ ${cubetasDe(vaciado).toLocaleString()} cub`)}
+                        {flecha}
+                        {paso("En piso (falta)", fmt(enPiso), "kg", `≈ ${cubetasDe(enPiso).toLocaleString()} cub`, "text-amber-600")}
+                        {flecha}
+                        {paso("Enviado a SAP", cubSap.toLocaleString(), "cub", horas.length ? `${horasEnv} de ${horas.length} horas` : "—", "text-green-700")}
+                      </div>
+                      <div className="h-2 rounded-full bg-gray-200 overflow-hidden flex mt-3">
+                        <span className="h-full bg-green-500" style={{ width: anch(enviadoKg) }}></span>
+                        <span className="h-full bg-blue-500" style={{ width: anch(sinEnviarKg) }}></span>
+                        <span className="h-full bg-red-300" style={{ width: anch(mermaKg) }}></span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-[10px] text-gray-500">
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Enviado a SAP {fmt(enviadoKg)} kg</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Vaciado sin enviar {fmt(sinEnviarKg)} kg</span>
+                        {mermaKg > 0 && <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300"></span> Mermado {fmt(mermaKg)} kg</span>}
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300"></span> En piso {fmt(enPiso)} kg</span>
+                        <span className="text-gray-400">· {cubTot.toLocaleString()} cubetas vaciadas ({pct}%)</span>
+                      </div>
+                    </>
+                  );
+                })()}
                 {excede && <div className="text-[11px] text-amber-600 mt-1 inline-flex items-center gap-1"><AlertTriangle size={13} /> Llevas {fmt(vaciado - recibido)} kg MÁS de lo recibido — revisa (a veces llega más; no bloquea).</div>}
                 <div className="mt-2 flex items-start gap-1.5 text-[11px] text-gray-500 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
                   <InfoTip className="text-indigo-400 mt-0.5" width="w-64"><b>¿Cómo se sacan las cubetas?</b><br />1) De cada pesada: <b>neto = bruto − (Nº × peso del contenedor)</b>.<br />2) Cubetas de la hora = <b>neto total ÷ 6 kg</b> (redondeado).<br />Eso es lo que suma a "Cantidad completada" en SAP.</InfoTip>
