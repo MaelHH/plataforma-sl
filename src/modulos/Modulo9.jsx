@@ -486,7 +486,13 @@ export default function Modulo9() {
   const evDia = (m) => (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
   const merDia = (m) => (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
   const sumaKg = (arr) => arr.reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
-  const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)), 0);
+  // Pesadas del vaciado POR HORA del día como pseudo-eventos {kg, fecha, hora}, para UNIR con evDia
+  // en las vistas por día (card "Vaciado del día" y pivote "Vaciado por hora"). Usa netoPesada
+  // (recalcula) para cuadrar con kgHorasDe/kgVaciadosDe. NO altera `eventos` ni `kgVaciadosDe`.
+  const pesadasDia = (m) => (m.vaciado?.horas || []).flatMap((h) => (h.pesadas || [])
+    .filter((p) => (p.fecha || hoyISO()) === diaReporte)
+    .map((p) => ({ kg: netoPesada(p), fecha: p.fecha, hora: p.hora })));
+  const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)) + sumaKg(pesadasDia(m)), 0);
   const totKgMerDia = recibidos.reduce((a, m) => a + sumaKg(merDia(m)), 0);
 
   // Lote/proveedor de un manifiesto (lo que se vacía y se inventaría).
@@ -497,7 +503,7 @@ export default function Modulo9() {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      evDia(m).forEach((e) => {
+      [...evDia(m), ...pesadasDia(m)].forEach((e) => {   // vaciado simple + POR HORA del día
         const h = String(e.hora || "").split(":")[0] || "—";
         if (!acc[h]) acc[h] = { kg: 0, lotes: {} };
         const kg = parseFloat(e.kg) || 0;
