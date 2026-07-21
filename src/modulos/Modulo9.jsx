@@ -405,6 +405,15 @@ export default function Modulo9() {
     if (usoTotalSAP(mv)) { setFaltanteError("Este folio ya se mandó COMPLETO a SAP; no se puede mandar un faltante (evita doble conteo)."); return; }
     if (!ord) { setFaltanteError("Este folio no tiene orden de fabricación en SAP."); return; }
     if (!(cub > 0)) { setFaltanteError("La cantidad calculada es 0."); return; }
+    // ÚLTIMO AVISO antes del POST. Aunque ya esté aprobado, este botón manda de un solo clic y a
+    // SAP no se le puede deshacer: se pregunta SIEMPRE (un clic de más = cubetas de más en SAP).
+    const seguro = await dlg.confirm({
+      title: "¿Mandar el faltante a SAP?",
+      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(aju.kg)} kg ÷ 6) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${mv.remision || mv.folio || ""}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${aju.aprobacion?.por || "—"}.`,
+      confirmText: `Sí, mandar ${cub.toLocaleString()} cubetas`,
+      danger: true,
+    });
+    if (!seguro) return;
     setFaltanteEnviando(true); setFaltanteError("");
     try {
       const res = await reciboProduccionSAP({
