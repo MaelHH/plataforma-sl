@@ -1415,22 +1415,7 @@ export default function Modulo9() {
         {lista.length === 0 ? (
           <div className="text-xs text-gray-400 text-center py-8 italic">{movimientos.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: "1000px" }}>
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
-                  <th className="text-left px-2 py-2 font-medium">Folio</th>
-                  <th className="text-left px-2 py-2 font-medium">Fecha</th>
-                  <th className="text-left px-2 py-2 font-medium">Ruta</th>
-                  <th className="text-left px-2 py-2 font-medium">Línea / Chofer</th>
-                  <th className="text-left px-2 py-2 font-medium">Producto</th>
-                  <th className="text-right px-2 py-2 font-medium">Parr/Bultos</th>
-                  <th className="text-center px-2 py-2 font-medium">Estado</th>
-                  <th className="text-center px-2 py-2 font-medium">QCI</th>
-                  <th className="text-center px-2 py-2 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="p-3 space-y-3 bg-gray-50/70">
                 {lista.map((m) => {
                   const par = sumar(m.cargaItems, "parrillas");
                   const bul = sumar(m.cargaItems, "bultos");
@@ -1440,47 +1425,55 @@ export default function Modulo9() {
                   const novedad = recibido && r?.condicion === "con_novedad";
                   const nMu = m.muestreos?.length || 0;
                   const qciProm = nMu ? m.muestreos.reduce((a, mu) => a + calcQCI(mu), 0) / nMu : null;
+                  // Chip de estado: lo primero que se debe entender de un flete.
+                  const est = recibido
+                    ? (novedad
+                      ? { t: "Recibido con novedad", c: "bg-red-50 text-red-700 border-red-200", i: <AlertTriangle size={13} /> }
+                      : { t: "Recibido", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> })
+                    : rechazado
+                      ? { t: "Rechazado", c: "bg-red-50 text-red-700 border-red-200", i: <X size={13} /> }
+                      : { t: "Por recibir", c: "bg-orange-50 text-orange-700 border-orange-200", i: <Clock size={13} /> };
+                  const dato = (etiqueta, valor) => (
+                    <div className="min-w-0">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{etiqueta}</div>
+                      <div className="text-xs text-gray-700 truncate">{valor}</div>
+                    </div>
+                  );
                   return (
-                    <tr key={m.id} className={`border-b border-gray-100 ${recibido ? (novedad ? "bg-red-50/40" : "bg-green-50/40") : rechazado ? "bg-red-50/40" : "hover:bg-gray-50"}`}>
-                      <td className="px-2 py-2 font-bold text-red-600">{m.folio || "—"}</td>
-                      <td className="px-2 py-2 font-semibold text-gray-700 whitespace-nowrap">{m.fecha || "—"}</td>
-                      <td className="px-2 py-2 text-gray-600">{m.origen || "—"} → {m.destino || "—"}</td>
-                      <td className="px-2 py-2 text-gray-700"><div className="font-medium">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>
-                      <td className="px-2 py-2 text-gray-700">
-                        {(m.cargaItems || []).filter((it) => it.prod).length ? (
-                          (m.cargaItems || []).filter((it) => it.prod).map((it, i) => (
-                            <div key={i} className="whitespace-nowrap"><span className="font-medium">{it.prod}</span>{(it.parrillas || it.bultos) ? <span className="text-gray-400"> · {it.parrillas || 0}p / {it.bultos || 0}b</span> : ""}</div>
-                          ))
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap"><span className="font-semibold text-green-700">{par || 0}</span><span className="text-gray-300"> / </span><span className="font-semibold text-blue-700">{bul ? bul.toLocaleString() : 0}</span></td>
-                      <td className="px-2 py-2 text-center">
-                        {recibido ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span title={novedad ? "Con novedad (faltante / daño)" : "Recibido completo"} className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm ${novedad ? "bg-red-100 text-red-700 border-red-200" : "bg-green-100 text-green-700 border-green-200"}`}>{novedad ? <AlertTriangle size={14} /> : <Check size={14} />}</span>
-                            <span className="text-[10px] text-green-700 font-semibold">Recepción</span>
-                            {r?.clienteDirecto && <span className="inline-flex items-center gap-0.5 text-[9px] text-blue-700 font-semibold bg-blue-50 border border-blue-200 rounded px-1"><Truck size={12} /> Cliente directo</span>}
+                    <div key={m.id} className={`bg-white border rounded-xl overflow-hidden shadow-sm ${novedad || rechazado ? "border-red-200" : recibido ? "border-green-200" : "border-gray-200"}`}>
+                      {/* Encabezado: folio, fecha, ruta y en qué estado está */}
+                      <div className="px-4 py-2.5 border-b border-gray-100 flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-base font-bold text-red-600">{m.folio || "—"}</span>
+                            <span className="text-[11px] text-gray-500">{m.fecha || "sin fecha"}</span>
+                            {m.remision && <span className="text-[11px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">rem. {m.remision}</span>}
                           </div>
-                        ) : rechazado ? (
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span title="Rechazado" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-red-100 text-red-700 border-red-200"><X size={14} /></span>
-                            <span className="text-[10px] text-red-700 font-semibold">Rechazo</span>
-                            {r?.comentario && <div className="text-[9px] text-gray-500 max-w-[110px] truncate" title={r.comentario}>{r.comentario}</div>}
-                          </div>
-                        ) : (
-                          <span title="Por recibir" className="inline-flex items-center justify-center w-6 h-6 rounded-full border text-sm bg-orange-100 text-orange-700 border-orange-200"><Clock size={14} /></span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-center">
-                        {qciProm !== null ? (
-                          <span className={`inline-block whitespace-nowrap px-2 py-0.5 rounded-full font-bold ${qciProm >= 90 ? "bg-green-100 text-green-700" : qciProm >= 80 ? "bg-lime-100 text-lime-700" : qciProm >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
-                            {qciProm.toFixed(2)}%
-                          </span>
-                        ) : <span className="text-gray-300">—</span>}
-                        {nMu > 0 && <div className="text-gray-400 text-[10px] mt-0.5">{nMu}/{MAX_MUESTREOS} muestreo{nMu > 1 ? "s" : ""}</div>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-col gap-1 items-stretch min-w-[108px]">
+                          <div className="text-[11px] text-gray-500 mt-0.5 truncate">{m.origen || "—"} → {m.destino || "—"}</div>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {r?.clienteDirecto && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200"><Truck size={13} /> Cliente directo</span>}
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${est.c}`}>{est.i}{est.t}</span>
+                        </div>
+                      </div>
+
+                      {/* Los datos del flete, ya no en columnas apretadas */}
+                      <div className="px-4 py-3 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 bg-gray-50 border-b border-gray-100">
+                        {dato("Línea / Chofer", <><b className="text-gray-800">{m.linea || "—"}</b> · {m.chofer || "—"}</>)}
+                        {dato("Producto", (m.cargaItems || []).filter((it) => it.prod).length
+                          ? (m.cargaItems || []).filter((it) => it.prod).map((it) => it.prod).join(", ")
+                          : <span className="text-gray-300">—</span>)}
+                        {dato("Parrillas / Bultos", <><span className="font-semibold text-green-700">{par || 0}</span> <span className="text-gray-300">/</span> <span className="font-semibold text-blue-700">{bul ? bul.toLocaleString() : 0}</span></>)}
+                        {dato("Calidad (QCI)", qciProm !== null
+                          ? <span className={`inline-block px-2 py-0.5 rounded-full font-bold ${qciProm >= 90 ? "bg-green-100 text-green-700" : qciProm >= 80 ? "bg-lime-100 text-lime-700" : qciProm >= 70 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>{qciProm.toFixed(2)}% <span className="font-normal opacity-70">· {nMu}/{MAX_MUESTREOS}</span></span>
+                          : <span className="text-gray-300">sin muestreo</span>)}
+                      </div>
+                      {rechazado && r?.comentario && (
+                        <div className="px-4 py-2 text-[11px] text-red-700 bg-red-50 border-b border-red-100"><b>Motivo del rechazo:</b> {r.comentario}</div>
+                      )}
+
+                      {/* Acciones */}
+                      <div className="px-4 py-2.5 flex items-center justify-end gap-2 flex-wrap">
                           <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><span className="inline-flex items-center gap-1"><FlaskConical size={14} /> {nMu ? "Calidad" : "Muestreo"}</span></button>
                           <button onClick={() => abrirInspeccion(m)} className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}><Truck size={14} /> {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? <span className="inline-flex items-center gap-1">Inspección <AlertTriangle size={14} /></span> : <span className="inline-flex items-center gap-1">Inspección <Check size={14} /></span>) : "Inspección"}</button>
                           {recibido ? (
@@ -1489,8 +1482,8 @@ export default function Modulo9() {
                               {/* Progreso a SAP del folio: cubetas ya reportadas y cuánto falta */}
                               {(cubetasEnviadasSAP(m) > 0 || kgPendienteSAP(m) > 0) && (
                                 <span title="Cubetas ya reportadas a SAP · lo que falta por mandar de lo ya vaciado"
-                                  className="inline-flex items-center justify-center gap-1 text-[10px] px-2 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 whitespace-nowrap">
-                                  <Send size={11} className="text-green-600" /> {cubetasEnviadasSAP(m).toLocaleString()} cub
+                                  className="mr-auto inline-flex items-center justify-center gap-1 text-[11px] px-2.5 py-1 rounded-lg border border-gray-200 bg-white text-gray-600 whitespace-nowrap">
+                                  <Send size={12} className="text-green-600" /> SAP: <b className="text-green-700">{cubetasEnviadasSAP(m).toLocaleString()} cub</b>
                                   {kgPendienteSAP(m) > 0 && <b className="text-amber-700">· faltan {cubetasDe(kgPendienteSAP(m)).toLocaleString()}</b>}
                                 </span>
                               )}
@@ -1531,15 +1524,12 @@ export default function Modulo9() {
                           ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
                           ) : (
-                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-2 py-1.5 rounded-lg font-medium hover:bg-emerald-700">Dar recepción</button>
+                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar recepción</button>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
           </div>
         )}
       </div>
