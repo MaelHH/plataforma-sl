@@ -42,11 +42,23 @@ async function req(method, path, body, timeoutMs) {
   const headers = { "Content-Type": "application/json" };
   const tok = getToken();
   if (tok) headers.Authorization = `Bearer ${tok}`;
-  const res = await fetchConTimeout(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  }, timeoutMs);   // timeout opcional (las escrituras a SAP son lentas → más largo)
+  let res;
+  try {
+    res = await fetchConTimeout(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }, timeoutMs);   // timeout opcional (las escrituras a SAP son lentas → más largo)
+  } catch (e) {
+    // NO hubo respuesta (timeout, se cayó el internet, el servidor no contestó). En una ESCRITURA
+    // esto NO significa "no se hizo": la operación pudo completarse allá. Se marca `sinRespuesta`
+    // para que quien llama NO reintente a ciegas (ver G4 "Verificar en SAP"). Ver [[sap-reglas-garantia]].
+    const err = new Error(e?.name === "AbortError"
+      ? "La petición tardó demasiado y se canceló; no sabemos si alcanzó a completarse."
+      : "Se perdió la conexión con el servidor; no sabemos si alcanzó a completarse.");
+    err.sinRespuesta = true;
+    throw err;
+  }
   if (!res.ok) {
     if (res.status === 401) {
       // Token vencido/ausente → limpiar y avisar a la app para mostrar el login.
@@ -61,6 +73,9 @@ async function req(method, path, body, timeoutMs) {
     try { const j = JSON.parse(raw); if (j && typeof j.detail === "string") msg = j.detail; } catch { /* body no-JSON → genérico */ }
     const err = new Error(msg);
     err.status = res.status;
+    // 500/504 = el backend murió o tardó demasiado a media operación → resultado DESCONOCIDO
+    // (a diferencia de 400/409/502, donde sabemos que se rechazó y NO se creó nada).
+    if (res.status === 500 || res.status === 504) err.sinRespuesta = true;
     throw err;
   }
   if (res.status === 204) return null;
@@ -134,6 +149,10 @@ export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalog
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
 // body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
 export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body, TIMEOUT_SAP_WRITE);
+// G4 · VERIFICAR (solo GET, no escribe en SAP): ¿el recibo que se quedó "enviando" sí se creó?
+// Evita el reintento a ciegas que duplicaría la Cantidad completada. Ver [[sap-reglas-garantia]].
+export const verificarReciboSAP = ({ clave, absoluteEntry, cantidad, fecha }) =>
+  req("GET", `/api/sap/recibo-verificar${qs({ clave, absoluteEntry, cantidad, fecha })}`, undefined, TIMEOUT_SAP_WRITE);
 
 // ── SAP · Orden de compra de flete (Paso 4) ──
 export const getProveedoresFleteSAP = (q) => req("GET", `/api/sap/proveedores-flete${qs({ q })}`);

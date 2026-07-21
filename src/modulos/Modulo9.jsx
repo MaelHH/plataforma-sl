@@ -1,8 +1,8 @@
 import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
-import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
-import { reciboProduccionSAP } from "../store/api";
+import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
@@ -142,11 +142,82 @@ export default function Modulo9() {
         meta: { cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
       setSapMov(null);
     } catch (e) {
-      setSapError(String(e?.message || e));
+      // G4: sin respuesta → NO decimos "falló" ni dejamos reenviar; queda ⏳ para verificar.
+      if (e?.sinRespuesta) {
+        marcarPendiente(m, { tipo: "total" }, { clave: m.id, absoluteEntry: ord.absoluteEntry, cubetas, kgPorCubeta: kgc, netoKg: neto });
+        setSapError("");
+      } else setSapError(String(e?.message || e));
     } finally {
       setSapCargando(false);
     }
   };
+
+  // ── G4 · Envío "PENDIENTE DE CONFIRMAR" (se quedó enviando) ──────────────────────────────
+  // Si el envío no devuelve respuesta (se cayó el internet / SAP tardó demasiado), NO sabemos si
+  // el recibo se creó allá. Reintentar a ciegas duplicaría la Cantidad completada, así que el
+  // envío queda marcado ⏳ y solo se ofrece "Verificar en SAP" (un GET que pregunta si ya existe).
+  const [verificando, setVerificando] = useState("");   // clave que se está verificando
+  const [verifMsg, setVerifMsg] = useState(null);       // { ok:bool, texto }
+
+  // Parcha el lugar donde vive el envío: total → recepcion; por hora → esa hora; faltante → ese ajuste.
+  const parcharDestino = (movId, destino, patch) => setMovimientos((prev) => prev.map((x) => {
+    if (x.id !== movId) return x;
+    if (destino.tipo === "total") return { ...x, recepcion: { ...x.recepcion, ...patch } };
+    const vac = baseVac(x);
+    const key = destino.tipo === "hora" ? "horas" : "ajustes";
+    return { ...x, vaciado: { ...vac, [key]: (vac[key] || []).map((o) => (o.id === destino.id ? { ...o, ...patch } : o)) } };
+  }));
+
+  // Marca el envío como incierto (⏳). Guarda lo necesario para poder verificarlo después.
+  const marcarPendiente = (m, destino, datos) => parcharDestino(m.id, destino, {
+    sapPendiente: { ...datos, ts: new Date().toISOString() },
+  });
+
+  // Pregunta a SAP (SOLO GET) si el recibo ya existe. No reintenta ni escribe nada en SAP.
+  const verificarPendiente = async (m, destino, pend) => {
+    setVerifMsg(null); setVerificando(pend.clave);
+    try {
+      const r = await verificarReciboSAP({ clave: pend.clave, absoluteEntry: pend.absoluteEntry, cantidad: pend.cubetas });
+      if (r.estado === "encontrado" || r.estado === "enviado") {
+        const envio = { docEntry: r.docEntry, docNum: r.docNum, cubetas: pend.cubetas, kgPorCubeta: pend.kgPorCubeta,
+          netoKg: pend.netoKg, absoluteEntry: pend.absoluteEntry, ts: new Date().toISOString(), verificado: true };
+        parcharDestino(m.id, destino, destino.tipo === "hora"
+          ? { estado: "enviada", sapEnvio: envio, sapPendiente: undefined }
+          : { sapEnvio: envio, sapPendiente: undefined });
+        setVerifMsg({ ok: true, texto: `Sí se creó en SAP (#${r.docNum}). Ya quedó registrado aquí; NO hay que volver a mandarlo.` });
+        registrarEvento?.({ evento: "recibo_sap_verificado", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+          detalle: `Verificado en SAP: el recibo de ${pend.cubetas} cub SÍ existe (SAP #${r.docNum}); no se reenvía.`,
+          meta: { clave: pend.clave, docNum: r.docNum, cubetas: pend.cubetas } });
+      } else if (r.estado === "no_encontrado") {
+        parcharDestino(m.id, destino, { sapPendiente: undefined });   // libera el botón de enviar
+        setVerifMsg({ ok: false, texto: "SAP NO tiene ese recibo: el envío no se completó. Ya puedes volver a mandarlo." });
+      } else {
+        setVerifMsg({ ok: false, texto: r.mensaje || "Hay varios recibos parecidos en SAP; revísalo allá antes de decidir." });
+      }
+    } catch (e) {
+      setVerifMsg({ ok: false, texto: String(e?.message || e) });
+    } finally { setVerificando(""); }
+  };
+
+  // Aviso ⏳ con el botón "Verificar en SAP" (se pinta en los 3 lugares de envío).
+  const avisoPendiente = (m, destino, pend) => (
+    <div className="text-xs bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 space-y-2">
+      <div className="text-amber-800">
+        <b>⏳ Pendiente de confirmar.</b> El envío de <b>{pend.cubetas} cubetas</b> se interrumpió y no
+        sabemos si alcanzó a registrarse en SAP. <b>No lo vuelvas a mandar</b> sin verificar: podría
+        quedar doble. Pregúntale a SAP si ya existe 👇
+      </div>
+      <button onClick={() => verificarPendiente(m, destino, pend)} disabled={verificando === pend.clave}
+        className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50 inline-flex items-center gap-1">
+        <Search size={14} /> {verificando === pend.clave ? "Consultando SAP…" : "Verificar en SAP"}
+      </button>
+      {verifMsg && (
+        <div className={`text-[11px] rounded-lg px-2 py-1.5 ${verifMsg.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-white text-gray-700 border border-gray-200"}`}>
+          {verifMsg.texto}
+        </div>
+      )}
+    </div>
+  );
 
   // ── Vaciado POR HORA (envío a SAP por hora, anidado al folio) ──
   const [horasMov, setHorasMov] = useState(null);       // folio cuyo panel de horas está abierto
@@ -253,7 +324,12 @@ export default function Modulo9() {
         detalle: `${hora.etiqueta}: ${cubetas} cubetas (${Math.round(neto)} kg ÷ ${kgc}) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`,
         meta: { horaId: hora.id, cubetas, netoKg: neto, absoluteEntry: ord.absoluteEntry, docNum: res.docNum } });
       setHoraSap(null);
-    } catch (e) { setHoraSapError(String(e?.message || e)); }
+    } catch (e) {
+      if (e?.sinRespuesta) {   // G4 — ver `verificarPendiente`
+        marcarPendiente(m, { tipo: "hora", id: hora.id }, { clave: `${m.id}_${hora.id}`, absoluteEntry: ord.absoluteEntry, cubetas, kgPorCubeta: kgc, netoKg: neto });
+        setHoraSapError("");
+      } else setHoraSapError(String(e?.message || e));
+    }
     finally { setHoraEnviando(false); }
   };
 
@@ -345,7 +421,12 @@ export default function Modulo9() {
         detalle: `Faltante #${aju.seq}: ${cub} cubetas (${Math.round(aju.kg)} kg ÷ 6) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`,
         meta: { ajusteId: aju.id, cubetas: cub, netoKg: aju.kg, docNum: res.docNum } });
       setFaltanteMov(null);
-    } catch (e) { setFaltanteError(String(e?.message || e)); }
+    } catch (e) {
+      if (e?.sinRespuesta) {   // G4 — ver `verificarPendiente`
+        marcarPendiente(mv, { tipo: "ajuste", id: aju.id }, { clave: `${mv.id}_ajuste_${aju.seq}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: 6, netoKg: aju.kg });
+        setFaltanteError("");
+      } else setFaltanteError(String(e?.message || e));
+    }
     finally { setFaltanteEnviando(false); }
   };
 
@@ -1907,6 +1988,8 @@ export default function Modulo9() {
         const neto = kgRecibidosDe(sapMov);
         const kgc = parseFloat(sapKgCubeta) || 6;
         const cubetas = Math.round(neto / kgc);
+        const mVivo = movimientos.find((x) => x.id === sapMov.id) || sapMov;   // para ver el ⏳ (G4)
+        const pendSap = mVivo.recepcion?.sapPendiente;
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
             <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl">
@@ -1933,10 +2016,11 @@ export default function Modulo9() {
                 </div>
                 {!ord && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este movimiento no tiene orden de fabricación en SAP (su rancho no está en el catálogo).</div>}
                 {sapError && <div className="text-[11px] text-red-600">No se pudo enviar: {sapError}</div>}
+                {pendSap && avisoPendiente(mVivo, { tipo: "total" }, pendSap)}
               </div>
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
                 <button onClick={() => setSapMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={confirmarEnvioSAP} disabled={sapCargando || !ord || !(cubetas > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{sapCargando ? "Enviando…" : "Confirmar envío a SAP"}</button>
+                <button onClick={confirmarEnvioSAP} disabled={sapCargando || !ord || !(cubetas > 0) || !!pendSap} title={pendSap ? "Hay un envío pendiente de confirmar: verifícalo en SAP antes de volver a mandar" : undefined} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">{sapCargando ? "Enviando…" : "Confirmar envío a SAP"}</button>
               </div>
             </div>
           </div>
@@ -2030,6 +2114,12 @@ export default function Modulo9() {
                               {h.aprobacion ? (
                                 esHist(m) ? (
                                   <span title={`Folio anterior al corte (${goLiveSAP}): ya se registró fuera de la app`} className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-500 bg-gray-50 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Histórico — no se manda a SAP</span>
+                                ) : h.sapPendiente ? (
+                                  // G4: el envío se interrumpió → NO se reenvía a ciegas, se verifica en SAP.
+                                  <button onClick={() => verificarPendiente(m, { tipo: "hora", id: h.id }, h.sapPendiente)} disabled={verificando === h.sapPendiente.clave}
+                                    className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50 inline-flex items-center gap-1">
+                                    <Search size={14} /> {verificando === h.sapPendiente.clave ? "Consultando SAP…" : "⏳ Verificar en SAP"}
+                                  </button>
                                 ) : puedeEnviarSap ? (
                                   <button onClick={() => abrirEnvioHora(m, h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-40 inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</button>
                                 ) : (
@@ -2095,10 +2185,11 @@ export default function Modulo9() {
                 </div>
                 {!ord && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este folio no tiene orden de fabricación en SAP.</div>}
                 {horaSapError && <div className="text-[11px] text-red-600">No se pudo enviar: {horaSapError}</div>}
+                {hora.sapPendiente && avisoPendiente(m, { tipo: "hora", id: hora.id }, hora.sapPendiente)}
               </div>
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
                 <button onClick={() => setHoraSap(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-                <button onClick={confirmarEnvioHora} disabled={horaEnviando || !ord || !(cubetas > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{horaEnviando ? "Enviando…" : "Confirmar envío a SAP"}</button>
+                <button onClick={confirmarEnvioHora} disabled={horaEnviando || !ord || !(cubetas > 0) || !!hora.sapPendiente} title={hora.sapPendiente ? "Hay un envío pendiente de confirmar: verifícalo en SAP antes de volver a mandar" : undefined} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{horaEnviando ? "Enviando…" : "Confirmar envío a SAP"}</button>
               </div>
             </div>
           </div>
@@ -2200,7 +2291,9 @@ export default function Modulo9() {
                       ) : (
                         <span title="Solo la encargada (gerente o admin) puede aprobar" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Solo la encargada puede aprobar</span>
                       ))}
-                      {pend.aprobacion ? (puedeEnviarSap ? (
+                      {pend.aprobacion ? (pend.sapPendiente ? (
+                        <span className="text-[11px] px-3 py-1.5 border border-amber-300 bg-amber-50 text-amber-800 rounded-lg font-semibold">⏳ Pendiente de confirmar — verifícalo abajo</span>
+                      ) : puedeEnviarSap ? (
                         <button onClick={() => enviarFaltanteSAP(m, pend)} disabled={faltanteEnviando}
                           className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
                           <Send size={14} /> {faltanteEnviando ? "Enviando…" : `Mandar a SAP (${cubetasDe(pend.kg)} cub)`}
@@ -2227,6 +2320,7 @@ export default function Modulo9() {
                 )}
 
                 {faltanteError && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{faltanteError}</div>}
+                {pend?.sapPendiente && avisoPendiente(m, { tipo: "ajuste", id: pend.id }, pend.sapPendiente)}
               </div>
             </div>
           </div>

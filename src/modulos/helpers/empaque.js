@@ -48,9 +48,11 @@ export const usaHoras = (m) => (m.vaciado?.horas || []).length > 0;
 export const usoTotalSAP = (m) => !!m.recepcion?.sapEnvio;
 // G2: ¿el folio ya tuvo CUALQUIER envío a SAP? (total, por hora o faltante) → no se puede
 // reabrir ni rechazar (borraría lo enviado y desincronizaría con SAP → riesgo de doble envío).
-export const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio
-  || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio)
-  || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio);
+// Cuenta también los envíos PENDIENTES DE CONFIRMAR (G4): si se borran, se pierde la clave con
+// la que se verifica en SAP y ya no habría forma de saber si el recibo quedó allá.
+export const tieneEnvioSAP = (m) => !!m?.recepcion?.sapEnvio || !!m?.recepcion?.sapPendiente
+  || (m?.vaciado?.horas || []).some((h) => h?.sapEnvio || h?.sapPendiente)
+  || (m?.vaciado?.ajustes || []).some((a) => a?.sapEnvio || a?.sapPendiente);
 // G3: ¿el folio usa envío PARCIAL (por hora o faltante)? → bloquea el envío TOTAL (evita doble conteo).
 export const usaParcial = (m) => usaHoras(m) || (m?.vaciado?.ajustes || []).length > 0;
 // Mermado = kg que NO entraron a empaque (se descartan); también salen del piso.
