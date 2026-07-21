@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
-import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, ArrowDownToLine, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
@@ -85,10 +85,6 @@ export default function Modulo9() {
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
   const [tabRec, setTabRec] = useState("pendientes"); // pendientes | vaciado | historial
-  const [vaciarMov, setVaciarMov] = useState(null); // movimiento al que se le registra un vaciado
-  const [vaciarKg, setVaciarKg] = useState("");
-  const [vaciarFecha, setVaciarFecha] = useState("");
-  const [vaciarHora, setVaciarHora] = useState("");
   const [mermarMov, setMermarMov] = useState(null); // movimiento al que se le registra una merma (no entró a empaque)
   const [mermarKg, setMermarKg] = useState("");
   const [mermarFecha, setMermarFecha] = useState("");
@@ -476,16 +472,9 @@ export default function Modulo9() {
     setMovimientos((prev) => prev.map((m) => (m.id === id
       ? { ...m, vaciado: { ...baseVac(m), [campo]: val } }
       : m)));
-  const abrirVaciar = (m) => { setVaciarKg(""); setVaciarFecha(hoyISO()); setVaciarHora(ahoraHM()); setVaciarMov(m); };
-  const confirmarVaciado = () => {
-    const kg = parseFloat(vaciarKg) || 0;
-    if (kg <= 0) { setVaciarMov(null); return; }
-    const ev = { kg, fecha: vaciarFecha || hoyISO(), hora: vaciarHora || ahoraHM() };
-    setMovimientos((prev) => prev.map((m) => (m.id === vaciarMov.id
-      ? { ...m, vaciado: { ...baseVac(m), eventos: [...(m.vaciado?.eventos || []), ev] } }
-      : m)));
-    setVaciarMov(null); setVaciarKg("");
-  };
+  // El "vaciado simple" (un solo evento, sin desglose) se RETIRÓ: ahora TODO se vacía POR HORA, así
+  // el inventario y lo que va a SAP salen de la MISMA captura (antes se podía capturar dos veces).
+  // Los vaciados simples ya registrados se conservan, se ven y se pueden cancelar con el ✕.
   // Cancela un vaciado registrado: lo quita de eventos → sus kg vuelven al piso.
   const cancelarVaciado = (movId, idx) =>
     setMovimientos((prev) => prev.map((m) => (m.id === movId
@@ -1176,7 +1165,6 @@ export default function Modulo9() {
                               ) : (
                                 <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${(m.vaciado?.horas || []).length})` : ""}</span></button>
                               )}
-                              <button onClick={() => abrirVaciar(m)} title="Vaciado simple (solo inventario, no manda a SAP)" className="text-xs px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg font-medium hover:bg-indigo-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={14} /> Vaciar</span></button>
                               <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                               </>)}
                             </div>
@@ -1806,45 +1794,6 @@ export default function Modulo9() {
             <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
               <button onClick={() => { setRechazoMov(null); setRechazoComent(""); }} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
               <button onClick={confirmarRechazo} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700">Confirmar rechazo</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal: registrar vaciado a producción ── */}
-      {vaciarMov && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-xl">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <div className="text-sm font-semibold text-gray-900"><span className="inline-flex items-center gap-1"><ArrowDownToLine size={16} /> Vaciar a producción</span> — {vaciarMov.remision || vaciarMov.folio || "—"}</div>
-              <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
-                <span>Disponible en piso: <b>{fmt(kgEnPisoDe(vaciarMov))} kg</b></span>
-                {kgEnPisoDe(vaciarMov) > 0 && (
-                  <button type="button" onClick={() => setVaciarKg(String(kgEnPisoDe(vaciarMov)))}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 underline">usar todo el piso</button>
-                )}
-              </div>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              <div>
-                <label className={LBL}>Kg vaciados</label>
-                <input type="number" className={INP} value={vaciarKg} onChange={(e) => setVaciarKg(e.target.value)} placeholder="Ej: 1,180" autoFocus />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={LBL}>Fecha de vaciado</label>
-                  <input type="date" className={INP} value={vaciarFecha} onChange={(e) => setVaciarFecha(e.target.value)} />
-                </div>
-                <div>
-                  <label className={LBL}>Hora</label>
-                  <input type="time" className={INP} value={vaciarHora} onChange={(e) => setVaciarHora(e.target.value)} />
-                </div>
-              </div>
-              {vaciarFecha && vaciarFecha !== hoyISO() && <div className="inline-flex items-center gap-1 text-[11px] text-amber-700"><AlertTriangle size={14} /> Fecha distinta a hoy: este vaciado contará en el día {vaciarFecha}.</div>}
-            </div>
-            <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setVaciarMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
-              <button onClick={confirmarVaciado} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">Registrar vaciado</button>
             </div>
           </div>
         </div>
