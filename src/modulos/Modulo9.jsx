@@ -1063,7 +1063,10 @@ export default function Modulo9() {
                           </div>
                           {rcp.destareAplicar ? (
                             <div className="text-[10px] text-gray-400 text-center mt-1 leading-tight">
-                              bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className="text-green-700">ejote {fmt(des.neto)} kg</b>
+                              bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)} kg</b>
+                              {des.bruto > 0 && des.taraTotal >= des.bruto && (
+                                <div className="text-[10px] text-red-600 font-semibold">⚠️ la tara supera al bruto — revisa la recepción</div>
+                              )}
                             </div>
                           ) : (
                             <div className="text-[10px] text-gray-400 text-center mt-1 leading-tight">peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</div>
@@ -1514,6 +1517,18 @@ export default function Modulo9() {
                         <div className="flex justify-between px-3 py-1.5 bg-green-50"><span className="text-green-800 font-semibold">Ejote neto (a vaciar)</span><b className="text-green-700">{fmt(neto)} kg</b></div>
                       </div>
                       {bruto === 0 && <div className="text-[11px] text-amber-700">Captura el <b>peso recibido</b> arriba para calcular el neto.</div>}
+                      {/* Candados de captura: los dos errores que dejan el ejote en 0 sin que nadie lo note. */}
+                      {parrillas > 0 && cajas > 0 && parrillas > cajas && (
+                        <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-start justify-between gap-2">
+                          <span>⚠️ <b>¿Parrillas y bultos están invertidos?</b> Hay más parrillas ({fmt(parrillas)}) que cajas ({fmt(cajas)}), y normalmente van ~{CAJAS_POR_PARRILLA} cajas por parrilla.</span>
+                          <button type="button" onClick={() => setForm((f) => ({ ...f, parrillasRecibidas: f.bultosRecibidos, bultosRecibidos: f.parrillasRecibidas }))} className="shrink-0 px-2 py-1 rounded-md bg-red-600 text-white font-semibold hover:bg-red-700">Intercambiar</button>
+                        </div>
+                      )}
+                      {bruto > 0 && taraT >= bruto && (
+                        <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                          ⚠️ <b>La tara ({fmt(taraT)} kg) es mayor o igual al peso recibido ({fmt(bruto)} kg)</b>, por eso el ejote neto queda en <b>0</b>. Revisa parrillas, bultos y los pesos antes de confirmar.
+                        </div>
+                      )}
                       <div className="text-[10px] text-gray-400">≈ 1 parrilla por cada {CAJAS_POR_PARRILLA} cajas; si no capturas parrillas, se estiman con esa razón.</div>
                     </div>
                   </div>
