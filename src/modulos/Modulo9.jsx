@@ -1095,20 +1095,9 @@ export default function Modulo9() {
                   : "No hay fletes en piso por vaciar. Al dar recepción pasan aquí para vaciarlos a producción."}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs" style={{ minWidth: "960px" }}>
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-500">
-                    <th className="text-left px-3 py-2 font-medium">Folio / Remisión</th>
-                    <th className="text-left px-3 py-2 font-medium">Producto</th>
-                    <th className="text-center px-3 py-2 font-medium">Recibido (kg)</th>
-                    <th className="text-left px-3 py-2 font-medium">Vaciados a empaque</th>
-                    <th className="text-left px-3 py-2 font-medium">Mermados (no entró)</th>
-                    <th className="text-right px-3 py-2 font-medium">Piso (inventario)</th>
-                    <th className="text-center px-3 py-2 font-medium"></th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="p-3 space-y-3 bg-gray-50/70">
+              {/* UNA TARJETA POR FOLIO (diseño aprobado): el mismo dato de siempre, pero contado
+                  como una historia — Recibido → Vaciado → En piso → Enviado a SAP. */}
                   {filasVac.map((m) => {
                     const recK = kgRecibidosDe(m);
                     const pisoK = kgEnPisoDe(m);
@@ -1130,30 +1119,82 @@ export default function Modulo9() {
                     const kgRecVal = (m.vaciado && "kgRecibidos" in m.vaciado)
                       ? m.vaciado.kgRecibidos
                       : (rcp.destareAplicar ? (des.neto || "") : (rcp.pesoRecibido || m.pesoBascula || ""));
+                    // Barra de flujo (mismos helpers, solo lectura).
+                    const enviadoKg = Math.min(kgEnviadosSAP(m), vacK);
+                    const sinEnviarKg = Math.max(0, vacK - enviadoKg);
+                    const base = Math.max(1, recK, vacK + merK);
+                    const anch = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
+                    const hayPend = !!rcp.sapPendiente || horasM.some((h) => h.sapPendiente) || ajustesM.some((a) => a.sapPendiente);
+                    const estado = completo ? { t: "Completado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
+                      : esHist(m) ? { t: "Histórico — no va a SAP", c: "bg-gray-100 text-gray-500 border-gray-300", i: <Ban size={13} /> }
+                        : hayPend ? { t: "Pendiente de confirmar", c: "bg-amber-50 text-amber-700 border-amber-300", i: <Clock size={13} /> }
+                          : usaHoras(m) ? { t: "Vaciando por hora", c: "bg-blue-50 text-blue-700 border-blue-200", i: <Clock size={13} /> }
+                            : { t: "Sin vaciar", c: "bg-gray-50 text-gray-500 border-gray-200", i: null };
+                    const paso = (etiqueta, cuerpo, sub, color) => (
+                      <div className="px-1 min-w-0">
+                        <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold truncate">{etiqueta}</div>
+                        <div className={`text-lg font-bold leading-tight ${color || "text-gray-800"}`}>{cuerpo}</div>
+                        <div className="text-[10px] text-gray-500 truncate">{sub}</div>
+                      </div>
+                    );
+                    const flecha = <div className="hidden lg:grid place-items-center text-gray-300"><ArrowRight size={16} /></div>;
                     return (
-                      <tr key={m.id} className={`border-b border-gray-100 ${completo ? "bg-green-50/40" : "hover:bg-gray-50"}`}>
-                        <td className="px-3 py-2 whitespace-nowrap align-top">
-                          <div className="font-bold text-red-600">{m.remision || m.folio || "—"}</div>
-                          <div className="text-[10px] text-gray-400">lote: {loteDe(m)}</div>
-                        </td>
-                        <td className="px-3 py-2 text-gray-700 align-top">{prod}</td>
-                        <td className="px-3 py-2 align-top">
-                          <div className="flex items-center justify-center gap-1">
-                            <input type="number" className="w-24 text-right text-xs px-2 py-1 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
-                            <span className="text-[10px] text-gray-400">kg</span>
-                          </div>
-                          {rcp.destareAplicar ? (
-                            <div className="text-[10px] text-gray-400 text-center mt-1 leading-tight">
-                              bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)} kg</b>
-                              {des.bruto > 0 && des.taraTotal >= des.bruto && (
-                                <div className="text-[10px] text-red-600 font-semibold">⚠️ la tara supera al bruto — revisa la recepción</div>
-                              )}
+                      <div key={m.id} className={`bg-white border rounded-xl overflow-hidden shadow-sm ${completo ? "border-green-200" : hayPend ? "border-amber-300" : "border-gray-200"}`}>
+                        {/* Encabezado: quién es este folio */}
+                        <div className="px-4 py-2.5 border-b border-gray-100 flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-base font-bold text-red-600">{m.remision || m.folio || "—"}</span>
+                              <span className="text-[11px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">lote {loteDe(m)}</span>
                             </div>
-                          ) : (
-                            <div className="text-[10px] text-gray-400 text-center mt-1 leading-tight">peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5">
+                              <b className="text-gray-700">{prod}</b>
+                              {m.origen || m.destino ? <> · {m.origen || "—"} → {m.destino || "—"}</> : null}
+                              {m.chofer ? <> · {m.chofer}</> : null}
+                            </div>
+                          </div>
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${estado.c}`}>{estado.i}{estado.t}</span>
+                        </div>
+
+                        {/* Barra de flujo: el estado del folio de un vistazo */}
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+                          <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:gap-y-0 items-center">
+                            {paso("Recibido",
+                              <span className="inline-flex items-center gap-1">
+                                <input type="number" className="w-24 text-right text-base font-bold px-2 py-0.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
+                                <span className="text-[11px] font-semibold text-gray-400">kg</span>
+                              </span>,
+                              rcp.destareAplicar
+                                ? <>bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)}</b></>
+                                : <>peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</>)}
+                            {flecha}
+                            {paso("Vaciado", <>{fmt(vacK)} <span className="text-[11px] font-semibold text-gray-400">kg</span></>, `≈ ${cubetasDe(vacK).toLocaleString()} cub`)}
+                            {flecha}
+                            {paso("En piso (falta)", <>{fmt(pisoK)} <span className="text-[11px] font-semibold text-gray-400">kg</span></>, `≈ ${cubetasDe(pisoK).toLocaleString()} cub`, completo ? "text-green-700" : "text-amber-600")}
+                            {flecha}
+                            {paso("Enviado a SAP", <>{cubSAP.toLocaleString()} <span className="text-[11px] font-semibold text-gray-400">cub</span></>,
+                              pendKg > 0 ? `faltan ${cubetasDe(pendKg).toLocaleString()} cub` : (cubSAP > 0 ? "todo enviado" : "—"), "text-green-700")}
+                          </div>
+                          {des.bruto > 0 && des.taraTotal >= des.bruto && rcp.destareAplicar && (
+                            <div className="text-[10px] text-red-600 font-semibold mt-1">⚠️ la tara supera al bruto — revisa la recepción</div>
                           )}
-                        </td>
-                        <td className="px-3 py-2 text-gray-600 align-top">
+                          <div className="h-2 rounded-full bg-gray-200 overflow-hidden flex mt-3">
+                            <span className="h-full bg-green-500" style={{ width: anch(enviadoKg) }}></span>
+                            <span className="h-full bg-blue-500" style={{ width: anch(sinEnviarKg) }}></span>
+                            <span className="h-full bg-red-300" style={{ width: anch(merK) }}></span>
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-[10px] text-gray-500">
+                            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> En SAP {fmt(enviadoKg)} kg</span>
+                            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Vaciado sin enviar {fmt(sinEnviarKg)} kg</span>
+                            {merK > 0 && <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300"></span> Mermado {fmt(merK)} kg</span>}
+                            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300"></span> En piso {fmt(pisoK)} kg</span>
+                          </div>
+                        </div>
+
+                        {/* Detalle: de dónde salen esos kg */}
+                        <div className="px-4 py-3 grid md:grid-cols-2 gap-x-6 gap-y-3">
+                        <div className="text-xs text-gray-600 min-w-0">
+                          <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-1">Vaciado a empaque</div>
                           {vacK > 0 ? (
                             <div>
                               <span className="font-semibold text-green-700">{fmt(vacK)} kg</span>
@@ -1202,18 +1243,12 @@ export default function Modulo9() {
                               )}
 
                               {/* Progreso a SAP: cuánto se envió y cuánto falta */}
-                              {(cubSAP > 0 || pendKg > 0) && (
-                                <div className="mt-1.5 text-[10px] flex flex-wrap items-center gap-1">
-                                  <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Send size={11} /> SAP: {cubSAP.toLocaleString()} cub</span>
-                                  {pendKg > 0
-                                    ? <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">faltan {cubetasDe(pendKg).toLocaleString()} cub ({fmt(pendKg)} kg)</span>
-                                    : <span className="text-green-600">· todo enviado</span>}
-                                </div>
-                              )}
+                              {/* El progreso a SAP ya se ve arriba, en el paso "Enviado a SAP" de la barra de flujo. */}
                             </div>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-gray-600 align-top">
+                          ) : <span className="text-gray-300">Todavía no se vacía nada.</span>}
+                        </div>
+                        <div className="text-xs text-gray-600 min-w-0">
+                          <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold mb-1">Mermado (no entró a empaque)</div>
                           {merK > 0 ? (
                             <div>
                               <span className="font-semibold text-red-700">{fmt(merK)} kg</span>
@@ -1226,42 +1261,38 @@ export default function Modulo9() {
                                 ))}
                               </div>
                             </div>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap align-top">
-                          {completo
-                            ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> sin piso</span>
-                            : recK > 0
-                              ? <div>
-                                  <span className="font-semibold text-amber-700">{fmt(pisoK)} kg</span>
-                                  <div className="text-[10px] text-gray-400">rec {fmt(recK)} − vac {fmt(vacK)}{merK ? ` − mer ${fmt(merK)}` : ""} = {fmt(pisoK)} kg</div>
-                                </div>
-                              : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2 text-center align-top">
-                          {recK > 0 && !completo && (
-                            <div className="flex flex-col gap-1 items-stretch min-w-[110px]">
-                              {!puedeEditarVaciado ? (
-                                <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
-                              ) : (<>
+                          ) : <span className="text-gray-300">Sin merma.</span>}
+                        </div>
+                        </div>
+
+                        {/* Pie: la cuenta del piso + los botones */}
+                        <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
+                          <span className="text-[11px] text-gray-500">
+                            {completo
+                              ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> Terminado — no queda nada en piso</span>
+                              : recK > 0
+                                ? <>En piso: rec {fmt(recK)} − vac {fmt(vacK)}{merK ? ` − mer ${fmt(merK)}` : ""} = <b className="text-amber-700">{fmt(pisoK)} kg</b></>
+                                : <>Captura los kg recibidos para empezar.</>}
+                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {recK > 0 && !completo && (!puedeEditarVaciado ? (
+                              <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
+                            ) : (<>
+                              <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                               {usoTotalSAP(m) ? (
                                 <span title="Ya se mandó el TOTAL a SAP — no se puede vaciar por hora (evita doble conteo)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Clock size={14} /> Vaciar por hora</span>
                               ) : (
-                                <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${(m.vaciado?.horas || []).length})` : ""}</span></button>
+                                <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className="text-xs px-4 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${horasM.length})` : ""}</span></button>
                               )}
-                              <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
-                              </>)}
-                            </div>
-                          )}
-                          {completo && (
-                            <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
-                          )}
-                        </td>
-                      </tr>
+                            </>))}
+                            {completo && (
+                              <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
             </div>
           )}
           {/* Rezagas sueltas (no vienen de manifiesto) — solo en Historial Mermado */}
