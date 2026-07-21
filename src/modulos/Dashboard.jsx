@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight, PackageOpen, FileSpreadsheet } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight, PackageOpen, FileSpreadsheet, ArrowRight } from "lucide-react";
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 import { hoyISO, lunesActual } from "../utils/fecha";
 import {
-  esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, netoPesada,
+  esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, netoPesada,
 } from "./helpers/empaque";
 
 // Semáforo vs promedio
@@ -199,18 +199,75 @@ export default function Dashboard() {
       (m.vaciado?.eventos || []).forEach((e) => { if (e.fecha && e.fecha in mapa) mapa[e.fecha] += parseFloat(e.kg) || 0; });
       (m.vaciado?.horas || []).forEach((h) => (h.pesadas || []).forEach((p) => { if (p.fecha && p.fecha in mapa) mapa[p.fecha] += netoPesada(p); }));
     });
-    return dias.map((d) => ({ dia: d.slice(5), kg: Math.round(mapa[d]) }));
+    const enSap = Object.fromEntries(dias.map((d) => [d, 0]));
+    const sumaEnvio = (env) => { const d = (env?.ts || "").slice(0, 10); if (d in enSap) enSap[d] += env?.netoKg || 0; };
+    // OJO: `mapa` (lo vaciado) ya se llenó arriba. Aquí SOLO se suma lo reportado a SAP ese día,
+    // por la fecha del propio envío → la gráfica compara "se vació" contra "se reportó".
+    empList.forEach((m) => {
+      sumaEnvio(m.recepcion?.sapEnvio);
+      (m.vaciado?.horas || []).forEach((h) => sumaEnvio(h.sapEnvio));
+      (m.vaciado?.ajustes || []).forEach((a) => sumaEnvio(a.sapEnvio));
+    });
+    return dias.map((d) => ({ dia: d.slice(5), kg: Math.round(mapa[d]), sap: Math.round(enSap[d]) }));
   })();
 
+  // ── Lo que de verdad le importa a Dirección: qué falta por mandar a SAP y qué necesita atención ──
+  const empPendSAP = empList.reduce((a, m) => a + kgPendienteSAP(m), 0);       // vaciado que NO se ha reportado
+  const empEnviadoSAP = empList.reduce((a, m) => a + kgEnviadosSAP(m), 0);
+  const empRecTot = empList.reduce((a, m) => a + kgRecibidosDe(m), 0);
+  const empFoliosPendSAP = empList.filter((m) => kgPendienteSAP(m) > 0).length;
+
+  const tienePendiente = (m) => !!m?.recepcion?.sapPendiente
+    || (m?.vaciado?.horas || []).some((h) => h?.sapPendiente)
+    || (m?.vaciado?.ajustes || []).some((a) => a?.sapPendiente);
+  const folioDe = (m) => m.remision || m.folio || "—";
+
+  const empAlertas = [
+    { clave: "pend", tono: "amber", titulo: "Envíos sin confirmar",
+      ayuda: "Se cortó la conexión al mandar a SAP. Hay que verificar en SAP si quedó (nunca reenviar a ciegas).",
+      items: empList.filter(tienePendiente).map(folioDe) },
+    { clave: "desc", tono: "red", titulo: "Vaciado mayor que lo recibido",
+      ayuda: "Puede ser doble captura o que llegó más de lo declarado. Hay que revisar el folio.",
+      items: empList.filter((m) => kgRecibidosDe(m) > 0 && kgVaciadosDe(m) > kgRecibidosDe(m)).map(folioDe) },
+    { clave: "apro", tono: "blue", titulo: "Horas cerradas sin aprobar",
+      ayuda: "La encargada tiene que revisar y aprobar el cálculo para que se pueda mandar a SAP.",
+      items: empList.filter((m) => (m.vaciado?.horas || []).some((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio)).map(folioDe) },
+    { clave: "term", tono: "amber", titulo: "Terminados pero falta mandarlos a SAP",
+      ayuda: "Ya no queda nada en piso, pero hay kg vaciados que todavía no se reportaron.",
+      items: empList.filter((m) => kgEnPisoDe(m) === 0 && kgRecibidosDe(m) > 0 && kgPendienteSAP(m) > 0).map(folioDe) },
+  ].filter((a) => a.items.length > 0);
+
+  // Excel con DOS hojas: el resumen por lote y el detalle folio por folio (lo que piden los jefes
+  // para revisar en frío: qué se recibió, qué se vació, qué falta y qué ya está en SAP).
   const exportarEmpExcel = () => {
     const rows = empPorLote.map((l) => ({
       Lote: l.lote, "Recibido (kg)": Math.round(l.rec), "Vaciado (kg)": Math.round(l.vac),
       "Mermado (kg)": Math.round(l.mer), "En piso (kg)": Math.round(l.piso), "Cubetas a SAP": Math.round(l.cub),
       Revisar: l.vac > l.rec ? "vaciado > recibido" : "",
     }));
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Lote: "(sin datos)" }]);
+    const detalle = empList.map((m) => {
+      const rec = kgRecibidosDe(m), vac = kgVaciadosDe(m), pend = kgPendienteSAP(m);
+      return {
+        Folio: folioDe(m), Lote: empLoteDe(m), Empaque: empDestinoDe(m),
+        Producto: (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || m.rancho || "",
+        Fecha: m.fecha || "",
+        "Recibido (kg)": Math.round(rec), "Vaciado (kg)": Math.round(vac),
+        "Mermado (kg)": Math.round(kgMermadosDe(m)), "En piso (kg)": Math.round(kgEnPisoDe(m)),
+        "Cubetas a SAP": Math.round(cubetasEnviadasSAP(m)),
+        "Reportado a SAP (kg)": Math.round(kgEnviadosSAP(m)),
+        "Falta reportar (kg)": Math.round(pend),
+        Horas: (m.vaciado?.horas || []).length,
+        Estado: kgEnPisoDe(m) === 0 && rec > 0 ? "Terminado" : "En piso",
+        Atención: [
+          tienePendiente(m) ? "envío sin confirmar" : "",
+          rec > 0 && vac > rec ? "vaciado > recibido" : "",
+          (m.vaciado?.horas || []).some((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio) ? "horas sin aprobar" : "",
+        ].filter(Boolean).join(" · "),
+      };
+    });
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventario por lote");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Lote: "(sin datos)" }]), "Por lote");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle.length ? detalle : [{ Folio: "(sin datos)" }]), "Por folio");
     XLSX.writeFile(wb, `empaque-inventario-${hoyEmp}.xlsx`);
   };
   const fmtKg = (n) => Math.round(n || 0).toLocaleString();
@@ -357,39 +414,107 @@ export default function Dashboard() {
           <div className="bg-white border border-dashed border-gray-300 rounded-xl p-6 text-center text-xs text-gray-400">Aún no hay fletes recibidos en empaque.</div>
         ) : (
           <>
+            {/* Barra de flujo GLOBAL — el mismo lenguaje que ve la operadora en su módulo,
+                para que jefes y piso hablen de los mismos números. */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+              <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:gap-y-0 items-center">
+                {[
+                  ["Recibido", fmtKg(empRecTot), "kg", `${empList.length} fletes`, "text-gray-800"],
+                  ["Vaciado", fmtKg(empVacTot), "kg", `≈ ${Math.round(empVacTot / 6).toLocaleString()} cub`, "text-blue-700"],
+                  ["En piso (falta)", fmtKg(empEnPiso), "kg", `${empPendientes} folios por terminar`, "text-amber-600"],
+                  ["Reportado a SAP", empCubetasSAP.toLocaleString(), "cub", empPendSAP > 0 ? `faltan ${Math.round(empPendSAP / 6).toLocaleString()} cub` : "todo reportado", "text-green-700"],
+                ].map(([et, val, uni, sub, col], i) => (
+                  <Fragment key={et}>
+                    {i > 0 && <div className="hidden lg:grid place-items-center text-gray-300"><ArrowRight size={16} /></div>}
+                    <div className="px-1 min-w-0">
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold truncate">{et}</div>
+                      <div className={`text-xl font-bold leading-tight ${col}`}>{val} <span className="text-[11px] font-semibold text-gray-400">{uni}</span></div>
+                      <div className="text-[10px] text-gray-500 truncate">{sub}</div>
+                    </div>
+                  </Fragment>
+                ))}
+              </div>
+              {(() => {
+                const base = Math.max(1, empRecTot, empVacTot + empMerma);
+                const an = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
+                return (<>
+                  <div className="h-2.5 rounded-full bg-gray-200 overflow-hidden flex mt-3">
+                    <span className="h-full bg-green-500" style={{ width: an(empEnviadoSAP) }}></span>
+                    <span className="h-full bg-blue-500" style={{ width: an(empPendSAP) }}></span>
+                    <span className="h-full bg-red-300" style={{ width: an(empMerma) }}></span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-[10px] text-gray-500">
+                    <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500"></span> Reportado a SAP {fmtKg(empEnviadoSAP)} kg</span>
+                    <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> Vaciado sin reportar {fmtKg(empPendSAP)} kg</span>
+                    {empMerma > 0 && <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-300"></span> Mermado {fmtKg(empMerma)} kg</span>}
+                    <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300"></span> En piso {fmtKg(empEnPiso)} kg</span>
+                  </div>
+                </>);
+              })()}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
               <div className="bg-white border border-gray-200 rounded-xl p-3">
                 <div className="text-xs text-gray-500 mb-1">Vaciado hoy</div>
                 <div className="text-2xl font-bold text-blue-600">{fmtKg(empVaciadoHoy)} <span className="text-xs font-medium text-gray-400">kg</span></div>
+                <div className="text-[10px] text-gray-400">≈ {Math.round(empVaciadoHoy / 6).toLocaleString()} cubetas</div>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-3">
                 <div className="text-xs text-gray-500 mb-1">Cubetas a SAP</div>
                 <div className="text-2xl font-bold text-green-700">{empCubetasSAP.toLocaleString()}</div>
+                <div className="text-[10px] text-gray-400">{fmtKg(empEnviadoSAP)} kg reportados</div>
+              </div>
+              <div className={`border rounded-xl p-3 ${empPendSAP > 0 ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
+                <div className="text-xs text-gray-500 mb-1">Falta mandar a SAP</div>
+                <div className={`text-2xl font-bold ${empPendSAP > 0 ? "text-amber-700" : "text-green-700"}`}>{Math.round(empPendSAP / 6).toLocaleString()} <span className="text-xs font-medium text-gray-400">cub</span></div>
+                <div className="text-[10px] text-gray-400">{fmtKg(empPendSAP)} kg · {empFoliosPendSAP} folios</div>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-3">
                 <div className="text-xs text-gray-500 mb-1">En piso (inventario)</div>
                 <div className="text-2xl font-bold text-amber-600">{fmtKg(empEnPiso)} <span className="text-xs font-medium text-gray-400">kg</span></div>
+                <div className="text-[10px] text-gray-400">{empPendientes} folios por terminar</div>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl p-3">
                 <div className="text-xs text-gray-500 mb-1">% merma</div>
                 <div className="text-2xl font-bold text-gray-900">{empMermaPct.toFixed(1)}%</div>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-xl p-3">
-                <div className="text-xs text-gray-500 mb-1">Folios por terminar</div>
-                <div className="text-2xl font-bold text-gray-900">{empPendientes}</div>
+                <div className="text-[10px] text-gray-400">{fmtKg(empMerma)} kg no entraron</div>
               </div>
             </div>
 
+            {/* Requiere atención: lo accionable, no solo números bonitos */}
+            {empAlertas.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+                <div className="text-sm font-semibold text-gray-900 mb-2 inline-flex items-center gap-1"><AlertTriangle size={16} className="text-amber-500" /> Requiere atención</div>
+                <div className="grid md:grid-cols-2 gap-2">
+                  {empAlertas.map((a) => {
+                    const tono = a.tono === "red" ? "bg-red-50 border-red-200 text-red-800"
+                      : a.tono === "blue" ? "bg-blue-50 border-blue-200 text-blue-800"
+                        : "bg-amber-50 border-amber-200 text-amber-800";
+                    return (
+                      <div key={a.clave} className={`border rounded-lg px-3 py-2 ${tono}`}>
+                        <div className="text-xs font-semibold">{a.titulo} ({a.items.length})</div>
+                        <div className="text-[11px] opacity-80 mt-0.5">{a.ayuda}</div>
+                        <div className="text-[11px] font-medium mt-1">Folios: {a.items.slice(0, 8).join(", ")}{a.items.length > 8 ? ` y ${a.items.length - 8} más` : ""}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className="text-sm font-semibold text-gray-900 mb-3 inline-flex items-center gap-1"><TrendingUp size={16} /> Vaciado por día <span className="text-xs font-normal text-gray-400">· últimos 7 días · kg</span></div>
+                <div className="text-sm font-semibold text-gray-900 mb-1 inline-flex items-center gap-1"><TrendingUp size={16} /> Vaciado vs reportado a SAP <span className="text-xs font-normal text-gray-400">· últimos 7 días · kg</span></div>
+                <div className="text-[11px] text-gray-400 mb-2">Si la línea verde va por debajo de la azul, ese día se vació más de lo que se reportó a SAP.</div>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={empTendencia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="dia" tick={{ fontSize: 11, fill: "#6b7280" }} />
                     <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
-                    <Tooltip formatter={(v) => [`${v.toLocaleString()} kg`, "Vaciado"]} />
+                    <Tooltip formatter={(v, n) => [`${v.toLocaleString()} kg`, n === "sap" ? "Reportado a SAP" : "Vaciado"]} />
+                    <Legend formatter={(v) => (v === "sap" ? "Reportado a SAP" : "Vaciado")} wrapperStyle={{ fontSize: 11 }} />
                     <Line type="monotone" dataKey="kg" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3, fill: "#2563eb" }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="sap" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3, fill: "#16a34a" }} activeDot={{ r: 5 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
