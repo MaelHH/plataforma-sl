@@ -131,6 +131,14 @@ export default function Modulo9() {
     const cubetas = Math.round(neto / kgc);
     if (!ord) { setSapError("Este movimiento no tiene orden de fabricación en SAP."); return; }
     if (!(cubetas > 0)) { setSapError("La cantidad calculada es 0."); return; }
+    // ÚLTIMO AVISO. Este es el envío MÁS grande (el folio completo de una vez) → se pregunta siempre.
+    const seguro = await dlg.confirm({
+      title: "¿Mandar el folio COMPLETO a SAP?",
+      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${m.remision || m.folio || ""}.\n\nEs el TOTAL del folio de una sola vez. Esto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer.`,
+      confirmText: `Sí, mandar ${cubetas.toLocaleString()} cubetas`,
+      danger: true,
+    });
+    if (!seguro) return;
     setSapCargando(true); setSapError("");
     try {
       // movimientoId → idempotencia server-side: si esto se reintenta, SAP no recibe doble recibo.
@@ -313,6 +321,15 @@ export default function Modulo9() {
     if (!hora.aprobacion) { setHoraSapError("Falta APROBAR el cálculo antes de mandar a SAP."); return; }
     if (!ord) { setHoraSapError("Este folio no tiene orden de fabricación en SAP."); return; }
     if (!(cubetas > 0)) { setHoraSapError("La cantidad calculada es 0."); return; }
+    // ÚLTIMO AVISO. Aunque el cálculo ya esté aprobado, a SAP no se le puede deshacer desde aquí:
+    // se pregunta SIEMPRE antes del POST.
+    const seguro = await dlg.confirm({
+      title: `¿Mandar ${hora.etiqueta} a SAP?`,
+      message: `Se van a mandar ${cubetas.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry} del folio ${m.remision || m.folio || ""}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${hora.aprobacion?.por || "—"}.`,
+      confirmText: `Sí, mandar ${cubetas.toLocaleString()} cubetas`,
+      danger: true,
+    });
+    if (!seguro) return;
     setHoraEnviando(true); setHoraSapError("");
     try {
       // claveEnvio ÚNICA por hora → idempotencia server-side (no doble conteo aunque se reintente).
