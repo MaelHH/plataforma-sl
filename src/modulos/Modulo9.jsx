@@ -7,7 +7,7 @@ import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
   kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
-  kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP,
+  kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
@@ -698,7 +698,11 @@ export default function Modulo9() {
   // Los recibidos que SÍ van a empaque (excluye los de cliente directo).
   const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido" && !m.recepcion?.clienteDirecto);
   // El kg es lo que manda (los bins son guía a grosso modo): "completo" = sin kg en piso.
-  const vaciadoCompleto = (m) => kgRecibidosDe(m) > 0 && kgEnPisoDe(m) === 0;
+  // Un folio se archiva SOLO cuando una persona le da "Terminado". Antes se archivaba solo al
+  // llegar el piso a 0, y eso escondía folios con trabajo pendiente: se podía tener todo vaciado
+  // pero horas SIN APROBAR o SIN MANDAR a SAP, y el folio ya se había salido de la lista de trabajo.
+  // Que los kg den 0 no quiere decir que se haya terminado el trabajo.
+  const vaciadoCompleto = (m) => estaTerminado(m);
   const enPisoLista = recibidos.filter((m) => !vaciadoCompleto(m));   // pestaña "Vaciado a Empaque"
   // Historiales: manifiestos sin kg en piso, separados por a dónde se fue el producto.
   const vaciadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgVaciadosDe(m) > 0);  // entraron a empaque
@@ -1172,9 +1176,9 @@ export default function Modulo9() {
               </span>
               <span className="text-xs text-gray-400 ml-2">
                 {tabRec === "histVaciado"
-                  ? "· manifiestos ya vaciados por completo (en piso = 0)"
+                  ? "· folios cerrados con el botón \"Terminado\" (los kg en 0 NO cierran solos)"
                   : tabRec === "histMermado"
-                    ? "· manifiestos terminados con kg que NO entraron a empaque"
+                    ? "· folios cerrados con kg que NO entraron a empaque"
                     : "· captura los kg recibidos; vacía a empaque o marca merma (no entró)"}
               </span>
             </div>
@@ -1230,8 +1234,11 @@ export default function Modulo9() {
                     const anch = (v) => `${Math.max(0, Math.min(100, (v / base) * 100))}%`;
                     const hayPend = tienePendienteSAP(m);
                     const term = m.vaciado?.terminado;
+                    // Ya no queda nada en piso pero NADIE lo ha cerrado: puede que falte aprobar
+                    // horas o mandarlas a SAP. Se avisa en vez de archivarlo solo.
+                    const listoParaCerrar = !term && recK > 0 && pisoK === 0;
                     const estado = term ? { t: "Terminado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
-                      : completo ? { t: "Completado", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> }
+                      : listoParaCerrar ? { t: pendKg > 0 ? "Falta mandarlo a SAP" : "Listo para cerrar", c: "bg-indigo-50 text-indigo-700 border-indigo-200", i: <Check size={13} /> }
                       : esHist(m) ? { t: "Histórico — no va a SAP", c: "bg-gray-100 text-gray-500 border-gray-300", i: <Ban size={13} /> }
                         : hayPend ? { t: "Pendiente de confirmar", c: "bg-amber-50 text-amber-700 border-amber-300", i: <Clock size={13} /> }
                           : usaHoras(m) ? { t: "Vaciando por hora", c: "bg-blue-50 text-blue-700 border-blue-200", i: <Clock size={13} /> }
@@ -1376,37 +1383,37 @@ export default function Modulo9() {
                           <span className="text-[11px] text-gray-500">
                             {term
                               ? <span className="inline-flex items-center gap-1 flex-wrap"><Check size={14} className="text-green-600" /> <b className="text-green-700">Terminado por {term.por}</b> · {(term.ts || "").slice(0, 10)}{term.pisoAlCerrar > 0 ? <> · quedaron <b className="text-amber-700">{fmt(term.pisoAlCerrar)} kg</b> sin vaciar</> : " · cerró exacto"}</span>
-                              : completo
-                                ? <span className="inline-flex items-center gap-1 font-semibold text-green-700"><Check size={14} /> Terminado — no queda nada en piso</span>
+                              : listoParaCerrar
+                                ? <span className="inline-flex items-center gap-1 flex-wrap text-indigo-700">Ya no queda nada en piso.{pendKg > 0 ? <> Pero <b>faltan {cubetasDe(pendKg).toLocaleString()} cub ({fmt(pendKg)} kg)</b> por mandar a SAP.</> : <> Dale a <b>Terminado</b> para cerrarlo.</>}</span>
                                 : recK > 0
                                   ? <>En piso: rec {fmt(recK)} − vac {fmt(vacK)}{merK ? ` − mer ${fmt(merK)}` : ""} = <b className="text-amber-700">{fmt(pisoK)} kg</b></>
                                   : <>Captura los kg recibidos para empezar.</>}
                           </span>
                           <div className="flex items-center gap-2 flex-wrap">
-                            {term && (
+                            {term ? (<>
                               <button onClick={() => reabrirVaciado(m)} title={puedeAprobar ? "Reabrir el folio (vuelve a 'en piso')" : "Solo la encargada puede reabrir un folio terminado"}
                                 className={`text-xs px-3 py-1.5 border rounded-lg font-medium whitespace-nowrap inline-flex items-center gap-1 ${puedeAprobar ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-gray-200 text-gray-300 cursor-not-allowed"}`}>
                                 <RotateCcw size={14} /> Reabrir
                               </button>
-                            )}
-                            {recK > 0 && !completo && (!puedeEditarVaciado ? (
+                              <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
+                            </>) : recK > 0 && (!puedeEditarVaciado ? (
                               <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
                             ) : (<>
-                              <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
-                              {/* Cierre a mano: cuando ya no va a entrar más de este folio (casi nunca cierra en 0 exacto). */}
-                              {vacK > 0 && (
-                                <button onClick={() => terminarVaciado(m)} title="Dar por terminado el vaciado de este folio: se archiva y sale de 'en piso'"
-                                  className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 whitespace-nowrap"><Check size={14} /> Terminado</button>
+                              {pisoK > 0 && (
+                                <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                               )}
+                              {/* Cierre a mano: los kg en 0 NO cierran el folio; lo cierra una persona. */}
+                              {vacK > 0 && (
+                                <button onClick={() => terminarVaciado(m)} title="Dar por terminado el vaciado de este folio: se archiva y sale de la lista de trabajo"
+                                  className={`inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ${listoParaCerrar && pendKg === 0 ? "bg-green-600 text-white hover:bg-green-700" : "border border-green-400 text-green-700 hover:bg-green-50"}`}><Check size={14} /> Terminado</button>
+                              )}
+                              {/* Sigue disponible aunque el piso esté en 0: puede faltar aprobar horas o mandarlas a SAP. */}
                               {usoTotalSAP(m) ? (
                                 <span title="Ya se mandó el TOTAL a SAP — no se puede vaciar por hora (evita doble conteo)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Clock size={14} /> Vaciar por hora</span>
                               ) : (
-                                <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className="text-xs px-4 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${horasM.length})` : ""}</span></button>
+                                <button onClick={() => abrirPanelHoras(m)} title="Vaciar por hora y mandar a SAP por hora (en cubetas)" className={`text-xs px-4 py-1.5 rounded-lg font-semibold whitespace-nowrap ${pendKg > 0 ? "bg-indigo-600 text-white hover:bg-indigo-700" : "border border-indigo-300 text-indigo-700 hover:bg-indigo-50"}`}><span className="inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora{usaHoras(m) ? ` (${horasM.length})` : ""}</span></button>
                               )}
                             </>))}
-                            {completo && (
-                              <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
-                            )}
                           </div>
                         </div>
                       </div>
