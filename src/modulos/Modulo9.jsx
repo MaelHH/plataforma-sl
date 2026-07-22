@@ -503,8 +503,10 @@ export default function Modulo9() {
           ? { ...a, kg, aprobacion: a.kg === kg ? a.aprobacion : undefined } : a)) } };
       }
       const seq = vac.nextAjusteSeq || 1;   // contador estable; NUNCA se reutiliza
+      // fecha/hora: SIN esto el faltante bajaba el "en piso" pero no aparecía en el "Vaciado del
+      // día" ni en el pivote → los reportes del día no cuadraban con el inventario.
       return { ...x, vaciado: { ...vac, nextAjusteSeq: seq + 1,
-        ajustes: [...list, { id: nuevoId("AJ"), seq, kg, creado: new Date().toISOString() }] } };
+        ajustes: [...list, { id: nuevoId("AJ"), seq, kg, fecha: hoyISO(), hora: ahoraHM(), creado: new Date().toISOString() }] } };
     }));
   };
 
@@ -778,7 +780,11 @@ export default function Modulo9() {
       await dlg.alerta({ title: "Primero verifica el envío", message: "Este folio tiene un envío a SAP PENDIENTE DE CONFIRMAR. Abre el vaciado por hora y dale a \"Verificar en SAP\" antes de darlo por terminado." });
       return;
     }
+    const horasAbiertas = (m.vaciado?.horas || []).filter((h) => h.estado === "abierta").length;
+    const sinAprobar = (m.vaciado?.horas || []).filter((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio).length;
     const avisos = [
+      horasAbiertas > 0 ? `• Hay ${horasAbiertas} hora(s) TODAVÍA ABIERTA(S): ciérralas antes, o lo que se capture después no se podrá mandar.` : "",
+      sinAprobar > 0 ? `• Hay ${sinAprobar} hora(s) cerrada(s) SIN APROBAR: como están, no se pueden mandar a SAP.` : "",
       piso > 0 ? `• Quedan ${fmt(piso)} kg en piso (≈ ${cubetasDe(piso)} cubetas) que YA NO se van a vaciar ni a mandar a SAP.` : "",
       pendSAP > 0 ? `• Hay ${fmt(pendSAP)} kg vaciados (≈ ${cubetasDe(pendSAP)} cubetas) que TODAVÍA NO se han reportado a SAP.` : "",
     ].filter(Boolean).join("\n");
@@ -786,7 +792,7 @@ export default function Modulo9() {
       title: "¿Ya se terminó este folio?",
       message: `¿Segura que ya se terminó de vaciar el folio ${m.remision || m.folio || ""}?\n\n${avisos ? avisos + "\n\n" : ""}Al terminarlo se archiva en el historial y sale de la lista de "en piso". Solo la encargada podrá reabrirlo. Quedará registrado a TU nombre.`,
       confirmText: "Sí, ya se terminó",
-      danger: pendSAP > 0,
+      danger: pendSAP > 0 || horasAbiertas > 0 || sinAprobar > 0,
     });
     if (!ok) return;
     const por = usuarioActual?.full_name || usuarioActual?.email || "—";
@@ -915,9 +921,15 @@ export default function Modulo9() {
   const pesadasDia = (m) => (m.vaciado?.horas || []).flatMap((h) => (h.pesadas || [])
     .filter((p) => p.fecha === diaReporte)
     .map((p) => ({ kg: netoPesada(p), fecha: p.fecha, hora: p.hora })));
-  const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)) + sumaKg(pesadasDia(m)), 0);
+  // Faltantes (ajustes) del día. También son vaciado: bajan el piso, así que TIENEN que contar en
+  // el día, si no el card y el pivote no cuadran con el inventario.
+  const ajustesDia = (m) => (m.vaciado?.ajustes || []).filter((a) => a.fecha === diaReporte)
+    .map((a) => ({ kg: a.kg, fecha: a.fecha, hora: a.hora, esAjuste: true }));
+  const totKgVacDia = recibidos.reduce((a, m) => a + sumaKg(evDia(m)) + sumaKg(pesadasDia(m)) + sumaKg(ajustesDia(m)), 0);
   // Vaciado VIEJO sin fecha: no se puede ubicar en un día → se avisa para que no "desaparezca".
-  const kgVacSinFecha = recibidos.reduce((a, m) => a + sumaKg((m.vaciado?.eventos || []).filter((e) => !e.fecha)), 0);
+  const kgVacSinFecha = recibidos.reduce((a, m) => a
+    + sumaKg((m.vaciado?.eventos || []).filter((e) => !e.fecha))
+    + sumaKg((m.vaciado?.ajustes || []).filter((x) => !x.fecha)), 0);
   const totKgMerDia = recibidos.reduce((a, m) => a + sumaKg(merDia(m)), 0);
 
   // Lote/proveedor de un manifiesto (lo que se vacía y se inventaría).
@@ -928,7 +940,7 @@ export default function Modulo9() {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      [...evDia(m), ...pesadasDia(m)].forEach((e) => {   // vaciado simple + POR HORA del día
+      [...evDia(m), ...pesadasDia(m), ...ajustesDia(m)].forEach((e) => {   // simple + POR HORA + faltantes
         const h = String(e.hora || "").split(":")[0] || "—";
         if (!acc[h]) acc[h] = { kg: 0, lotes: {} };
         const kg = parseFloat(e.kg) || 0;
@@ -1554,7 +1566,12 @@ export default function Modulo9() {
                           <div className="grid grid-cols-2 gap-y-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:gap-y-0 items-center">
                             {paso("Recibido",
                               <span className="inline-flex items-center gap-1">
-                                <input type="number" className="w-24 text-right text-base font-bold px-2 py-0.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400" value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
+                                {/* CONGELADO si ya se mandó algo a SAP: subir el recibido después
+                                    fabricaría un "faltante" mandable ENCIMA de lo ya reportado. */}
+                                <input type="number" disabled={tieneEnvioSAP(m)}
+                                  title={tieneEnvioSAP(m) ? "Este folio ya tiene envíos a SAP: el recibido queda congelado para que nadie pueda inflar el faltante después de haber reportado." : undefined}
+                                  className="w-24 text-right text-base font-bold px-2 py-0.5 border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+                                  value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
                                 <span className="text-[11px] font-semibold text-gray-400">kg</span>
                               </span>,
                               rcp.destareAplicar
@@ -2647,7 +2664,13 @@ export default function Modulo9() {
                           {h.estado === "cerrada" && (
                             <>
                               {h.aprobacion && <span className="text-[11px] text-green-700 inline-flex items-center gap-1 mr-auto"><Check size={13} /> Aprobado por {h.aprobacion.por}</span>}
-                              <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
+                              {/* No se reabre una hora con envío SIN CONFIRMAR: primero hay que
+                                  saber si ese recibo quedó en SAP, si no se corrige a ciegas. */}
+                              {h.sapPendiente ? (
+                                <span title="Esta hora tiene un envío pendiente de confirmar: verifícalo en SAP antes de corregirla" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-medium cursor-not-allowed inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span>
+                              ) : (
+                                <button onClick={() => reabrirHoraFn(m, h.id)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
+                              )}
                               {h.aprobacion ? (
                                 esHist(m) ? (
                                   <span title={`Folio anterior al corte (${goLiveSAP}): ya se registró fuera de la app`} className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-500 bg-gray-50 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Histórico — no se manda a SAP</span>

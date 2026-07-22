@@ -164,7 +164,9 @@ export default function Dashboard() {
   // Los registros VIEJOS sin fecha NO se cuentan como "hoy" (antes inflaban el día, todos los días).
   const kgVacDiaDe = (m, dia) =>
     (m.vaciado?.eventos || []).filter((e) => e.fecha === dia).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0)
-    + (m.vaciado?.horas || []).flatMap((h) => h.pesadas || []).filter((p) => p.fecha === dia).reduce((a, p) => a + netoPesada(p), 0);
+    + (m.vaciado?.horas || []).flatMap((h) => h.pesadas || []).filter((p) => p.fecha === dia).reduce((a, p) => a + netoPesada(p), 0)
+    // Los faltantes también son vaciado (bajan el piso) → cuentan en el día, igual que en el módulo.
+    + (m.vaciado?.ajustes || []).filter((x) => x.fecha === dia).reduce((a, x) => a + (parseFloat(x.kg) || 0), 0);
 
   const empVaciadoHoy = empList.reduce((a, m) => a + kgVacDiaDe(m, hoyEmp), 0);
   const empEnPiso = empList.reduce((a, m) => a + kgEnPisoDe(m), 0);
@@ -198,6 +200,7 @@ export default function Dashboard() {
     empList.forEach((m) => {
       (m.vaciado?.eventos || []).forEach((e) => { if (e.fecha && e.fecha in mapa) mapa[e.fecha] += parseFloat(e.kg) || 0; });
       (m.vaciado?.horas || []).forEach((h) => (h.pesadas || []).forEach((p) => { if (p.fecha && p.fecha in mapa) mapa[p.fecha] += netoPesada(p); }));
+      (m.vaciado?.ajustes || []).forEach((x) => { if (x.fecha && x.fecha in mapa) mapa[x.fecha] += parseFloat(x.kg) || 0; });
     });
     const enSap = Object.fromEntries(dias.map((d) => [d, 0]));
     const sumaEnvio = (env) => { const d = (env?.ts || "").slice(0, 10); if (d in enSap) enSap[d] += env?.netoKg || 0; };
