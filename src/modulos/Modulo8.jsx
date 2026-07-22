@@ -131,6 +131,38 @@ export default function Modulo8() {
   const [cultivos, setCultivos] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
 
+  // ── TABLAS (en SAP: "Departamento", norma de reparto dim 3) ──
+  // SAP NO guarda qué tablas tiene cada rancho: las normas de reparto son catálogos planos
+  // (dim2 = ranchos, dim3 = tablas) y no están relacionadas. Así que la lista es la COMPLETA de
+  // SAP, pero se ordenan arriba las que ya se han usado en ese rancho (aprendido del histórico
+  // de movimientos): sin capturar nada, la lista se va afinando sola con el uso.
+  const tablasUsadas = (rancho) => {
+    if (!rancho) return [];
+    const cuenta = {};
+    (movimientos || []).forEach((m) => {
+      if (m.rancho !== rancho) return;
+      const d = (m.departamento || "").trim();
+      if (d) cuenta[d] = (cuenta[d] || 0) + 1;
+    });
+    return Object.entries(cuenta).sort((a, b) => b[1] - a[1]).map(([d]) => d);
+  };
+  // Opciones del selector: primero las usadas en ese rancho, luego el resto del catálogo de SAP.
+  const opcionesTablas = (rancho, valorActual) => {
+    const etiqueta = (code) => {
+      const d = departamentos.find((x) => x.FactorCode === code);
+      return d?.FactorDescription && d.FactorDescription !== code ? `${code} · ${d.FactorDescription}` : code;
+    };
+    const usadas = tablasUsadas(rancho);
+    const resto = departamentos.map((d) => d.FactorCode).filter((c) => c && !usadas.includes(c));
+    const opts = [
+      ...usadas.map((c) => ({ value: c, label: `★ ${etiqueta(c)}` })),   // ya usadas en este rancho
+      ...resto.map((c) => ({ value: c, label: etiqueta(c) })),
+    ];
+    // Si el movimiento trae una tabla que ya no está en el catálogo, no se pierde.
+    if (valorActual && !opts.some((o) => o.value === valorActual)) opts.unshift({ value: valorActual, label: valorActual });
+    return opts;
+  };
+
   // Traer fleteros de SAP → upsert al catálogo `proveedores` (por cardCode).
   const cargarProveedoresSAP = async () => {
     setFlCargando(true); setFlError(""); setFlInfo("");
@@ -173,7 +205,10 @@ export default function Modulo8() {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
     const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
     setOcCultivo(r?.cultivo || "");
-    setOcDepto(r?.departamento || m.departamento || "");   // default al del proyecto/rancho (editable)
+    // Default del Departamento: PRIMERO la TABLA que eligió quien creó el movimiento (es quien sabe
+    // de dónde salió el flete); si el movimiento no la trae (los viejos), se cae al del catálogo
+    // como antes. Sigue siendo editable aquí por si hay que corregir.
+    setOcDepto(m.departamento || r?.departamento || "");
     setOcFecha(new Date().toISOString().slice(0, 10)); // Fecha necesaria default = hoy (editable)
     setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
     // "Detalles de artículo" default: acarreo + cultivo + lote (editable). Sin factura/pagar.
@@ -286,7 +321,14 @@ export default function Modulo8() {
 
   const resetModos = () => { setLineaNueva(false); setChoferNuevo(false); setTractoNuevo(false); setCajaNueva(false); };
 
-  const abrirNuevo = () => { setForm(formVacio); setEditId(null); resetModos(); setModal(true); };
+  // Catálogo de TABLAS (departamentos de SAP) para el selector del movimiento. Se pide una vez;
+  // si SAP no responde, el resto del formulario sigue funcionando igual.
+  const cargarTablas = () => {
+    if (departamentos.length) return;
+    getDepartamentosSAP().then((d) => setDepartamentos(d.value || [])).catch(() => { /* noop */ });
+  };
+
+  const abrirNuevo = () => { setForm(formVacio); setEditId(null); resetModos(); setModal(true); cargarTablas(); };
 
   // Editar un movimiento existente. Si ya fue recibido/rechazado en M9, avisa que la
   // base de datos ya se afectó y hay que notificar manualmente.
@@ -300,6 +342,7 @@ export default function Modulo8() {
     setEditId(m.id);
     resetModos();
     setModal(true);
+    cargarTablas();
   };
 
   const cerrarModal = () => { setModal(false); setEditId(null); resetModos(); };
@@ -424,6 +467,7 @@ export default function Modulo8() {
         "Días en tránsito": (() => { const d = diasPlazo(m.fecha, fechaReciboEmpaque(m)); return d != null ? d : ""; })(),
         Remisión: m.remision || "",
         Viaje: m.viaje || "", Temporada: ranchoDe(m), Lote: loteDe(m),
+        Tabla: m.departamento || "",   // = "Departamento" en SAP (norma de reparto dim 3)
         "Resp. cosecha": m.responsableCosecha || "", Consignado: m.consignado || "",
         Distribuidor: m.distribuidor || "", Origen: m.origen || "", Destino: m.destino || "",
         Línea: m.linea || "", Chofer: m.chofer || "", "Placa tracto": m.placaTracto || "",
@@ -695,12 +739,25 @@ export default function Modulo8() {
                     <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel}
                       onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
                       placeholder={proyectoSel ? "— Rancho —" : "Elige temporada"} options={(proyectoSel?.ranchos || []).map((r) => ({ value: r.nombre, label: r.nombre }))} />
-                    {form.departamento ? <div className="text-[10px] text-gray-400 mt-0.5">Depto: {form.departamento}</div> : null}
                   </div>
                   <div><label className={LBL}>Responsable cosecha</label>
                     <SearchSelect className={INP} value={form.responsableCosecha} onChange={(v) => setForm((f) => ({ ...f, responsableCosecha: v }))} disabled={!ranchoSelForm}
                       placeholder={ranchoSelForm ? "— Responsable —" : "Elige rancho"} options={(ranchoSelForm?.responsables || []).map((r) => ({ value: r, label: r }))} />
                   </div>
+                </div>
+                {/* TABLAS = el "Departamento" de SAP (norma de reparto dim 3). Se elige AQUÍ, al crear
+                    el movimiento, porque quien captura el flete es quien sabe de qué tabla salió; la
+                    OC la manda otra persona después. NO afecta la orden de fabricación (esa se
+                    resuelve con temporada + rancho y su departamento siempre es Campo). */}
+                <div className="mt-2">
+                  <label className={LBL}>Tablas <span className="text-gray-400 font-normal">· de qué tabla del rancho salió este flete (en SAP es el "Departamento")</span></label>
+                  <SearchSelect className={INP} value={form.departamento} disabled={!form.rancho} searchThreshold={0}
+                    onChange={(v) => setForm((f) => ({ ...f, departamento: v }))}
+                    placeholder={form.rancho ? "— Tabla —" : "Elige rancho"}
+                    options={opcionesTablas(form.rancho, form.departamento)} />
+                  {form.rancho && tablasUsadas(form.rancho).length > 0 && (
+                    <div className="text-[10px] text-gray-400 mt-0.5">Arriba salen las tablas que ya se han usado en {form.rancho}.</div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div><label className={LBL}>Hora inicio cosecha</label><input type="time" className={INP} value={form.horaInicio} onChange={(e) => setForm((f) => ({ ...f, horaInicio: e.target.value }))} /></div>
@@ -1180,13 +1237,14 @@ export default function Modulo8() {
                     })()} />
                 </div>
                 <div>
-                  <label className={LBL}>Departamento {r?.departamento ? <span className="text-gray-400 font-normal">· del proyecto: {r.departamento}</span> : null}</label>
-                  <SearchSelect className={INP} value={ocDepto} onChange={setOcDepto} searchThreshold={0} placeholder="— Departamento (norma de reparto) —"
-                    options={(() => {
-                      const opts = departamentos.map((d) => ({ value: d.FactorCode, label: `${d.FactorCode}${d.FactorDescription ? " · " + d.FactorDescription : ""}` }));
-                      if (ocDepto && !opts.some((o) => o.value === ocDepto)) opts.unshift({ value: ocDepto, label: ocDepto });
-                      return opts;
-                    })()} />
+                  <label className={LBL}>Departamento (tabla) {ocMov?.departamento
+                    ? <span className="text-gray-400 font-normal">· tabla del movimiento: {ocMov.departamento}</span>
+                    : (r?.departamento ? <span className="text-gray-400 font-normal">· del proyecto: {r.departamento}</span> : null)}</label>
+                  <SearchSelect className={INP} value={ocDepto} onChange={setOcDepto} searchThreshold={0} placeholder="— Departamento (tabla) —"
+                    options={opcionesTablas(ocMov?.rancho, ocDepto)} />
+                  {ocMov?.departamento && ocDepto !== ocMov.departamento && (
+                    <div className="text-[10px] text-amber-700 mt-0.5">Ojo: cambiaste la tabla; en el movimiento quedó <b>{ocMov.departamento}</b>.</div>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
