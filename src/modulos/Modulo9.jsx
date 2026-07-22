@@ -6,7 +6,7 @@ import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from 
 import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
-  kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
+  taraPesada, kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
   kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado, kgSobranteCierre,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
@@ -341,7 +341,7 @@ export default function Modulo9() {
 
   // ── Vaciado POR HORA (envío a SAP por hora, anidado al folio) ──
   const [horasMov, setHorasMov] = useState(null);       // folio cuyo panel de horas está abierto
-  const [pesForm, setPesForm] = useState({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1" });  // form de pesada
+  const [pesForm, setPesForm] = useState({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1", soporte: "", tara2: "", num2: "0" });  // form de pesada
   const [horaSap, setHoraSap] = useState(null);         // { m, hora } que se manda a SAP
   const [horaKgCub, setHoraKgCub] = useState(6);
   const [horaEnviando, setHoraEnviando] = useState(false);
@@ -390,7 +390,7 @@ export default function Modulo9() {
   const setHoras = (movId, fn) => setMovimientos((prev) => prev.map((m) => (m.id === movId
     ? { ...m, vaciado: { ...baseVac(m), horas: fn(m.vaciado?.horas || []) } } : m)));
 
-  const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1" }); };
+  const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1", soporte: "", tara2: "", num2: "0" }); };
   const cerrarPanelHoras = () => setHorasMov(null);
 
   const nuevaHora = (m) => {
@@ -405,7 +405,12 @@ export default function Modulo9() {
     if (bruto <= 0) return;
     const num = parseInt(pesForm.num, 10) || 1;
     const tara = parseFloat(pesForm.tara) || 0;
-    const pes = { id: nuevoId("P"), bruto, tipo: pesForm.tipo, tara, num, neto: Math.max(0, bruto - num * tara), fecha: hoyISO(), hora: ahoraHM() };
+    // SOPORTE (parrilla/tarima): opcional. Si no se usa, num2 = 0 y no resta nada.
+    const num2 = parseInt(pesForm.num2, 10) || 0;
+    const tara2 = parseFloat(pesForm.tara2) || 0;
+    const pes = { id: nuevoId("P"), bruto, tipo: pesForm.tipo, tara, num, fecha: hoyISO(), hora: ahoraHM() };
+    if (num2 > 0 && tara2 > 0) { pes.soporte = pesForm.soporte; pes.num2 = num2; pes.tara2 = tara2; }
+    pes.neto = netoPesada(pes);
     setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, pesadas: [...(h.pesadas || []), pes] } : h)));
     setPesForm((f) => ({ ...f, bruto: "" }));   // limpia el bruto, mantiene tipo/tara/num para la siguiente
   };
@@ -2433,7 +2438,8 @@ export default function Modulo9() {
         const cubTot = horas.reduce((a, h) => a + cubetasDe(netoHora(h)), 0);
         const hayAbierta = horas.some((h) => h.estado === "abierta");
         const ord = ordenSAPde(m);
-        const netoPreview = Math.max(0, (parseFloat(pesForm.bruto) || 0) - ((parseInt(pesForm.num, 10) || 1) * (parseFloat(pesForm.tara) || 0)));
+        // Preview con el MISMO helper que guarda la pesada (contenedores + soporte) → no se despegan.
+        const netoPreview = netoPesada({ bruto: pesForm.bruto, num: pesForm.num, tara: pesForm.tara, num2: pesForm.num2, tara2: pesForm.tara2 });
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={cerrarPanelHoras}>
             <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -2517,7 +2523,11 @@ export default function Modulo9() {
                           <div className="space-y-1 mb-2">
                             {h.pesadas.map((p) => (
                               <div key={p.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
-                                <span className="text-gray-600 min-w-0">{p.num}× {CONTS.find((c) => c.id === p.tipo)?.label || p.tipo} · bruto {fmt(p.bruto)} − tara {fmt(p.num * p.tara)} = <b className="text-gray-800">{fmt(netoPesada(p))} kg</b> <span className="text-gray-400">({p.hora})</span></span>
+                                <span className="text-gray-600 min-w-0">
+                                  {p.num}× {CONTS.find((c) => c.id === p.tipo)?.label || p.tipo}
+                                  {p.num2 > 0 ? <> + {p.num2}× {CONTS.find((c) => c.id === p.soporte)?.label || p.soporte || "soporte"}</> : null}
+                                  {" · "}bruto {fmt(p.bruto)} − tara {fmt(taraPesada(p))} = <b className="text-gray-800">{fmt(netoPesada(p))} kg</b> <span className="text-gray-400">({p.hora})</span>
+                                </span>
                                 {h.estado !== "enviada" && <button onClick={() => delPesada(m, h.id, p.id)} title="Quitar pesada" className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>}
                               </div>
                             ))}
@@ -2533,8 +2543,22 @@ export default function Modulo9() {
                             </div>
                             <div className="w-16"><label className="text-[10px] text-gray-500 block">Tara c/u</label><input type="number" value={pesForm.tara} onChange={(e) => setPesForm((f) => ({ ...f, tara: e.target.value }))} className="w-full text-sm px-1 py-1 border border-gray-200 rounded" /></div>
                             <div className="w-12"><label className="text-[10px] text-gray-500 block">Nº</label><input type="number" min="1" value={pesForm.num} onChange={(e) => setPesForm((f) => ({ ...f, num: e.target.value }))} className="w-full text-sm px-1 py-1 border border-gray-200 rounded" /></div>
+                            {/* SOPORTE: cuando las cajas se pesan ARRIBA de una parrilla/tarima, hay
+                                que restar también su peso. Opcional: en 0 no resta nada. */}
+                            <div className="w-24"><label className="text-[10px] text-gray-500 block">Sobre (soporte)</label>
+                              <select value={pesForm.soporte} onChange={(e) => { const c = CONTS.find((x) => x.id === e.target.value); setPesForm((f) => ({ ...f, soporte: e.target.value, tara2: c ? c.tara : f.tara2, num2: (parseInt(f.num2, 10) || 0) === 0 ? "1" : f.num2 })); }} className="w-full text-sm px-1 py-1 border border-gray-200 rounded bg-white">
+                                <option value="">— sin soporte —</option>
+                                {CONTS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                              </select>
+                            </div>
+                            <div className="w-16"><label className="text-[10px] text-gray-500 block">Tara c/u</label><input type="number" value={pesForm.tara2} onChange={(e) => setPesForm((f) => ({ ...f, tara2: e.target.value }))} disabled={!pesForm.soporte} className="w-full text-sm px-1 py-1 border border-gray-200 rounded disabled:bg-gray-50" /></div>
+                            <div className="w-12"><label className="text-[10px] text-gray-500 block">Nº</label><input type="number" min="0" value={pesForm.num2} onChange={(e) => setPesForm((f) => ({ ...f, num2: e.target.value }))} disabled={!pesForm.soporte} className="w-full text-sm px-1 py-1 border border-gray-200 rounded disabled:bg-gray-50" /></div>
                             <div className="text-xs text-gray-600 pb-1.5">= <b className="text-green-700">{fmt(netoPreview)} kg</b></div>
                             <button onClick={() => addPesada(m, h.id)} disabled={!(parseFloat(pesForm.bruto) > 0)} className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Agregar</button>
+                            <div className="w-full text-[10px] text-gray-500">
+                              neto = bruto − ({parseInt(pesForm.num, 10) || 1} × {parseFloat(pesForm.tara) || 0} kg)
+                              {(parseInt(pesForm.num2, 10) || 0) > 0 && <> − ({parseInt(pesForm.num2, 10)} × {parseFloat(pesForm.tara2) || 0} kg de {CONTS.find((c) => c.id === pesForm.soporte)?.label || "soporte"})</>}
+                            </div>
                           </div>
                         )}
                         <div className="flex items-center gap-2 flex-wrap mt-2 justify-end">

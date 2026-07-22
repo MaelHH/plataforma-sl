@@ -32,8 +32,15 @@ export const kgRecibidosDe = (m) => {
   if (m.recepcion?.destareAplicar) return destareDe(m).neto;
   return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
 };
-// ── Vaciado POR HORA ── Cada pesada se pesa CON el contenedor: neto = bruto − (Nº contenedores × tara).
-export const netoPesada = (p) => Math.max(0, (parseFloat(p.bruto) || 0) - ((parseFloat(p.num) || 1) * (parseFloat(p.tara) || 0)));
+// ── Vaciado POR HORA ──
+// Cada pesada se pesa CON su empaque, y muchas veces hay DOS cosas que descontar: los
+// contenedores (ej. 56 cajas × 0.86 kg) y el SOPORTE sobre el que van (ej. 1 parrilla × 14.8 kg).
+//   neto = bruto − (Nº contenedores × tara) − (Nº soportes × tara del soporte)
+// El soporte es OPCIONAL: las pesadas viejas no traen `num2/tara2` y dan 0, así que siguen
+// calculando exactamente igual que antes.
+export const taraSoportePesada = (p) => (parseFloat(p?.num2) || 0) * (parseFloat(p?.tara2) || 0);
+export const taraPesada = (p) => ((parseFloat(p?.num) || 1) * (parseFloat(p?.tara) || 0)) + taraSoportePesada(p);
+export const netoPesada = (p) => Math.max(0, (parseFloat(p?.bruto) || 0) - taraPesada(p));
 export const netoHora = (h) => (h?.pesadas || []).reduce((a, p) => a + netoPesada(p), 0);
 export const kgHorasDe = (m) => (m.vaciado?.horas || []).reduce((a, h) => a + netoHora(h), 0);
 export const cubetasDe = (kg, kgPorCubeta = 6) => Math.round((kg || 0) / (kgPorCubeta || 6));
