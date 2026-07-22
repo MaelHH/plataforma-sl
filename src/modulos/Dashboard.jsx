@@ -219,6 +219,12 @@ export default function Dashboard() {
 
   const tienePendiente = tienePendienteSAP;   // helper compartido con el módulo
   const folioDe = (m) => m.remision || m.folio || "—";
+  // Descuadres ya revisados por alguien en Empaque: dejan de alertar aquí también (mismo criterio
+  // que el módulo — si la diferencia cambia, la marca ya no aplica y vuelve a salir).
+  const yaRevisado = (m, tipo, dif) => {
+    const r = m?.vaciado?.revisado;
+    return !!r && r.tipo === tipo && Math.abs((parseFloat(r.dif) || 0) - dif) <= 1;
+  };
 
   // Merma POR MOTIVO: saber cuánto se descarta no sirve si no se sabe POR QUÉ (calidad vs
   // inexistencia se atacan de formas distintas).
@@ -237,10 +243,12 @@ export default function Dashboard() {
       items: empList.filter(tienePendiente).map(folioDe) },
     { clave: "desc", tono: "red", titulo: "Salió MÁS de lo recibido",
       ayuda: "Doble captura, recibido capturado de menos, o carga con peso inflado (piedras en las cajas).",
-      items: empList.filter((m) => kgRecibidosDe(m) > 0 && kgVaciadosDe(m) > kgRecibidosDe(m)).map(folioDe) },
+      items: empList.filter((m) => kgRecibidosDe(m) > 0 && kgVaciadosDe(m) > kgRecibidosDe(m)
+        && !yaRevisado(m, "sobra", kgVaciadosDe(m) - kgRecibidosDe(m))).map(folioDe) },
     { clave: "falto", tono: "red", titulo: "Llegó MENOS de lo recibido",
       ayuda: "Folios ya cerrados que no alcanzaron el peso del manifiesto (descontando merma): nos mandaron de menos.",
-      items: empList.filter((m) => estaTerminado(m) && kgSobranteCierre(m) > 0)
+      items: empList.filter((m) => estaTerminado(m) && kgSobranteCierre(m) > 0
+        && !yaRevisado(m, "falta", kgSobranteCierre(m)))
         .sort((a, b) => kgSobranteCierre(b) - kgSobranteCierre(a))
         .map((m) => `${folioDe(m)} (−${Math.round(kgSobranteCierre(m)).toLocaleString()} kg)`) },
     { clave: "apro", tono: "blue", titulo: "Horas cerradas sin aprobar",

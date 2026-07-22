@@ -99,6 +99,7 @@ export default function Modulo9() {
   const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [loteAbierto, setLoteAbierto] = useState(null);   // lote con el detalle de "revisar" desplegado
+  const [vistosAbierto, setVistosAbierto] = useState(null); // lote con los "ya revisados" desplegados
   const [q, setQ] = useState("");
   const [fDestino, setFDestino] = useState(""); // filtro dropdown por Destino (aplica a la pestaña activa)
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
@@ -733,6 +734,31 @@ export default function Modulo9() {
   };
 
   // Devolver un manifiesto a "Vaciado a Empaque" (deshace vaciados y mermas; el piso vuelve completo).
+  // ── DAR POR REVISADO un descuadre ──
+  // Los folios descuadrados se acumulaban para siempre en "revisar". Aquí una persona dice
+  // "ya lo vi" y deja de estorbar, PERO se guarda el tamaño de la diferencia: si el número
+  // cambia después (siguen capturando o corrigen el recibido), el folio vuelve a salir solo.
+  const marcarRevisado = async (f) => {
+    const que = f.tipo === "falta"
+      ? `salió ${fmt(f.dif)} kg MENOS de lo recibido`
+      : `salió ${fmt(f.dif)} kg MÁS de lo recibido`;
+    const ok = await dlg.confirm({
+      title: "Dar por revisado",
+      message: `Folio ${f.folio}: ${que}.\n\n¿Ya lo revisaste? Dejará de aparecer en "revisar" y quedará registrado a TU nombre.\n\nSi la diferencia cambia (siguen capturando o se corrige el recibido), el folio volverá a salir solo.`,
+      confirmText: "Sí, ya lo revisé",
+    });
+    if (!ok) return;
+    const por = usuarioActual?.full_name || usuarioActual?.email || "—";
+    setMovimientos((prev) => prev.map((x) => (x.id === f.id
+      ? { ...x, vaciado: { ...baseVac(x), revisado: { por, porId: usuarioActual?.id ?? null, ts: new Date().toISOString(), tipo: f.tipo, dif: f.dif } } }
+      : x)));
+    registrarEvento?.({ evento: "descuadre_revisado", modulo: "M9", actor: por, destino: f.folio, ref: f.id,
+      detalle: `Descuadre revisado por ${por}: ${que} (recibido ${fmt(f.rec)} · vaciado ${fmt(f.vac)}).`,
+      meta: { tipo: f.tipo, dif: f.dif } });
+  };
+  const quitarRevisado = (f) => setMovimientos((prev) => prev.map((x) => (x.id === f.id
+    ? { ...x, vaciado: { ...baseVac(x), revisado: undefined } } : x)));
+
   // ── TERMINAR el vaciado de un folio (cierre a mano) ──
   // Casi nunca cierra en 0.00: quedan kg de diferencia de báscula que nadie va a vaciar y el folio
   // se quedaría "en piso" para siempre. Aquí una persona declara que ya se acabó. Se guarda quién y
@@ -911,7 +937,7 @@ export default function Modulo9() {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0, malos: [], faltos: [] };
+      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0, malos: [], faltos: [], vistos: [] };
       const rec = kgRecibidosDe(m);
       const vac = kgVaciadosDe(m);
       const mer = kgMermadosDe(m);
@@ -920,16 +946,27 @@ export default function Modulo9() {
       acc[lote].mer += mer;
       acc[lote].piso += kgEnPisoDe(m);
       const ref = { id: m.id, folio: m.folio || m.remision || m.id, rec, vac, mer };
+      // ¿Ya lo revisó alguien? Se guarda el tipo y el TAMAÑO de la diferencia al momento de
+      // revisarla: si después el número cambia (siguen capturando), el folio VUELVE a salir.
+      const rev = m.vaciado?.revisado;
+      const yaVisto = (tipo, dif) => !!rev && rev.tipo === tipo && Math.abs((parseFloat(rev.dif) || 0) - dif) <= 1;
       // DOS descuadres que hay que vigilar, y por razones distintas:
       // 1) SOBRA — salió MÁS de lo que se recibió. Puede ser doble captura, o que la carga venga
       //    con peso inflado (les meten piedras a las cajas para que pesen más).
-      if (vac > rec) acc[lote].malos.push({ ...ref, dif: vac - rec });
+      if (vac > rec) {
+        const d = vac - rec;
+        const fila = { ...ref, dif: d, tipo: "sobra", rev };
+        (yaVisto("sobra", d) ? acc[lote].vistos : acc[lote].malos).push(fila);
+      }
       // 2) FALTA — el folio ya se dio por TERMINADO y aun así salió MENOS de lo que se recibió
       //    (descontando lo mermado): nos mandaron de menos. Solo cuenta al cerrar, porque mientras
       //    se está vaciando es normal que falte. `pisoAlCerrar` es justo ese hueco.
       if (estaTerminado(m)) {
         const falta = kgSobranteCierre(m);
-        if (falta > toleranciaKg) acc[lote].faltos.push({ ...ref, dif: falta, pct: rec > 0 ? (falta / rec) * 100 : 0 });
+        if (falta > toleranciaKg) {
+          const fila = { ...ref, dif: falta, pct: rec > 0 ? (falta / rec) * 100 : 0, tipo: "falta", rev };
+          (yaVisto("falta", falta) ? acc[lote].vistos : acc[lote].faltos).push(fila);
+        }
       }
     });
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
@@ -1149,8 +1186,9 @@ export default function Modulo9() {
                     {porLote.map(([lote, v]) => {
                       const disp = v.vac + v.mer;
                       const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
-                      const nMal = v.malos.length, nFal = v.faltos.length;
-                      const malo = nMal > 0 || nFal > 0;
+                      const nMal = v.malos.length, nFal = v.faltos.length, nVis = v.vistos.length;
+                      const pend = nMal + nFal;                 // descuadres que NADIE ha revisado
+                      const malo = pend > 0 || nVis > 0;        // hay algo que mostrar en el detalle
                       const abierto = loteAbierto === lote;
                       return (
                         <Fragment key={lote}>
@@ -1158,9 +1196,15 @@ export default function Modulo9() {
                             <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}
                               {malo && (
                                 <button onClick={() => setLoteAbierto(abierto ? null : lote)}
-                                  title="Ver los folios descuadrados: salió de más (peso inflado / doble captura) o salió de menos al cerrar (llegó de menos)"
-                                  className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle hover:bg-amber-100">
-                                  <AlertTriangle size={10} /> revisar ({nMal + nFal}) {abierto ? "▾" : "▸"}
+                                  title={pend > 0
+                                    ? "Ver los folios descuadrados: salió de más (peso inflado / doble captura) o salió de menos al cerrar (llegó de menos)"
+                                    : "Todos los descuadres de este lote ya se revisaron; aquí puedes consultarlos"}
+                                  className={`ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full align-middle border ${pend > 0
+                                    ? "text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                                    : "text-gray-500 bg-gray-50 border-gray-200 hover:bg-gray-100"}`}>
+                                  {pend > 0
+                                    ? <><AlertTriangle size={10} /> revisar ({pend})</>
+                                    : <><Check size={10} className="text-green-600" /> revisados ({nVis})</>} {abierto ? "▾" : "▸"}
                                 </button>
                               )}
                             </td>
@@ -1199,8 +1243,9 @@ export default function Modulo9() {
                                       {[...v.malos].sort((a, b) => b.dif - a.dif).map((f) => (
                                         <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 flex-wrap">
                                           <span className="font-semibold text-gray-800">Folio {f.folio}</span>
-                                          <span className="text-gray-600">
+                                          <span className="text-gray-600 flex items-center gap-2 flex-wrap">
                                             recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b> · <b className="text-amber-700">sobra {fmt(f.dif)} kg</b>
+                                            <button onClick={() => marcarRevisado(f)} title="Ya lo revisé: quitarlo de esta lista" className="inline-flex items-center gap-1 px-2 py-0.5 border border-gray-300 text-gray-600 rounded-full hover:bg-gray-50"><Check size={11} /> ya lo revisé</button>
                                           </span>
                                         </div>
                                       ))}
@@ -1220,14 +1265,38 @@ export default function Modulo9() {
                                       {[...v.faltos].sort((a, b) => b.dif - a.dif).map((f) => (
                                         <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-red-200 rounded px-2 py-1 flex-wrap">
                                           <span className="font-semibold text-gray-800">Folio {f.folio}</span>
-                                          <span className="text-gray-600">
+                                          <span className="text-gray-600 flex items-center gap-2 flex-wrap">
                                             recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b>
                                             {f.mer > 0 ? <> · mermado <b className="text-red-600">{fmt(f.mer)}</b></> : null}
                                             {" · "}<b className="text-red-700">faltaron {fmt(f.dif)} kg ({f.pct.toFixed(1)}%)</b>
+                                            <button onClick={() => marcarRevisado(f)} title="Ya lo revisé: quitarlo de esta lista" className="inline-flex items-center gap-1 px-2 py-0.5 border border-gray-300 text-gray-600 rounded-full hover:bg-gray-50"><Check size={11} /> ya lo revisé</button>
                                           </span>
                                         </div>
                                       ))}
                                     </div>
+                                  </div>
+                                )}
+                                {/* Los que ya se revisaron: no estorban, pero siguen consultables. */}
+                                {v.vistos.length > 0 && (
+                                  <div>
+                                    <button onClick={() => setVistosAbierto(vistosAbierto === lote ? null : lote)}
+                                      className="text-[11px] text-gray-500 hover:text-gray-700 inline-flex items-center gap-1">
+                                      <Check size={12} className="text-green-600" /> Ya revisados ({v.vistos.length}) {vistosAbierto === lote ? "▾" : "▸"}
+                                    </button>
+                                    {(vistosAbierto === lote || pend === 0) && (
+                                      <div className="space-y-1 mt-1">
+                                        {[...v.vistos].sort((a, b) => b.dif - a.dif).map((f) => (
+                                          <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white/70 border border-gray-200 rounded px-2 py-1 flex-wrap text-gray-500">
+                                            <span className="font-semibold text-gray-700">Folio {f.folio}</span>
+                                            <span className="flex items-center gap-2 flex-wrap">
+                                              {f.tipo === "falta" ? "faltaron" : "sobraron"} <b>{fmt(f.dif)} kg</b>
+                                              · revisado por <b>{f.rev?.por || "—"}</b> el {(f.rev?.ts || "").slice(0, 10)}
+                                              <button onClick={() => quitarRevisado(f)} title="Volver a marcarlo para revisar" className="inline-flex items-center gap-1 px-2 py-0.5 border border-gray-300 rounded-full hover:bg-gray-50"><RotateCcw size={11} /> volver a revisar</button>
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </td>
