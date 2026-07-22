@@ -666,6 +666,7 @@ export default function Modulo8() {
                       </td>
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-gray-700">{ranchoDe(m) || "—"}{loteDe(m) ? ` · ${loteDe(m)}` : ""}</div>
+                        {m.departamento ? <div className="text-[10px] text-gray-400">tabla: {m.departamento}</div> : null}
                         <div className="text-[11px] text-gray-500">{m.origen || "—"} → {m.destino || "—"}</div>
                       </td>
                       <td className="px-3 py-2.5"><div className="font-medium text-gray-700">{m.linea || "—"}</div><div className="text-gray-400">{m.chofer || "—"}</div></td>

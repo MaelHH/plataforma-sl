@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
-import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search, ArrowRight } from "lucide-react";
+import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search, ArrowRight, Sprout } from "lucide-react";
 import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
@@ -175,10 +175,21 @@ export default function Modulo9() {
   // Se pinta siempre, no solo al mandar, para que nadie tenga que abrir el modal para saberlo.
   const lineaOrdenSAP = (m) => {
     const o = ordenSAPde(m);
+    // TABLA (en SAP: "Departamento") que eligieron al crear el movimiento. Es informativa aquí:
+    // NO cambia la orden de fabricación (esa sale de temporada + rancho); va en la OC del flete.
+    const chipTabla = m.departamento ? (
+      <span title="Tabla del rancho de la que salió el flete (en SAP va como Departamento en la orden de compra)"
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600">
+        <Sprout size={11} /> tabla {m.departamento}
+      </span>
+    ) : null;
     if (!o) {
       return (
-        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
-          <AlertTriangle size={11} /> Sin orden de fabricación en SAP (rancho «{m.rancho || "—"}» no está en el catálogo)
+        <span className="inline-flex items-center gap-1.5 flex-wrap text-[11px]">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+            <AlertTriangle size={11} /> Sin orden de fabricación en SAP (rancho «{m.rancho || "—"}» no está en el catálogo)
+          </span>
+          {chipTabla}
         </span>
       );
     }
@@ -187,6 +198,7 @@ export default function Modulo9() {
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold">
           <Send size={11} /> Orden SAP #{o.docNum ?? o.absoluteEntry}
         </span>
+        {chipTabla}
         <span className="text-gray-500">{o.temporada || "—"} · {o.rancho || "—"}{o.item ? ` · ${o.item}` : ""}</span>
         {o.plannedQty ? <span className="text-gray-400">· lleva {fmt(o.completedQty)} de {fmt(o.plannedQty)} cub</span> : null}
         {o.totalOrdenes > 1 && (
@@ -930,7 +942,7 @@ export default function Modulo9() {
         const qciProm = nMu ? m.muestreos.reduce((a, mu) => a + calcQCI(mu), 0) / nMu : null;
         const base = {
           Folio: m.folio || "", Fecha: m.fecha || "", Remisión: m.remision || "",
-          Rancho: m.rancho || "", Lote: m.lote || "",
+          Rancho: m.rancho || "", Lote: m.lote || "", Tabla: m.departamento || "",
           Origen: m.origen || "", Destino: m.destino || "",
           Línea: m.linea || "", Chofer: m.chofer || "",
           Producto: prodDe(m),
@@ -962,7 +974,7 @@ export default function Modulo9() {
         return {
           "Folio/Remisión": m.remision || m.folio || "",
           Folio: m.folio || "", Remisión: m.remision || "",
-          Lote: loteDe(m), Rancho: m.rancho || "",
+          Lote: loteDe(m), Rancho: m.rancho || "", Tabla: m.departamento || "",
           Origen: m.origen || "", Destino: m.destino || "",
           Producto: prodDe(m),
           "Recibido (kg)": Math.round(kgRecibidosDe(m)),

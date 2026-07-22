@@ -257,7 +257,7 @@ export default function Dashboard() {
     const detalle = empList.map((m) => {
       const rec = kgRecibidosDe(m), vac = kgVaciadosDe(m), pend = kgPendienteSAP(m);
       return {
-        Folio: folioDe(m), Lote: empLoteDe(m), Empaque: empDestinoDe(m),
+        Folio: folioDe(m), Lote: empLoteDe(m), Tabla: m.departamento || "", Empaque: empDestinoDe(m),
         Producto: (m.cargaItems || []).map((it) => it.prod).filter(Boolean).join(", ") || m.rancho || "",
         Fecha: m.fecha || "",
         "Recibido (kg)": Math.round(rec), "Vaciado (kg)": Math.round(vac),
