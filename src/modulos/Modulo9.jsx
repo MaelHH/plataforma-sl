@@ -979,7 +979,10 @@ export default function Modulo9() {
       acc[lote].vac += vac;
       acc[lote].mer += mer;
       acc[lote].piso += kgEnPisoDe(m);
-      const ref = { id: m.id, folio: m.folio || m.remision || m.id, rec, vac, mer };
+      // Se arrastra QUIÉN trajo la carga: los descuadres sueltos no dicen nada, pero repetidos con
+      // el mismo chofer/línea/tabla sí — que es justo para lo que sirve el historial de avisos.
+      const ref = { id: m.id, folio: m.folio || m.remision || m.id, rec, vac, mer,
+        fecha: m.fecha || "", chofer: m.chofer || "", linea: m.linea || "", tabla: m.departamento || "" };
       // ¿Ya lo revisó alguien? Se guarda el tipo y el TAMAÑO de la diferencia al momento de
       // revisarla: si después el número cambia (siguen capturando), el folio VUELVE a salir.
       const rev = m.vaciado?.revisado;
@@ -1020,7 +1023,8 @@ export default function Modulo9() {
     .filter((a) => avTipo === "todos" || a.tipo === avTipo);
   const exportarAvisos = () => {
     const rows = avisosFiltrados.map((a) => ({
-      Folio: a.folio, Lote: a.lote,
+      Folio: a.folio, Fecha: a.fecha, Lote: a.lote, Tabla: a.tabla,
+      Línea: a.linea, Chofer: a.chofer,
       Aviso: a.tipo === "falta" ? "Llegó de MENOS" : "Salió de MÁS",
       "Recibido (kg)": Math.round(a.rec), "Vaciado (kg)": Math.round(a.vac), "Mermado (kg)": Math.round(a.mer),
       "Diferencia (kg)": Math.round(a.dif), "% del recibido": a.rec > 0 ? Number(((a.dif / a.rec) * 100).toFixed(2)) : "",
@@ -2003,6 +2007,13 @@ export default function Modulo9() {
                   <div className="text-[11px] text-gray-600 mt-1">
                     recibido <b className="text-gray-800">{fmt(a.rec)}</b> · vaciado <b className="text-green-700">{fmt(a.vac)}</b>
                     {a.mer > 0 ? <> · mermado <b className="text-red-600">{fmt(a.mer)}</b></> : null}
+                  </div>
+                  {/* De dónde vino: para cachar patrones (siempre el mismo chofer, la misma tabla…) */}
+                  <div className="text-[10px] text-gray-500 mt-0.5">
+                    {a.fecha || "sin fecha"}
+                    {a.linea ? <> · {a.linea}</> : null}
+                    {a.chofer ? <> · <b className="text-gray-700">{a.chofer}</b></> : null}
+                    {a.tabla ? <> · tabla {a.tabla}</> : null}
                   </div>
                   <div className="flex items-center justify-between gap-2 flex-wrap mt-1.5">
                     {a.estado === "revisado" ? (
