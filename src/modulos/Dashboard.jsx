@@ -235,9 +235,14 @@ export default function Dashboard() {
     { clave: "pend", tono: "amber", titulo: "Envíos sin confirmar",
       ayuda: "Se cortó la conexión al mandar a SAP. Hay que verificar en SAP si quedó (nunca reenviar a ciegas).",
       items: empList.filter(tienePendiente).map(folioDe) },
-    { clave: "desc", tono: "red", titulo: "Vaciado mayor que lo recibido",
-      ayuda: "Puede ser doble captura o que llegó más de lo declarado. Hay que revisar el folio.",
+    { clave: "desc", tono: "red", titulo: "Salió MÁS de lo recibido",
+      ayuda: "Doble captura, recibido capturado de menos, o carga con peso inflado (piedras en las cajas).",
       items: empList.filter((m) => kgRecibidosDe(m) > 0 && kgVaciadosDe(m) > kgRecibidosDe(m)).map(folioDe) },
+    { clave: "falto", tono: "red", titulo: "Llegó MENOS de lo recibido",
+      ayuda: "Folios ya cerrados que no alcanzaron el peso del manifiesto (descontando merma): nos mandaron de menos.",
+      items: empList.filter((m) => estaTerminado(m) && kgSobranteCierre(m) > 0)
+        .sort((a, b) => kgSobranteCierre(b) - kgSobranteCierre(a))
+        .map((m) => `${folioDe(m)} (−${Math.round(kgSobranteCierre(m)).toLocaleString()} kg)`) },
     { clave: "apro", tono: "blue", titulo: "Horas cerradas sin aprobar",
       ayuda: "La encargada tiene que revisar y aprobar el cálculo para que se pueda mandar a SAP.",
       items: empList.filter((m) => (m.vaciado?.horas || []).some((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio)).map(folioDe) },
@@ -271,7 +276,8 @@ export default function Dashboard() {
         "Terminado por": m.vaciado?.terminado?.por || "",
         Atención: [
           tienePendiente(m) ? "envío sin confirmar" : "",
-          rec > 0 && vac > rec ? "vaciado > recibido" : "",
+          rec > 0 && vac > rec ? "salio de mas (" + Math.round(vac - rec) + " kg)" : "",
+          estaTerminado(m) && kgSobranteCierre(m) > 0 ? "llego de menos (" + Math.round(kgSobranteCierre(m)) + " kg)" : "",
           (m.vaciado?.horas || []).some((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio) ? "horas sin aprobar" : "",
         ].filter(Boolean).join(" · "),
       };

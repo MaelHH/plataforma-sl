@@ -7,7 +7,7 @@ import { useAuth } from "../store/auth";
 import {
   CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
   kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
-  kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado,
+  kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado, kgSobranteCierre,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
 import InfoTip from "../components/InfoTip";
@@ -80,6 +80,10 @@ export default function Modulo9() {
   const dlg = useDialog();
   // LÍNEA DE CORTE SAP: folios anteriores a esta fecha son HISTÓRICO → la app no los manda a SAP.
   const goLiveSAP = configEmpaque?.goLiveSAP || "";
+  // Cuánto se le tolera a un folio CERRADO haber salido de menos antes de marcarlo para revisar.
+  // Default 0 = se marca cualquier faltante (el usuario quiere que cuadre exacto para detectar
+  // cargas que llegan de menos); se puede subir si la báscula da diferencias chicas.
+  const toleranciaKg = parseFloat(configEmpaque?.toleranciaKg) || 0;
   const esHist = (m) => esHistoricoSAP(m, goLiveSAP);
 
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
@@ -907,15 +911,26 @@ export default function Modulo9() {
     const acc = {};
     recibidos.forEach((m) => {
       const lote = loteDe(m);
-      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0, malos: [] };
+      if (!acc[lote]) acc[lote] = { rec: 0, vac: 0, mer: 0, piso: 0, malos: [], faltos: [] };
       const rec = kgRecibidosDe(m);
       const vac = kgVaciadosDe(m);
+      const mer = kgMermadosDe(m);
       acc[lote].rec += rec;
       acc[lote].vac += vac;
-      acc[lote].mer += kgMermadosDe(m);
+      acc[lote].mer += mer;
       acc[lote].piso += kgEnPisoDe(m);
-      // Folios donde se vació MÁS de lo recibido → son los que causan el "revisar" del lote.
-      if (vac > rec) acc[lote].malos.push({ id: m.id, folio: m.folio || m.remision || m.id, rec, vac, dif: vac - rec });
+      const ref = { id: m.id, folio: m.folio || m.remision || m.id, rec, vac, mer };
+      // DOS descuadres que hay que vigilar, y por razones distintas:
+      // 1) SOBRA — salió MÁS de lo que se recibió. Puede ser doble captura, o que la carga venga
+      //    con peso inflado (les meten piedras a las cajas para que pesen más).
+      if (vac > rec) acc[lote].malos.push({ ...ref, dif: vac - rec });
+      // 2) FALTA — el folio ya se dio por TERMINADO y aun así salió MENOS de lo que se recibió
+      //    (descontando lo mermado): nos mandaron de menos. Solo cuenta al cerrar, porque mientras
+      //    se está vaciando es normal que falte. `pisoAlCerrar` es justo ese hueco.
+      if (estaTerminado(m)) {
+        const falta = kgSobranteCierre(m);
+        if (falta > toleranciaKg) acc[lote].faltos.push({ ...ref, dif: falta, pct: rec > 0 ? (falta / rec) * 100 : 0 });
+      }
     });
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
   })();
@@ -1068,6 +1083,16 @@ export default function Modulo9() {
           ) : (
             <span className="text-gray-500 flex-1 min-w-[240px]">Sin corte: <b>todos</b> los folios pueden mandarse a SAP. Pon aquí la fecha desde la que la app empieza a registrar en SAP.</span>
           )}
+          <span className="w-full border-t border-indigo-100 pt-1.5 flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-indigo-800 whitespace-nowrap">Tolerancia al cerrar:</span>
+            <input type="number" min="0" step="1" value={configEmpaque?.toleranciaKg ?? ""}
+              onChange={(e) => setConfigEmpaque({ ...(configEmpaque || {}), toleranciaKg: e.target.value })}
+              placeholder="0" className="w-20 text-xs px-2 py-1 border border-indigo-200 rounded-md bg-white text-right focus:outline-none focus:border-indigo-400" />
+            <span className="text-indigo-700">kg</span>
+            <span className="text-gray-500 flex-1 min-w-[240px]">
+              Al dar <b>Terminado</b>, si salió <b>menos</b> de lo recibido por más de estos kg, el folio se marca para <b>revisar</b> (llegó de menos). Con <b>0</b> se marca cualquier faltante.
+            </span>
+          </span>
         </div>
       )}
 
@@ -1124,7 +1149,8 @@ export default function Modulo9() {
                     {porLote.map(([lote, v]) => {
                       const disp = v.vac + v.mer;
                       const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
-                      const malo = v.vac > v.rec;
+                      const nMal = v.malos.length, nFal = v.faltos.length;
+                      const malo = nMal > 0 || nFal > 0;
                       const abierto = loteAbierto === lote;
                       return (
                         <Fragment key={lote}>
@@ -1132,9 +1158,9 @@ export default function Modulo9() {
                             <td className="px-3 py-1.5 font-semibold text-gray-700">{lote}
                               {malo && (
                                 <button onClick={() => setLoteAbierto(abierto ? null : lote)}
-                                  title="Ver qué folios tienen vaciado mayor que recibido"
+                                  title="Ver los folios descuadrados: salió de más (peso inflado / doble captura) o salió de menos al cerrar (llegó de menos)"
                                   className="ml-2 inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle hover:bg-amber-100">
-                                  <AlertTriangle size={10} /> revisar ({v.malos.length}) {abierto ? "▾" : "▸"}
+                                  <AlertTriangle size={10} /> revisar ({nMal + nFal}) {abierto ? "▾" : "▸"}
                                 </button>
                               )}
                             </td>
@@ -1160,22 +1186,50 @@ export default function Modulo9() {
                           </tr>
                           {malo && abierto && (
                             <tr className="bg-amber-50/50 border-b border-amber-100">
-                              <td colSpan={7} className="px-3 py-2">
-                                <div className="text-[11px] text-amber-800 mb-1.5">
-                                  En <b>{lote}</b> se vació <b>{fmt(v.vac - v.rec)} kg de más</b>. Estos son los folios que lo causan.
-                                  Revisa si el ejote se capturó <b>dos veces</b> (con "Vaciar" simple <i>y además</i> "Vaciar por hora")
-                                  o si el <b>Recibido</b> quedó capturado de menos.
-                                </div>
-                                <div className="space-y-1">
-                                  {[...v.malos].sort((a, b) => b.dif - a.dif).map((f) => (
-                                    <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 flex-wrap">
-                                      <span className="font-semibold text-gray-800">Folio {f.folio}</span>
-                                      <span className="text-gray-600">
-                                        recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b> · sobra <b className="text-amber-700">{fmt(f.dif)} kg</b>
-                                      </span>
+                              <td colSpan={7} className="px-3 py-2 space-y-3">
+                                {/* SALIÓ DE MÁS: doble captura o peso inflado (piedras en las cajas). */}
+                                {nMal > 0 && (
+                                  <div>
+                                    <div className="text-[11px] text-amber-800 mb-1.5">
+                                      <b>Salió de MÁS ({nMal}):</b> en <b>{lote}</b> se vació <b>{fmt(v.vac - v.rec)} kg de más</b>.
+                                      Revisa si el ejote se capturó <b>dos veces</b>, si el <b>Recibido</b> quedó de menos,
+                                      o si la carga venía con <b>peso inflado</b> (piedras u otro material en las cajas).
                                     </div>
-                                  ))}
-                                </div>
+                                    <div className="space-y-1">
+                                      {[...v.malos].sort((a, b) => b.dif - a.dif).map((f) => (
+                                        <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-amber-200 rounded px-2 py-1 flex-wrap">
+                                          <span className="font-semibold text-gray-800">Folio {f.folio}</span>
+                                          <span className="text-gray-600">
+                                            recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b> · <b className="text-amber-700">sobra {fmt(f.dif)} kg</b>
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {/* LLEGÓ DE MENOS: folio ya cerrado que no alcanzó el peso que se recibió. */}
+                                {nFal > 0 && (
+                                  <div>
+                                    <div className="text-[11px] text-red-800 mb-1.5">
+                                      <b>Llegó de MENOS ({nFal}):</b> estos folios ya se dieron por <b>Terminado</b> y aun así salió
+                                      menos ejote del que se recibió (ya descontando lo mermado). Es lo que hay que reclamar:
+                                      <b> nos mandaron menos de lo que dice el manifiesto</b>.
+                                      {toleranciaKg > 0 && <> Se ignoran diferencias de hasta <b>{fmt(toleranciaKg)} kg</b>.</>}
+                                    </div>
+                                    <div className="space-y-1">
+                                      {[...v.faltos].sort((a, b) => b.dif - a.dif).map((f) => (
+                                        <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white border border-red-200 rounded px-2 py-1 flex-wrap">
+                                          <span className="font-semibold text-gray-800">Folio {f.folio}</span>
+                                          <span className="text-gray-600">
+                                            recibido <b className="text-gray-800">{fmt(f.rec)}</b> · vaciado <b className="text-green-700">{fmt(f.vac)}</b>
+                                            {f.mer > 0 ? <> · mermado <b className="text-red-600">{fmt(f.mer)}</b></> : null}
+                                            {" · "}<b className="text-red-700">faltaron {fmt(f.dif)} kg ({f.pct.toFixed(1)}%)</b>
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           )}
