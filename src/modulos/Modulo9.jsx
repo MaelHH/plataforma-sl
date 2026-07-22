@@ -398,7 +398,9 @@ export default function Modulo9() {
   const nuevaHora = (m) => {
     const cont = CONTS.find((c) => c.id === pesForm.tipo) || CONTS[0];
     const n = (m.vaciado?.horas || []).length + 1;
-    const hora = { id: nuevoId("H"), etiqueta: `Hora ${n}`, contenedorDefault: { tipo: cont.id, tara: cont.tara }, pesadas: [], estado: "abierta", creada: new Date().toISOString() };
+    // `fecha`: un folio se puede vaciar en varios días, y sin esto había dos "Hora 1" sin forma
+    // de distinguirlas al revisar. Es solo para mostrar; los kg siguen saliendo de las pesadas.
+    const hora = { id: nuevoId("H"), etiqueta: `Hora ${n}`, fecha: hoyISO(), contenedorDefault: { tipo: cont.id, tara: cont.tara }, pesadas: [], estado: "abierta", creada: new Date().toISOString() };
     setHoras(m.id, (hs) => [...hs, hora]);
   };
 
@@ -410,9 +412,10 @@ export default function Modulo9() {
     // SOPORTE (parrilla/tarima): opcional. Si no se usa, num2 = 0 y no resta nada.
     const num2 = parseInt(pesForm.num2, 10) || 0;
     const tara2 = parseFloat(pesForm.tara2) || 0;
+    // OJO: NO se guarda `neto`. El neto SIEMPRE se recalcula con `netoPesada` a partir de
+    // bruto/tara/num, así que guardarlo solo creaba un dato que podía quedar viejo y mentir.
     const pes = { id: nuevoId("P"), bruto, tipo: pesForm.tipo, tara, num, fecha: hoyISO(), hora: ahoraHM() };
     if (num2 > 0 && tara2 > 0) { pes.soporte = pesForm.soporte; pes.num2 = num2; pes.tara2 = tara2; }
-    pes.neto = netoPesada(pes);
     setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId ? { ...h, pesadas: [...(h.pesadas || []), pes] } : h)));
     setPesForm((f) => ({ ...f, bruto: "" }));   // limpia el bruto, mantiene tipo/tara/num para la siguiente
   };
@@ -517,10 +520,22 @@ export default function Modulo9() {
     }
     const ord = ordenSAPde(m);
     const cub = cubetasDe(aj.kg);
+    // Si el faltante pide MÁS de lo que queda en piso, la encargada tiene que aceptarlo a
+    // sabiendas: no se bloquea (a veces llega más de lo declarado), pero se le dice en la cara.
+    // El piso COMO SI este faltante no existiera (kgEnPisoDe ya lo tiene descontado, y además
+    // se topa en 0, así que hay que rehacer la resta a mano para ver el exceso real).
+    const kgAj = parseFloat(aj.kg) || 0;
+    const pisoSinEste = kgRecibidosDe(m) - (kgVaciadosDe(m) - kgAj) - kgMermadosDe(m);
+    const excedeKg = Math.max(0, kgAj - pisoSinEste);
     const ok = await dlg.confirm({
       title: "Aprobar el faltante antes de SAP",
-      message: `¿Segura que el faltante es correcto? Se enviarán ${cub} cubetas (${Math.round(aj.kg)} kg ÷ 6) a la orden #${(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}. Quedará registrado a TU nombre como responsable. Al aprobar se habilita el botón de mandar a SAP.`,
+      message: `¿Segura que el faltante es correcto? Se enviarán ${cub} cubetas (${Math.round(aj.kg)} kg ÷ 6) a la orden #${(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}.`
+        + (excedeKg > 0
+          ? `\n\n⚠️ OJO: son ${fmt(excedeKg)} kg MÁS de los que quedan en piso (${fmt(Math.max(0, pisoSinEste))} kg). Este folio va a quedar con MÁS vaciado del que se recibió y saldrá marcado para revisar. Solo apruébalo si de verdad llegó más de lo declarado.`
+          : "")
+        + `\n\nQuedará registrado a TU nombre como responsable. Al aprobar se habilita el botón de mandar a SAP.`,
       confirmText: "Sí, es correcto — aprobar",
+      danger: excedeKg > 0,
     });
     if (!ok) return;
     const por = usuarioActual?.full_name || usuarioActual?.email || "encargado";
@@ -2535,6 +2550,9 @@ export default function Modulo9() {
         const excede = recibido > 0 && vaciado > recibido;
         const cubTot = horas.reduce((a, h) => a + cubetasDe(netoHora(h)), 0);
         const hayAbierta = horas.some((h) => h.estado === "abierta");
+        // ¿Este folio se vació en más de un día? Entonces conviene enseñar la fecha de cada hora
+        // (si no, se ven dos "Hora 1" sin manera de distinguirlas).
+        const variosDias = new Set(horas.map((h) => h.fecha || (h.pesadas || [])[0]?.fecha).filter(Boolean)).size > 1;
         const ord = ordenSAPde(m);
         // Preview con el MISMO helper que guarda la pesada (contenedores + soporte) → no se despegan.
         const netoPreview = netoPesada({ bruto: pesForm.bruto, num: pesForm.num, tara: pesForm.tara, num2: pesForm.num2, tara2: pesForm.tara2 });
@@ -2612,6 +2630,10 @@ export default function Modulo9() {
                     <div key={h.id} className={`border rounded-xl ${borde}`}>
                       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 flex-wrap gap-2">
                         <span className="text-sm font-semibold text-gray-800 inline-flex items-center gap-2">{h.etiqueta}
+                          {/* La fecha se enseña cuando el folio se vació en VARIOS días (si no, estorba). */}
+                          {variosDias && (h.fecha || (h.pesadas || [])[0]?.fecha) && (
+                            <span className="text-[10px] font-normal text-gray-500">{h.fecha || (h.pesadas || [])[0]?.fecha}</span>
+                          )}
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${h.estado === "enviada" ? "bg-green-50 text-green-700 border-green-200" : h.estado === "cerrada" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>{h.estado === "enviada" ? "Enviada" : h.estado === "cerrada" ? "Cerrada" : "Abierta"}</span>
                         </span>
                         <span className="text-xs text-gray-600 inline-flex items-center gap-1"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub<InfoTip>{fmt(neto)} kg ÷ 6 kg/cubeta = <b>{cub} cubetas</b> (redondeado). Es lo que se manda a SAP.</InfoTip></span>
