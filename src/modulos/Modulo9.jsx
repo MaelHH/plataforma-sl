@@ -99,7 +99,9 @@ export default function Modulo9() {
   const [rezagaForm, setRezagaForm] = useState(null); // alta de rezaga suelta (Historial Mermado); null = cerrado
   const [diaReporte, setDiaReporte] = useState(hoyISO()); // día que se ve en el resumen / por hora
   const [loteAbierto, setLoteAbierto] = useState(null);   // lote con el detalle de "revisar" desplegado
-  const [vistosAbierto, setVistosAbierto] = useState(null); // lote con los "ya revisados" desplegados
+  const [avisosAbierto, setAvisosAbierto] = useState(false); // panel "Historial de avisos"
+  const [avFiltro, setAvFiltro] = useState("todos");         // todos | pendiente | revisado
+  const [avTipo, setAvTipo] = useState("todos");             // todos | sobra | falta
   const [q, setQ] = useState("");
   const [fDestino, setFDestino] = useState(""); // filtro dropdown por Destino (aplica a la pestaña activa)
   const [fTipo, setFTipo] = useState(""); // historial: "" | recibido | rechazado
@@ -958,7 +960,8 @@ export default function Modulo9() {
       // DOS descuadres que hay que vigilar, y por razones distintas:
       // 1) SOBRA — salió MÁS de lo que se recibió. Puede ser doble captura, o que la carga venga
       //    con peso inflado (les meten piedras a las cajas para que pesen más).
-      if (vac > rec) {
+      // (el `> 1` evita el ruido de decimales: 24,353.2 vs 24,353.0 no es un descuadre real)
+      if (vac - rec > 1) {
         const d = vac - rec;
         const fila = { ...ref, dif: d, tipo: "sobra", rev };
         (yaVisto("sobra", d) ? acc[lote].vistos : acc[lote].malos).push(fila);
@@ -976,6 +979,33 @@ export default function Modulo9() {
     });
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
   })();
+  // ── HISTORIAL DE AVISOS ── Todos los descuadres (pendientes Y ya revisados) en una sola lista.
+  // Los revisados salen de la tabla de lotes para no dejar ruido, pero NO se pierden: aquí se
+  // pueden volver a consultar, filtrar y exportar cuando haya que reclamarle a alguien.
+  const avisosTodos = porLote.flatMap(([lote, v]) => [
+    ...v.malos.map((f) => ({ ...f, lote, estado: "pendiente" })),
+    ...v.faltos.map((f) => ({ ...f, lote, estado: "pendiente" })),
+    ...v.vistos.map((f) => ({ ...f, lote, estado: "revisado" })),
+  ]).sort((a, b) => (a.estado === b.estado ? b.dif - a.dif : a.estado === "pendiente" ? -1 : 1));
+  const avisosPend = avisosTodos.filter((a) => a.estado === "pendiente").length;
+  const avisosFiltrados = avisosTodos
+    .filter((a) => avFiltro === "todos" || a.estado === avFiltro)
+    .filter((a) => avTipo === "todos" || a.tipo === avTipo);
+  const exportarAvisos = () => {
+    const rows = avisosFiltrados.map((a) => ({
+      Folio: a.folio, Lote: a.lote,
+      Aviso: a.tipo === "falta" ? "Llegó de MENOS" : "Salió de MÁS",
+      "Recibido (kg)": Math.round(a.rec), "Vaciado (kg)": Math.round(a.vac), "Mermado (kg)": Math.round(a.mer),
+      "Diferencia (kg)": Math.round(a.dif), "% del recibido": a.rec > 0 ? Number(((a.dif / a.rec) * 100).toFixed(2)) : "",
+      Estado: a.estado === "revisado" ? "Revisado" : "Pendiente",
+      "Revisado por": a.rev?.por || "", "Fecha revisión": (a.rev?.ts || "").slice(0, 10),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Folio: "(sin avisos)" }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Avisos");
+    XLSX.writeFile(wb, `empaque-avisos-${hoyISO()}.xlsx`);
+  };
+
   const totMermaPct = (totKgVac + totKgMer) > 0 ? (totKgMer / (totKgVac + totKgMer)) * 100 : 0;
   // Lotes que tuvieron algún vaciado hoy (columnas del pivote "Vaciado por hora").
   const lotesHora = [...new Set(porHora.flatMap(([, v]) => Object.keys(v.lotes)))].sort();
@@ -1170,7 +1200,17 @@ export default function Modulo9() {
 
           {/* Inventario y merma por lote */}
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Inventario por lote (kg) <span className="text-gray-300 normal-case">· piso = recibido − vaciado − merma</span></div>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+              <div className="text-[10px] font-semibold text-gray-400 uppercase">Inventario por lote (kg) <span className="text-gray-300 normal-case">· piso = recibido − vaciado − merma</span></div>
+              {avisosTodos.length > 0 && (
+                <button onClick={() => setAvisosAbierto(true)}
+                  className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold inline-flex items-center gap-1 border ${avisosPend > 0
+                    ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}>
+                  <AlertTriangle size={13} /> Historial de avisos ({avisosTodos.length}){avisosPend > 0 ? ` · ${avisosPend} sin revisar` : ""}
+                </button>
+              )}
+            </div>
             {porLote.length === 0 ? (
               <div className="text-xs text-gray-400 italic py-2">Aún no hay recibidos hoy.</div>
             ) : (
@@ -1193,7 +1233,9 @@ export default function Modulo9() {
                       const pct = disp > 0 ? (v.mer / disp) * 100 : 0;
                       const nMal = v.malos.length, nFal = v.faltos.length, nVis = v.vistos.length;
                       const pend = nMal + nFal;                 // descuadres que NADIE ha revisado
-                      const malo = pend > 0 || nVis > 0;        // hay algo que mostrar en el detalle
+                      // La tabla solo enseña lo PENDIENTE. Lo ya revisado se consulta en el
+                      // "Historial de avisos" (botón arriba), para no dejar ruido acumulado aquí.
+                      const malo = pend > 0;
                       const abierto = loteAbierto === lote;
                       return (
                         <Fragment key={lote}>
@@ -1240,7 +1282,9 @@ export default function Modulo9() {
                                 {nMal > 0 && (
                                   <div>
                                     <div className="text-[11px] text-amber-800 mb-1.5">
-                                      <b>Salió de MÁS ({nMal}):</b> en <b>{lote}</b> se vació <b>{fmt(v.vac - v.rec)} kg de más</b>.
+                                      {/* Se suma lo que sobra FOLIO POR FOLIO: el total del lote puede
+                                          quedar en negativo si otros folios salieron de menos. */}
+                                      <b>Salió de MÁS ({nMal}):</b> en <b>{lote}</b> sobran <b>{fmt(v.malos.reduce((a, f) => a + f.dif, 0))} kg</b> repartidos en estos folios.
                                       Revisa si el ejote se capturó <b>dos veces</b>, si el <b>Recibido</b> quedó de menos,
                                       o si la carga venía con <b>peso inflado</b> (piedras u otro material en las cajas).
                                     </div>
@@ -1281,27 +1325,9 @@ export default function Modulo9() {
                                     </div>
                                   </div>
                                 )}
-                                {/* Los que ya se revisaron: no estorban, pero siguen consultables. */}
                                 {v.vistos.length > 0 && (
-                                  <div>
-                                    <button onClick={() => setVistosAbierto(vistosAbierto === lote ? null : lote)}
-                                      className="text-[11px] text-gray-500 hover:text-gray-700 inline-flex items-center gap-1">
-                                      <Check size={12} className="text-green-600" /> Ya revisados ({v.vistos.length}) {vistosAbierto === lote ? "▾" : "▸"}
-                                    </button>
-                                    {(vistosAbierto === lote || pend === 0) && (
-                                      <div className="space-y-1 mt-1">
-                                        {[...v.vistos].sort((a, b) => b.dif - a.dif).map((f) => (
-                                          <div key={f.id} className="flex items-center justify-between gap-2 text-[11px] bg-white/70 border border-gray-200 rounded px-2 py-1 flex-wrap text-gray-500">
-                                            <span className="font-semibold text-gray-700">Folio {f.folio}</span>
-                                            <span className="flex items-center gap-2 flex-wrap">
-                                              {f.tipo === "falta" ? "faltaron" : "sobraron"} <b>{fmt(f.dif)} kg</b>
-                                              · revisado por <b>{f.rev?.por || "—"}</b> el {(f.rev?.ts || "").slice(0, 10)}
-                                              <button onClick={() => quitarRevisado(f)} title="Volver a marcarlo para revisar" className="inline-flex items-center gap-1 px-2 py-0.5 border border-gray-300 rounded-full hover:bg-gray-50"><RotateCcw size={11} /> volver a revisar</button>
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
+                                  <div className="text-[11px] text-gray-400">
+                                    {v.vistos.length} aviso{v.vistos.length > 1 ? "s" : ""} de este lote ya se revisó; míralo en el <b>Historial de avisos</b> (arriba).
                                   </div>
                                 )}
                               </td>
@@ -1906,6 +1932,61 @@ export default function Modulo9() {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── HISTORIAL DE AVISOS ── Todos los descuadres, revisados y sin revisar, en un solo lugar.
+          Así la tabla de lotes queda limpia pero nada se pierde: aquí se vuelve a consultar. ── */}
+      {avisosAbierto && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setAvisosAbierto(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlertTriangle size={16} className="text-amber-500" /> Historial de avisos ({avisosTodos.length})</div>
+                <div className="text-xs text-gray-400">Folios que no cuadraron: salió de más o llegó de menos. Se conservan aunque ya se hayan revisado.</div>
+              </div>
+              <button onClick={() => setAvisosAbierto(false)} className="text-gray-400 hover:text-gray-700 shrink-0"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
+              {[["todos", `Todos (${avisosTodos.length})`], ["pendiente", `Sin revisar (${avisosPend})`], ["revisado", `Revisados (${avisosTodos.length - avisosPend})`]].map(([k, l]) => (
+                <button key={k} onClick={() => setAvFiltro(k)} className={`text-[11px] px-2.5 py-1 rounded-lg font-medium border ${avFiltro === k ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>{l}</button>
+              ))}
+              <span className="w-px h-5 bg-gray-200 mx-1"></span>
+              {[["todos", "Los dos"], ["falta", "Llegó de menos"], ["sobra", "Salió de más"]].map(([k, l]) => (
+                <button key={k} onClick={() => setAvTipo(k)} className={`text-[11px] px-2.5 py-1 rounded-lg font-medium border ${avTipo === k ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>{l}</button>
+              ))}
+              <button onClick={exportarAvisos} className="ml-auto text-[11px] bg-green-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+            </div>
+            <div className="px-5 py-3 overflow-y-auto space-y-2">
+              {avisosFiltrados.length === 0 ? (
+                <div className="text-xs text-gray-400 text-center py-8 italic">No hay avisos con ese filtro.</div>
+              ) : avisosFiltrados.map((a) => (
+                <div key={`${a.id}_${a.tipo}`} className={`border rounded-xl px-3 py-2 ${a.estado === "revisado" ? "border-gray-200 bg-gray-50/60" : a.tipo === "falta" ? "border-red-200 bg-red-50/50" : "border-amber-200 bg-amber-50/50"}`}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-gray-800">Folio {a.folio} <span className="font-normal text-gray-500">· lote {a.lote}</span></span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${a.tipo === "falta" ? "border-red-200 bg-white text-red-700" : "border-amber-200 bg-white text-amber-700"}`}>
+                      {a.tipo === "falta" ? `Llegó de MENOS · ${fmt(a.dif)} kg` : `Salió de MÁS · ${fmt(a.dif)} kg`}
+                      {a.rec > 0 ? ` (${((a.dif / a.rec) * 100).toFixed(1)}%)` : ""}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-600 mt-1">
+                    recibido <b className="text-gray-800">{fmt(a.rec)}</b> · vaciado <b className="text-green-700">{fmt(a.vac)}</b>
+                    {a.mer > 0 ? <> · mermado <b className="text-red-600">{fmt(a.mer)}</b></> : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 flex-wrap mt-1.5">
+                    {a.estado === "revisado" ? (
+                      <span className="text-[11px] text-gray-500 inline-flex items-center gap-1"><Check size={12} className="text-green-600" /> Revisado por <b>{a.rev?.por || "—"}</b> el {(a.rev?.ts || "").slice(0, 10)}</span>
+                    ) : (
+                      <span className="text-[11px] text-amber-700 font-semibold">Sin revisar</span>
+                    )}
+                    {a.estado === "revisado"
+                      ? <button onClick={() => quitarRevisado(a)} className="text-[11px] px-2.5 py-1 border border-gray-300 text-gray-600 rounded-lg hover:bg-white inline-flex items-center gap-1"><RotateCcw size={12} /> Volver a revisar</button>
+                      : <button onClick={() => marcarRevisado(a)} className="text-[11px] px-2.5 py-1 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 inline-flex items-center gap-1"><Check size={12} /> Ya lo revisé</button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal de recepción ── */}
