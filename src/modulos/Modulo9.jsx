@@ -10,7 +10,7 @@ import {
   kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado, kgSobranteCierre,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
-import { generarPDFVaciadoHora } from "./reportes/vaciadoPorHora";
+import { generarPDFVaciadoHora, generarExcelVaciadoHora } from "./reportes/vaciadoPorHora";
 import InfoTip from "../components/InfoTip";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
@@ -1433,10 +1433,17 @@ export default function Modulo9() {
           <div>
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div className="text-[10px] font-semibold text-gray-400 uppercase">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · <b>bins = kg netos ÷ {kgPorBin}</b></span></div>
-              {porHora.length > 0 && (
-                <button onClick={() => generarPDFVaciadoHora({ dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora })}
-                  className="text-[11px] bg-red-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF para jefes</button>
-              )}
+              {porHora.length > 0 && (() => {
+                const args = { dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora };
+                return (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => generarExcelVaciadoHora(args)}
+                      className="text-[11px] bg-green-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+                    <button onClick={() => generarPDFVaciadoHora(args)}
+                      className="text-[11px] bg-red-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+                  </div>
+                );
+              })()}
             </div>
             {porHora.length === 0 ? (
               <div className="text-xs text-gray-400 italic py-2">No hay vaciados registrados el día seleccionado.</div>
