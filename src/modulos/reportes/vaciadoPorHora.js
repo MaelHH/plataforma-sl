@@ -75,8 +75,10 @@ export function generarPDFVaciadoHora({ dia, porHora, lotesHora, kgPorBin, totKg
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
   <title>Vaciado por hora — ${esc(dia || "")}</title>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; margin: 18px; color: #000; }
+    /* Forzar que los colores de fondo SÍ se impriman (Chrome/Edge los quitan por defecto). */
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 18px; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     h1 { font-size: 15px; margin: 0 0 2px; }
     .sub { font-size: 11px; color: #444; margin-bottom: 10px; }
     table { border-collapse: collapse; }
