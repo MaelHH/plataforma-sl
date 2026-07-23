@@ -26,7 +26,12 @@ export function generarPDFVaciadoHora({ dia, porHora, lotesHora, kgPorBin, totKg
   const nL = lotes.length;
 
   const mapaH = Object.fromEntries(porHora.map(([h, v]) => [String(Number(h)), v]));
-  const horas = Array.from({ length: 24 }, (_, i) => (8 + i) % 24);   // 08:00 → …
+  // Turno del Excel: 08:00 a 22:00 (start hours 8..21 = 14 franjas). Si hubo vaciado FUERA de ese
+  // rango, se agregan esas horas al final para no esconder datos.
+  const turno = Array.from({ length: 14 }, (_, i) => 8 + i);          // 8 → 21
+  const extras = porHora.map(([h]) => Number(h)).filter((h) => !turno.includes(h)).sort((a, b) => a - b);
+  const horas = [...turno, ...extras];
+  const BREAK_HOURS = [14];   // 02:00 A 03:00 (comida) → se pinta naranja, como en el Excel
 
   // Totales por lote.
   const totKgLote = {};
@@ -35,7 +40,9 @@ export function generarPDFVaciadoHora({ dia, porHora, lotesHora, kgPorBin, totKg
   const totBinsProc = bins(totKgVacDia, kgb);
   const totMermaPct = (totKgVacDia + totMermaKg) > 0 ? Math.round((totMermaKg / (totKgVacDia + totMermaKg)) * 100) : 0;
 
-  const franja = (h) => `${String(h).padStart(2, "0")}:00 A ${String((h + 1) % 24).padStart(2, "0")}:00`;
+  // Formato de 12 horas SIN am/pm (como el Excel): 12:00 A 01:00, 01:00 A 02:00…
+  const h12 = (h) => { const x = h % 12; return String(x === 0 ? 12 : x).padStart(2, "0"); };
+  const franja = (h) => `${h12(h)}:00 A ${h12((h + 1) % 24)}:00`;
   const kgLoteHora = (v, l) => (esPh(l) ? 0 : (v?.lotes?.[l] || 0));
 
   const filas = horas.map((h) => {
@@ -44,8 +51,9 @@ export function generarPDFVaciadoHora({ dia, porHora, lotesHora, kgPorBin, totKg
     const merKg = (mermaPorHora || {})[String(h)] || 0;
     const pctMerma = (kgHora + merKg) > 0 ? Math.round((merKg / (kgHora + merKg)) * 100) : null;
     const cel = (val) => `<td class="num">${val || ""}</td>`;
+    const esBreak = BREAK_HOURS.includes(h);
     return `<tr>
-      <td class="hora">${franja(h)}</td>
+      <td class="hora${esBreak ? " break" : ""}">${franja(h)}</td>
       ${lotes.map(() => `<td></td>`).join("")}
       ${lotes.map((l) => { const kg = kgLoteHora(v, l); return cel(kg ? fmt(bins(kg, kgb)) : ""); }).join("")}
       ${lotes.map((l) => { const kg = kgLoteHora(v, l); return cel(kg ? fmt(kg) : ""); }).join("")}
@@ -86,6 +94,8 @@ export function generarPDFVaciadoHora({ dia, porHora, lotesHora, kgPorBin, totKg
     .grid th.sub { background: #f6a500; font-weight: bold; text-align: center; }
     /* Celdas de la columna HORA (datos): BLANCAS, texto negro en negrita */
     .grid td.hora { background: #fff; font-weight: bold; white-space: nowrap; }
+    /* Fila de descanso (comida): la hora va en naranja, como en el Excel */
+    .grid td.hora.break { background: #f6a500; }
     /* Fila de totales: amarillo */
     .grid tr.totales td { background: #ffff00; font-weight: bold; }
     /* Resumen de abajo */
