@@ -506,8 +506,8 @@ export function DatosProvider({ children }) {
     (async () => {
       if (!(await api.disponible())) { setCargando(false); return; }
       try {
-        const cargado = {};
-        for (const k of Object.keys(CONFIG)) {
+        // Carga de UNA clave (misma lógica de siempre: siembra el seed si falta).
+        const cargarClave = async (k) => {
           const cfg = CONFIG[k];
           let val;
           if (cfg.tipo === "col") {
@@ -522,11 +522,17 @@ export function DatosProvider({ children }) {
             if (val == null && cfg.seed != null) { await api.putState(k, cfg.seed); val = cfg.seed; }
             if (val == null) val = {};
           }
-          if (cancel) return;
-          cargado[k] = val;
-          setters[k]?.(val);
-        }
+          return val;
+        };
+        // EN PARALELO: antes se cargaban las ~28 secciones una por una (await en serie). En
+        // producción el backend está en el server local (el VPS lo alcanza por Tailscale), así que
+        // 28 idas y vueltas en fila tardaban 3-5 s y la pantalla se veía VACÍA mientras cargaba.
+        // Pidiéndolas todas a la vez, la carga tarda lo de la más lenta, no la suma de todas.
+        const claves = Object.keys(CONFIG);
+        const vals = await Promise.all(claves.map((k) => cargarClave(k)));
         if (cancel) return;
+        const cargado = {};
+        claves.forEach((k, i) => { cargado[k] = vals[i]; setters[k]?.(vals[i]); });
         prevRef.current = cargado;
         setFuente("backend");
       } catch (e) {
