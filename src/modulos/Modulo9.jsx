@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import * as XLSX from "xlsx";
 import { Calendar, Plus, Trash2, Truck, Eye, Check, AlertTriangle, X, Send, Ban, FileText, Save, MessageCircle, RotateCcw, Clock, FlaskConical, Camera, Search, ArrowRight, Sprout } from "lucide-react";
-import { useDatos, nuevoId, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
+import { useDatos, nuevoId, KG_POR_BIN_DEFAULT, DEFECTOS_QC, CATS_QC, MAX_MUESTREOS, INSP_VEHICULO, INSP_PRODUCTO } from "../store/datos";
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
@@ -10,6 +10,7 @@ import {
   kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado, kgSobranteCierre,
 } from "./helpers/empaque";
 import SearchSelect from "../components/SearchSelect";
+import { generarPDFVaciadoHora } from "./reportes/vaciadoPorHora";
 import InfoTip from "../components/InfoTip";
 import { pctDefecto, pctCategoria, calcQCI } from "./helpers/calidad";
 import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/reporteCalidad";
@@ -36,8 +37,8 @@ function ahoraHM() {
 const sumar = (items, campo) => (items || []).reduce((a, it) => a + (parseFloat(it[campo]) || 0), 0);
 
 // ── Vaciado a Empaque ── Se maneja TODO en kg (la unidad que manda).
-// Solo en la visual "Vaciado por hora" mostramos bins teóricos = kg / 240.
-const KG_POR_BIN_TEO = 240;
+// El factor de bins (kg netos por bin) ahora es CONFIGURABLE (configEmpaque.kgPorBin, default 260).
+// Ver `kgPorBin`/`binsDe` dentro del componente.
 // Destare de empaque (ejote): la caja y la parrilla pesan; se restan del bruto para
 // obtener el ejote neto. Defaults editables por recepción.
 const TARA_PARRILLA = 14.8; // kg por parrilla
@@ -80,6 +81,9 @@ export default function Modulo9() {
   const dlg = useDialog();
   // LÍNEA DE CORTE SAP: folios anteriores a esta fecha son HISTÓRICO → la app no los manda a SAP.
   const goLiveSAP = configEmpaque?.goLiveSAP || "";
+  // Reporte por BINS (el que ven los jefes): cada `kgPorBin` kg NETOS = 1 bin. Configurable.
+  const kgPorBin = parseFloat(configEmpaque?.kgPorBin) || KG_POR_BIN_DEFAULT;
+  const binsDe = (kg) => (kg || 0) / kgPorBin;   // bins (con decimales); se redondea al mostrar
   // Cuánto se le tolera a un folio CERRADO haber salido de menos antes de marcarlo para revisar.
   // Default 0 = se marca cualquier faltante (el usuario quiere que cuadre exacto para detectar
   // cargas que llegan de menos); se puede subir si la báscula da diferencias chicas.
@@ -966,6 +970,26 @@ export default function Modulo9() {
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
   })();
 
+  // Merma por hora del día (para la columna "% MERMA EN KG" del reporte de bins). El % de la hora
+  // = merma / (vaciado + merma) de esa hora.
+  const mermaPorHora = (() => {
+    const acc = {};
+    recibidos.forEach((m) => merDia(m).forEach((e) => {
+      const h = String(e.hora || "").split(":")[0] || "—";
+      acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0);
+    }));
+    return acc;
+  })();
+  // Bins RECIBIDOS por lote = conteo FÍSICO que capturan a mano (m.binsRecibidos), sumado por lote.
+  const binsRecibidosPorLote = (() => {
+    const acc = {};
+    recibidos.forEach((m) => {
+      const n = parseFloat(m.vaciado?.binsRecibidos) || 0;
+      if (n > 0) acc[loteDe(m)] = (acc[loteDe(m)] || 0) + n;
+    });
+    return acc;
+  })();
+
   // Inventario y merma por lote (sobre los recibidos del día).
   const porLote = (() => {
     const acc = {};
@@ -1196,6 +1220,16 @@ export default function Modulo9() {
               Al dar <b>Terminado</b>, si salió <b>menos</b> de lo recibido por más de estos kg, el folio se marca para <b>revisar</b> (llegó de menos). Con <b>0</b> se marca cualquier faltante.
             </span>
           </span>
+          <span className="w-full border-t border-indigo-100 pt-1.5 flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-indigo-800 whitespace-nowrap">1 bin equivale a:</span>
+            <input type="number" min="1" step="1" value={configEmpaque?.kgPorBin ?? ""}
+              onChange={(e) => setConfigEmpaque({ ...(configEmpaque || {}), kgPorBin: e.target.value })}
+              placeholder="260" className="w-20 text-xs px-2 py-1 border border-indigo-200 rounded-md bg-white text-right focus:outline-none focus:border-indigo-400" />
+            <span className="text-indigo-700">kg netos</span>
+            <span className="text-gray-500 flex-1 min-w-[240px]">
+              El reporte de <b>Vaciado por hora</b> (el que ven los jefes) cuenta los <b>bins</b> vaciados: cada {kgPorBin} kg netos = 1 bin.
+            </span>
+          </span>
         </div>
       )}
 
@@ -1223,7 +1257,7 @@ export default function Modulo9() {
                 <div key={l} className={`bg-white border rounded-xl px-3 py-2.5 text-center ${bd}`}>
                   <div className="text-[10px] text-gray-500 mb-1 inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${dot}`}></span>{l}</div>
                   <div className={`text-xl font-bold ${c}`}>{fmt(k)} <span className="text-xs font-medium">kg</span></div>
-                  <div className="text-[10px] text-gray-400">≈ {cubetasDe(k).toLocaleString()} cubetas · ≈{(k / KG_POR_BIN_TEO).toFixed(1)} bins</div>
+                  <div className="text-[10px] text-gray-400">≈ {Math.round(binsDe(k)).toLocaleString()} bins · ≈ {cubetasDe(k).toLocaleString()} cubetas</div>
                 </div>
               ))}
             </div>
@@ -1395,9 +1429,15 @@ export default function Modulo9() {
             </div>
           )}
 
-          {/* Vaciado por hora y lote (kg + bins teóricos + CUBETAS que salieron esa hora) */}
+          {/* Vaciado por hora y lote — medido en BINS (kg netos ÷ kgPorBin). Es lo que ven los jefes. */}
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase mb-2">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · bins teóricos = kg / 240 · cubetas = kg / 6</span></div>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+              <div className="text-[10px] font-semibold text-gray-400 uppercase">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · <b>bins = kg netos ÷ {kgPorBin}</b></span></div>
+              {porHora.length > 0 && (
+                <button onClick={() => generarPDFVaciadoHora({ dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora })}
+                  className="text-[11px] bg-red-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF para jefes</button>
+              )}
+            </div>
             {porHora.length === 0 ? (
               <div className="text-xs text-gray-400 italic py-2">No hay vaciados registrados el día seleccionado.</div>
             ) : (
@@ -1410,7 +1450,7 @@ export default function Modulo9() {
                         <th key={lote} className="text-right px-3 py-2 font-semibold whitespace-nowrap normal-case">{lote} <span className="text-gray-300 font-normal">(kg)</span></th>
                       ))}
                       <th className="text-right px-3 py-2 font-semibold bg-gray-100">Total (kg)</th>
-                      <th className="text-right px-3 py-2 font-bold bg-indigo-50 text-indigo-600 whitespace-nowrap">Cubetas</th>
+                      <th className="text-right px-3 py-2 font-bold bg-indigo-50 text-indigo-600 whitespace-nowrap">Bins</th>
                       <th className="text-left px-3 py-2 font-semibold w-28">Ritmo</th>
                     </tr>
                   </thead>
@@ -1422,7 +1462,7 @@ export default function Modulo9() {
                           <td key={lote} className="px-3 py-1.5 text-right text-gray-700">{v.lotes[lote] ? fmt(v.lotes[lote]) : <span className="text-gray-300">—</span>}</td>
                         ))}
                         <td className="px-3 py-1.5 text-right font-semibold text-gray-800 bg-gray-50">{fmt(v.kg)}</td>
-                        <td className="px-3 py-1.5 text-right font-bold text-indigo-700 bg-indigo-50/50">{cubetasDe(v.kg).toLocaleString()}</td>
+                        <td className="px-3 py-1.5 text-right font-bold text-indigo-700 bg-indigo-50/50">{Math.round(binsDe(v.kg)).toLocaleString()}</td>
                         {/* Ritmo: qué tan cargada estuvo esa hora contra la hora más fuerte del día. */}
                         <td className="px-3 py-1.5">
                           <div title={`${fmt(v.kg)} kg — ${Math.round((v.kg / maxH) * 100)}% de la hora más fuerte`} className="h-2 rounded-full bg-gray-200 overflow-hidden min-w-[60px]">
@@ -1438,17 +1478,17 @@ export default function Modulo9() {
                         return <td key={lote} className="px-3 py-1.5 text-right">{fmt(t)}</td>;
                       })}
                       <td className="px-3 py-1.5 text-right">{fmt(totKgVacDia)}</td>
-                      <td className="px-3 py-1.5 text-right text-indigo-700 bg-indigo-100/60">{cubetasDe(totKgVacDia).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-right text-indigo-700 bg-indigo-100/60">{Math.round(binsDe(totKgVacDia)).toLocaleString()}</td>
                       <td className="px-3 py-1.5 text-[10px] font-normal text-gray-400">hora más fuerte</td>
                     </tr>
                     <tr className="bg-gray-50 text-gray-500 text-[10px]">
-                      <td className="px-3 py-1">Bins teóricos (≈kg/240)</td>
+                      <td className="px-3 py-1">Bins por lote (kg ÷ {kgPorBin})</td>
                       {lotesHora.map((lote) => {
                         const t = porHora.reduce((a, [, v]) => a + (v.lotes[lote] || 0), 0);
-                        return <td key={lote} className="px-3 py-1 text-right">≈{(t / KG_POR_BIN_TEO).toFixed(1)}</td>;
+                        return <td key={lote} className="px-3 py-1 text-right">{Math.round(binsDe(t)).toLocaleString()}</td>;
                       })}
-                      <td className="px-3 py-1 text-right">≈{(totKgVacDia / KG_POR_BIN_TEO).toFixed(1)}</td>
-                      <td className="px-3 py-1 text-right text-indigo-400">= kg ÷ 6</td>
+                      <td className="px-3 py-1 text-right font-semibold text-gray-700">{Math.round(binsDe(totKgVacDia)).toLocaleString()}</td>
+                      <td className="px-3 py-1 text-right text-indigo-400">bins</td>
                       <td className="px-3 py-1"></td>
                     </tr>
                   </tbody>
@@ -1593,9 +1633,16 @@ export default function Modulo9() {
                                   value={kgRecVal} onChange={(e) => setRecibido(m.id, "kgRecibidos", e.target.value)} placeholder="kg" />
                                 <span className="text-[11px] font-semibold text-gray-400">kg</span>
                               </span>,
-                              rcp.destareAplicar
-                                ? <>bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)}</b></>
-                                : <>peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</>)}
+                              <span className="inline-flex items-center gap-1">
+                                {rcp.destareAplicar
+                                  ? <>bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)}</b></>
+                                  : <>peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</>}
+                                {/* Bins RECIBIDOS: conteo FÍSICO de bins que llegaron (para el reporte de jefes). */}
+                                <span className="text-gray-400">· bins rec.</span>
+                                <input type="number" min="0" value={m.vaciado?.binsRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "binsRecibidos", e.target.value)} placeholder="—"
+                                  title="Conteo físico de bins que llegaron en este folio (para el reporte por hora)"
+                                  className="w-12 text-right text-[11px] px-1 py-0.5 border border-gray-200 rounded" />
+                              </span>)}
                             {flecha}
                             {paso("Vaciado", <>{fmt(vacK)} <span className="text-[11px] font-semibold text-gray-400">kg</span></>, `≈ ${cubetasDe(vacK).toLocaleString()} cub`)}
                             {flecha}

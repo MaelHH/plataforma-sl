@@ -406,8 +406,13 @@ const CONFIG = {
   // LÍNEA DE CORTE SAP: { goLiveSAP: "YYYY-MM-DD" }. Los folios ANTERIORES a esa fecha son
   // HISTÓRICO: se conservan y se ven, pero la app NUNCA los manda a SAP (ya se registraron por
   // fuera). Vacío = sin corte (no bloquea nada). Reversible: solo se cambia la fecha.
-  configEmpaque: { tipo: "kv", seed: { goLiveSAP: "" } },
+  //   goLiveSAP  → línea de corte. toleranciaKg → margen al cerrar. kgPorBin → cuántos kg netos
+  //   equivalen a 1 bin en el reporte de "Vaciado por hora" que ven los jefes (default 260).
+  configEmpaque: { tipo: "kv", seed: { goLiveSAP: "", toleranciaKg: "", kgPorBin: 260 } },
 };
+
+// Factor por defecto del reporte por bins (kg netos por 1 bin). El real sale de configEmpaque.
+export const KG_POR_BIN_DEFAULT = 260;
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
 // Colecciones: upsert por id (PUT) + borrar lo que ya no está. Singletons: PUT completo.
