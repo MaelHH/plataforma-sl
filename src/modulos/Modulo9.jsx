@@ -2012,6 +2012,10 @@ export default function Modulo9() {
                               {/* En Recibidos, "Editar neto" (recalcular el destare si se equivocaron); en
                                   Historial por Recibir, solo "Ver". Los dos abren el mismo modal. */}
                               <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> {tabRec === "pendientes" ? "Editar neto" : "Ver"}</button>
+                              {/* Las acciones de SAP (mandar a SAP, faltante, progreso) van SOLO en
+                                  "Historial por Recibir". En "Recibidos" solo se lleva el control del
+                                  neto/logística, muestreo e inspección — nada de SAP. */}
+                              {tabRec === "historial" && (<>
                               {/* Progreso a SAP del folio: cubetas ya reportadas y cuánto falta */}
                               {(cubetasEnviadasSAP(m) > 0 || kgPendienteSAP(m) > 0) && (
                                 <span title="Cubetas ya reportadas a SAP · lo que falta por mandar de lo ya vaciado"
@@ -2048,6 +2052,7 @@ export default function Modulo9() {
                                   </button>
                                 );
                               })()}
+                              </>)}
                               {/* Ya NO hay "Reabrir" en los recibidos: borraba el vaciado. Para corregir
                                   el peso, se usa "Editar neto" (recalcular el destare sin perder nada). */}
                             </>
