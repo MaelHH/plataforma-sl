@@ -398,19 +398,6 @@ export default function Modulo9() {
 
   const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1", soporte: "", tara2: "", num2: "0" }); };
 
-  // Vaciar SIN recepción formal: el folio se "recibe" PROVISIONAL (entra a En Piso y ya se puede
-  // vaciar por hora). El recibido usa bruto − trailer hasta que afinen el destare en recepción.
-  // `recepcionPendiente` marca que todavía falta el destare para el neto exacto.
-  const activarYVaciar = (m) => {
-    if (m.recepcion?.estado !== "recibido") {
-      setMovimientos((prev) => prev.map((x) => (x.id === m.id
-        ? { ...x, recepcion: { ...(x.recepcion || {}), estado: "recibido", pesoRecibido: x.pesoBascula || "", recepcionPendiente: true, autoRecibido: new Date().toISOString() } }
-        : x)));
-      registrarEvento?.({ evento: "vaciado_activado_sin_recepcion", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
-        detalle: "Se habilitó el vaciado sin recepción formal (recibido provisional; falta afinar el destare)." });
-    }
-    abrirPanelHoras(m);
-  };
   const cerrarPanelHoras = () => setHorasMov(null);
 
   const nuevaHora = (m) => {
@@ -2037,14 +2024,9 @@ export default function Modulo9() {
                             </>
                           ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
-                          ) : (<>
-                            {/* Vaciar SIN esperar recepción: el folio entra provisional y se puede vaciar ya.
-                                La recepción (destare + calidad) queda como paso opcional para afinar el neto. */}
-                            {puedeEditarVaciado && (
-                              <button onClick={() => activarYVaciar(m)} title="Empezar a vaciar por hora sin dar recepción formal (el peso queda provisional hasta afinar trailer/destare)" className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora</button>
-                            )}
-                            <button onClick={() => abrirRecepcion(m)} className="text-xs border border-emerald-300 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-emerald-50">Dar recepción</button>
-                          </>)}
+                          ) : (
+                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar recepción</button>
+                          )}
                       </div>
                     </div>
                   );
@@ -2198,11 +2180,11 @@ export default function Modulo9() {
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso de báscula (bruto, con trailer)</span><b className="text-gray-800">{fmt(brutoBascula)} kg</b></div>
                         {trailer > 0 ? (
                           <>
-                            <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso del trailer vacío</span><span className="text-red-600">− {fmt(trailer)} kg</span></div>
+                            <div className="flex justify-between px-3 py-1.5 bg-green-50/60"><span className="text-gray-700">Peso del trailer vacío <span className="text-green-700 font-semibold">✓ ya restado</span></span><span className="text-red-600 font-semibold">− {fmt(trailer)} kg</span></div>
                             <div className="flex justify-between px-3 py-1.5 bg-gray-50"><span className="text-gray-700 font-semibold">Carga (bruto − trailer)</span><b className="text-gray-800">{fmt(bruto)} kg</b></div>
                           </>
                         ) : (
-                          <div className="px-3 py-1.5 text-[11px] text-amber-700 inline-flex items-center gap-1"><AlertTriangle size={13} /> Falta el <b>peso del trailer</b> (se captura en el movimiento) — el neto es PROVISIONAL.</div>
+                          <div className="px-3 py-1.5 text-[11px] text-amber-700 inline-flex items-center gap-1.5"><AlertTriangle size={13} /> Falta el <b>peso del trailer</b> (se captura en el movimiento) — el neto es <b>PROVISIONAL</b> (todavía trae el peso del trailer).</div>
                         )}
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Parrillas: {parrillas} × {pK} kg</span><span className="text-red-600">− {fmt(taraP)} kg</span></div>
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Cajas: {fmt(cajas)} × {cK} kg</span><span className="text-red-600">− {fmt(taraC)} kg</span></div>

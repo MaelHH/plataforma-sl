@@ -657,8 +657,16 @@ export default function Modulo8() {
                   const fac = estadosOC[m.id]?.factura ?? m.ocSAP?.factura;
                   return (
                     <tr key={m.id} className="border-b border-gray-100 hover:bg-gray-50 align-top">
-                      <td className="px-3 py-2.5 font-bold text-red-600 whitespace-nowrap">{m.folio || "—"}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-3 py-2.5 font-bold text-red-600 whitespace-nowrap align-top">
+                        {m.folio || "—"}
+                        {/* ¿Ya tiene el peso del trailer? (necesario para el ejote neto exacto en empaque) */}
+                        {(parseFloat(m.pesoBascula) || 0) > 0 && (
+                          (parseFloat(m.pesoTrailer) || 0) > 0
+                            ? <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5"><Check size={11} /> trailer {parseFloat(m.pesoTrailer).toLocaleString()} kg</div>
+                            : <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5"><AlertTriangle size={11} /> falta trailer</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap align-top">
                         <div className="text-gray-700"><span className="text-gray-400">Sal</span> {m.fecha || "—"}</div>
                         {rec
                           ? <div className="text-green-700"><span className="text-gray-400">Rec</span> {rec}{dias != null && <span className="text-[10px] text-gray-400"> · {dias} {dias === 1 ? "día" : "días"}</span>}</div>
