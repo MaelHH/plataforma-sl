@@ -17,7 +17,7 @@ const BREAK_HOURS = [14];   // 02:00 A 03:00 (comida) → naranja, como el Excel
 const COL = { verde: "a9c48d", naranja: "f6a500", amarillo: "ffff00", salmon: "f4b183", verdeClaro: "cfe2b0" };
 
 // Prepara TODO lo que necesitan ambas salidas a partir de los datos del módulo.
-function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora }) {
+function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, recibidoPorLote, mermaHoraLote }) {
   const kgb = parseFloat(kgPorBin) || 260;
   const reales = lotesHora.length ? lotesHora : [];
   const lotes = [...reales];
@@ -34,16 +34,28 @@ function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibid
   const franja = (h) => `${h12(h)}:00 A ${h12((h + 1) % 24)}:00`;
   const kgLoteHora = (v, l) => (esPh(l) ? 0 : (v?.lotes?.[l] || 0));
 
+  // "En piso" que va quedando por lote: arranca en el recibido y baja cada hora (vaciado + merma).
+  const restante = {};
+  reales.forEach((l) => { restante[l] = recibidoPorLote?.[l] || 0; });
   const filas = horas.map((h) => {
     const v = mapaH[String(h)];
     const kgHora = v?.kg || 0;
     const merKg = (mermaPorHora || {})[String(h)] || 0;
     const pctMerma = (kgHora + merKg) > 0 ? Math.round((merKg / (kgHora + merKg)) * 100) : null;
+    // Descontar del restante lo que se vació/mermó ESTA hora, por lote. El "en piso" solo se
+    // muestra en las horas donde ese lote tuvo movimiento (cuánto quedaba en ese momento).
+    const enPiso = lotes.map((l) => {
+      if (esPh(l)) return null;
+      const vac = kgLoteHora(v, l);
+      const mer = (mermaHoraLote?.[String(h)]?.[l]) || 0;
+      restante[l] = Math.max(0, (restante[l] || 0) - vac - mer);
+      return (vac > 0 || mer > 0) ? restante[l] : null;
+    });
     return {
       h, franja: franja(h), esBreak: BREAK_HOURS.includes(h),
       binsProc: lotes.map((l) => { const kg = kgLoteHora(v, l); return kg ? bins(kg, kgb) : null; }),
       kg: lotes.map((l) => { const kg = kgLoteHora(v, l); return kg || null; }),
-      pctMerma,
+      enPiso, pctMerma,
     };
   });
 
@@ -56,6 +68,7 @@ function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibid
     binRec: lotes.map((l) => (esPh(l) ? 0 : (binsRecibidosPorLote?.[l] || 0))),
     binsProc: lotes.map((l) => (esPh(l) ? 0 : bins(totKgLote[l], kgb))),
     kg: lotes.map((l) => (esPh(l) ? 0 : totKgLote[l])),
+    enPiso: lotes.map((l) => (esPh(l) ? 0 : restante[l] || 0)),   // lo que quedó en piso al final
     mermaPct: totMermaPct,
   };
 
@@ -74,6 +87,7 @@ export function generarPDFVaciadoHora(args) {
     ${D.lotes.map(() => `<td></td>`).join("")}
     ${f.binsProc.map((b) => `<td class="num">${b == null ? "" : fmt(b)}</td>`).join("")}
     ${f.kg.map((k) => `<td class="num">${k == null ? "" : fmt(k)}</td>`).join("")}
+    ${f.enPiso.map((p) => `<td class="num piso">${p == null ? "" : fmt(p)}</td>`).join("")}
     <td class="num">${f.pctMerma == null ? "" : f.pctMerma + "%"}</td>
   </tr>`).join("");
 
@@ -82,6 +96,7 @@ export function generarPDFVaciadoHora(args) {
     ${D.totales.binRec.map((b) => `<td class="num">${b || 0}</td>`).join("")}
     ${D.totales.binsProc.map((b) => `<td class="num">${fmt(b)}</td>`).join("")}
     ${D.totales.kg.map((k) => `<td class="num">${fmt(k)}</td>`).join("")}
+    ${D.totales.enPiso.map((p) => `<td class="num">${fmt(p)}</td>`).join("")}
     <td class="num">${D.totales.mermaPct}%</td>
   </tr>`;
 
@@ -106,6 +121,8 @@ export function generarPDFVaciadoHora(args) {
     .grid th.sub { background: #${COL.naranja}; font-weight: bold; text-align: center; }
     .grid td.hora { background: #fff; font-weight: bold; white-space: nowrap; }
     .grid td.hora.break { background: #${COL.naranja}; }
+    .grid th.grupo.piso { background: #${COL.salmon}; }
+    .grid td.piso { background: #fde9d9; font-weight: bold; }
     .grid tr.totales td { background: #${COL.amarillo}; font-weight: bold; }
     .abajo { margin-top: 16px; display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
     .resumen { font-size: 12px; }
@@ -130,10 +147,12 @@ export function generarPDFVaciadoHora(args) {
           <th class="grupo" colspan="${nL}">BINS RECIBIDOS</th>
           <th class="grupo" colspan="${nL}">BINS PROCESADOS</th>
           <th class="grupo" colspan="${nL}">KG PROCESADOS</th>
+          <th class="grupo piso" colspan="${nL}">FALTA EN PISO (kg)</th>
           <th class="sub" rowspan="2">% MERMA<br/>EN KG</th>
         </tr>
         <tr>
           <th class="sub">HORA</th>
+          ${D.lotes.map((l) => `<th class="sub">${esc(D.rotulo(l))}</th>`).join("")}
           ${D.lotes.map((l) => `<th class="sub">${esc(D.rotulo(l))}</th>`).join("")}
           ${D.lotes.map((l) => `<th class="sub">${esc(D.rotulo(l))}</th>`).join("")}
           ${D.lotes.map((l) => `<th class="sub">${esc(D.rotulo(l))}</th>`).join("")}
@@ -179,28 +198,29 @@ export async function generarExcelVaciadoHora(args) {
     if (num) cell.numFmt = "#,##0";
   };
 
-  // Layout de columnas: 1=HORA, luego nL (recibidos) + nL (procesados) + nL (kg) + 1 (%merma).
-  const cRecIni = 2, cProcIni = 2 + nL, cKgIni = 2 + 2 * nL, cMerma = 2 + 3 * nL;
+  // Layout: 1=HORA, luego nL (recibidos) + nL (procesados) + nL (kg) + nL (en piso) + 1 (%merma).
+  const cRecIni = 2, cProcIni = 2 + nL, cKgIni = 2 + 2 * nL, cPisoIni = 2 + 3 * nL, cMerma = 2 + 4 * nL;
   const totCols = cMerma;
   ws.columns = Array.from({ length: totCols }, (_, i) => ({ width: i === 0 ? 14 : 12 }));
 
-  // Fila 1: grupos (verde) + esquina + %merma (naranja, merge 1-2).
+  // Fila 1: grupos (verde; en piso salmón) + esquina + %merma (naranja, merge 1-2).
   set(1, 1, "", { bg: COL.verde });
-  const grupo = (cIni, txt) => {
+  const grupo = (cIni, txt, bg = COL.verde) => {
     ws.mergeCells(1, cIni, 1, cIni + nL - 1);
-    set(1, cIni, txt, { bg: COL.verde, bold: true });
-    for (let c = cIni + 1; c < cIni + nL; c++) { ws.getRow(1).getCell(c).border = borde; ws.getRow(1).getCell(c).fill = fill(COL.verde); }
+    set(1, cIni, txt, { bg, bold: true });
+    for (let c = cIni + 1; c < cIni + nL; c++) { ws.getRow(1).getCell(c).border = borde; ws.getRow(1).getCell(c).fill = fill(bg); }
   };
   grupo(cRecIni, "BINS RECIBIDOS");
   grupo(cProcIni, "BINS PROCESADOS");
   grupo(cKgIni, "KG PROCESADOS");
+  grupo(cPisoIni, "FALTA EN PISO (kg)", COL.salmon);
   ws.mergeCells(1, cMerma, 2, cMerma);
   set(1, cMerma, "% MERMA EN KG", { bg: COL.naranja, bold: true });
   ws.getRow(2).getCell(cMerma).border = borde;
 
   // Fila 2: HORA + sub-headers de lote (naranja).
   set(2, 1, "HORA", { bg: COL.naranja, bold: true });
-  [cRecIni, cProcIni, cKgIni].forEach((cIni) => {
+  [cRecIni, cProcIni, cKgIni, cPisoIni].forEach((cIni) => {
     D.lotes.forEach((l, i) => set(2, cIni + i, D.rotulo(l), { bg: COL.naranja, bold: true }));
   });
 
@@ -211,6 +231,7 @@ export async function generarExcelVaciadoHora(args) {
     D.lotes.forEach((_, i) => set(r, cRecIni + i, "", {}));          // bins recibidos por hora: en blanco
     f.binsProc.forEach((b, i) => set(r, cProcIni + i, b == null ? "" : b, { align: der, num: true }));
     f.kg.forEach((k, i) => set(r, cKgIni + i, k == null ? "" : k, { align: der, num: true }));
+    f.enPiso.forEach((p, i) => set(r, cPisoIni + i, p == null ? "" : p, { bg: p == null ? undefined : "fde9d9", align: der, num: true }));
     set(r, cMerma, f.pctMerma == null ? "" : f.pctMerma / 100, {});
     if (f.pctMerma != null) { const c = ws.getRow(r).getCell(cMerma); c.numFmt = "0%"; c.alignment = der; }
     r++;
@@ -221,6 +242,7 @@ export async function generarExcelVaciadoHora(args) {
   D.totales.binRec.forEach((b, i) => set(r, cRecIni + i, b || 0, { bg: COL.amarillo, bold: true, align: der, num: true }));
   D.totales.binsProc.forEach((b, i) => set(r, cProcIni + i, b, { bg: COL.amarillo, bold: true, align: der, num: true }));
   D.totales.kg.forEach((k, i) => set(r, cKgIni + i, k, { bg: COL.amarillo, bold: true, align: der, num: true }));
+  D.totales.enPiso.forEach((p, i) => set(r, cPisoIni + i, p, { bg: COL.amarillo, bold: true, align: der, num: true }));
   { const c = ws.getRow(r).getCell(cMerma); c.value = D.totales.mermaPct / 100; c.numFmt = "0%"; c.fill = fill(COL.amarillo); c.font = { bold: true, name: "Arial", size: 10 }; c.border = borde; c.alignment = der; }
   const rTot = r; r += 2;
 
