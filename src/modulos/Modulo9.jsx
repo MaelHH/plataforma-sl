@@ -5,7 +5,7 @@ import { useDatos, nuevoId, KG_POR_BIN_DEFAULT, DEFECTOS_QC, CATS_QC, MAX_MUESTR
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
 import { useAuth } from "../store/auth";
 import {
-  CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, netoPesada, netoHora, kgHorasDe, cubetasDe,
+  CAJAS_POR_PARRILLA, destareDe, kgRecibidosDe, recibidoProvisional, faltaPesoTrailer, netoPesada, netoHora, kgHorasDe, cubetasDe,
   taraPesada, kgVaciadosDe, kgAjustesDe, usaHoras, usoTotalSAP, tieneEnvioSAP, tienePendienteSAP, usaParcial, kgMermadosDe,
   kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, esHistoricoSAP, estaTerminado, kgSobranteCierre,
 } from "./helpers/empaque";
@@ -397,6 +397,20 @@ export default function Modulo9() {
     ? { ...m, vaciado: { ...baseVac(m), horas: fn(m.vaciado?.horas || []) } } : m)));
 
   const abrirPanelHoras = (m) => { setHorasMov(m); setPesForm({ bruto: "", tipo: CONTS[0].id, tara: CONTS[0].tara, num: "1", soporte: "", tara2: "", num2: "0" }); };
+
+  // Vaciar SIN recepción formal: el folio se "recibe" PROVISIONAL (entra a En Piso y ya se puede
+  // vaciar por hora). El recibido usa bruto − trailer hasta que afinen el destare en recepción.
+  // `recepcionPendiente` marca que todavía falta el destare para el neto exacto.
+  const activarYVaciar = (m) => {
+    if (m.recepcion?.estado !== "recibido") {
+      setMovimientos((prev) => prev.map((x) => (x.id === m.id
+        ? { ...x, recepcion: { ...(x.recepcion || {}), estado: "recibido", pesoRecibido: x.pesoBascula || "", recepcionPendiente: true, autoRecibido: new Date().toISOString() } }
+        : x)));
+      registrarEvento?.({ evento: "vaciado_activado_sin_recepcion", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+        detalle: "Se habilitó el vaciado sin recepción formal (recibido provisional; falta afinar el destare)." });
+    }
+    abrirPanelHoras(m);
+  };
   const cerrarPanelHoras = () => setHorasMov(null);
 
   const nuevaHora = (m) => {
@@ -559,6 +573,9 @@ export default function Modulo9() {
     const cub = cubetasDe(aju.kg);
     if (esHist(mv)) { setFaltanteError(`Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): ya se registró fuera de la app, no se manda a SAP desde aquí.`); return; }
     if (!aju.aprobacion) { setFaltanteError("Falta APROBAR el faltante antes de mandar a SAP."); return; }
+    // El faltante SÍ escribe en SAP; con un recibido provisional (falta trailer/destare) el "en piso"
+    // no es real todavía → se bloquea hasta afinar el peso. El vaciado por hora NO se afecta.
+    if (recibidoProvisional(mv)) { setFaltanteError("El recibido es PROVISIONAL (falta el peso del trailer o el destare). Afina el peso en recepción/movimiento antes de mandar el faltante a SAP."); return; }
     if (usoTotalSAP(mv)) { setFaltanteError("Este folio ya se mandó COMPLETO a SAP; no se puede mandar un faltante (evita doble conteo)."); return; }
     if (!ord) { setFaltanteError("Este folio no tiene orden de fabricación en SAP."); return; }
     if (!(cub > 0)) { setFaltanteError("La cantidad calculada es 0."); return; }
@@ -695,7 +712,8 @@ export default function Modulo9() {
   // ⚠️ [SAP] Al dar recepción se generará en SAP: una ORDEN DE PRODUCCIÓN (materia prima)
   // y una ORDEN DE COMPRA (flete, documentado). Integración pendiente — ver docs/CLAUDE.md.
   const confirmar = () => {
-    const recepcion = { ...form, estado: "recibido", confirmado: new Date().toLocaleString("es-MX") };
+    // Al confirmar la recepción formal se limpia la marca de "provisional" (ya se afinó el destare).
+    const recepcion = { ...form, estado: "recibido", confirmado: new Date().toLocaleString("es-MX"), recepcionPendiente: false };
     setMovimientos((prev) => prev.map((m) => (m.id === recibir.id ? { ...m, recepcion } : m)));
     setRecibir(null);
     setForm(null);
@@ -802,6 +820,7 @@ export default function Modulo9() {
     const horasAbiertas = (m.vaciado?.horas || []).filter((h) => h.estado === "abierta").length;
     const sinAprobar = (m.vaciado?.horas || []).filter((h) => h.estado === "cerrada" && !h.aprobacion && !h.sapEnvio).length;
     const avisos = [
+      recibidoProvisional(m) ? `• El recibido es PROVISIONAL (falta ${faltaPesoTrailer(m) ? "el peso del trailer" : "el destare"}): el ejote neto estimado aún no es exacto, así que la comparación de "cuánto faltó/sobró" no será confiable.` : "",
       horasAbiertas > 0 ? `• Hay ${horasAbiertas} hora(s) TODAVÍA ABIERTA(S): ciérralas antes, o lo que se capture después no se podrá mandar.` : "",
       sinAprobar > 0 ? `• Hay ${sinAprobar} hora(s) cerrada(s) SIN APROBAR: como están, no se pueden mandar a SAP.` : "",
       piso > 0 ? `• Quedan ${fmt(piso)} kg en piso (≈ ${cubetasDe(piso)} cubetas) que YA NO se van a vaciar ni a mandar a SAP.` : "",
@@ -1624,7 +1643,13 @@ export default function Modulo9() {
                             {/* A qué orden de fabricación va a caer (visible sin abrir nada) */}
                             <div className="mt-1">{lineaOrdenSAP(m)}</div>
                           </div>
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${estado.c}`}>{estado.i}{estado.t}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                            {/* PROVISIONAL: el recibido aún no es el ejote neto exacto (falta trailer o destare). */}
+                            {recibidoProvisional(m) && (
+                              <span title="El recibido todavía no es el ejote neto exacto — falta el peso del trailer o el destare. El vaciado por hora no se afecta." className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap bg-amber-50 text-amber-700 border-amber-300"><AlertTriangle size={13} /> {faltaPesoTrailer(m) ? "Falta peso del trailer" : "Recibido provisional"}</span>
+                            )}
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${estado.c}`}>{estado.i}{estado.t}</span>
+                          </div>
                         </div>
 
                         {/* Barra de flujo: el estado del folio de un vistazo */}
@@ -2012,9 +2037,14 @@ export default function Modulo9() {
                             </>
                           ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
-                          ) : (
-                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar recepción</button>
-                          )}
+                          ) : (<>
+                            {/* Vaciar SIN esperar recepción: el folio entra provisional y se puede vaciar ya.
+                                La recepción (destare + calidad) queda como paso opcional para afinar el neto. */}
+                            {puedeEditarVaciado && (
+                              <button onClick={() => activarYVaciar(m)} title="Empezar a vaciar por hora sin dar recepción formal (el peso queda provisional hasta afinar trailer/destare)" className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 inline-flex items-center gap-1"><Clock size={14} /> Vaciar por hora</button>
+                            )}
+                            <button onClick={() => abrirRecepcion(m)} className="text-xs border border-emerald-300 text-emerald-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-emerald-50">Dar recepción</button>
+                          </>)}
                       </div>
                     </div>
                   );
