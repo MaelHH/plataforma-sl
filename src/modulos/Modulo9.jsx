@@ -1008,42 +1008,34 @@ export default function Modulo9() {
     return Object.entries(acc).sort((a, b) => a[0].localeCompare(b[0]));
   })();
 
-  // Merma por hora del día (para la columna "% MERMA EN KG" del reporte de bins). El % de la hora
-  // = merma / (vaciado + merma) de esa hora.
-  const mermaPorHora = (() => {
-    const acc = {};
-    recibidos.forEach((m) => merDia(m).forEach((e) => {
-      const h = String(e.hora || "").split(":")[0] || "—";
-      acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0);
-    }));
-    return acc;
-  })();
-  // Bins RECIBIDOS por lote = conteo FÍSICO que capturan a mano (m.binsRecibidos), sumado por lote.
-  const binsRecibidosPorLote = (() => {
-    const acc = {};
-    recibidos.forEach((m) => {
-      const n = parseFloat(m.vaciado?.binsRecibidos) || 0;
-      if (n > 0) acc[loteDe(m)] = (acc[loteDe(m)] || 0) + n;
-    });
-    return acc;
-  })();
-  // EN PISO real por lote COMPLETO (inventario actual = suma de kgEnPisoDe de todos sus folios).
-  // Es el mismo "en piso" que se ve en las tarjetas; el reporte lo usa para reconstruir cuánto va
-  // quedando en piso hora a hora (arranca en el inventario del inicio del día y baja).
-  const enPisoPorLote = (() => {
-    const acc = {};
-    recibidos.forEach((m) => { acc[loteDe(m)] = (acc[loteDe(m)] || 0) + kgEnPisoDe(m); });
-    return acc;
-  })();
-  // Merma por HORA y LOTE (para descontarla del "en piso" hora a hora en el reporte).
-  const mermaHoraLote = (() => {
-    const acc = {};
-    recibidos.forEach((m) => merDia(m).forEach((e) => {
-      const h = String(e.hora || "").split(":")[0] || "—";
-      if (!acc[h]) acc[h] = {};
-      acc[h][loteDe(m)] = (acc[h][loteDe(m)] || 0) + (parseFloat(e.kg) || 0);
-    }));
-    return acc;
+  // ── Datos POR FOLIO para el reporte (jefes: una tabla por folio, NO se mezclan folios) ──
+  // Cada folio lleva su propio vaciado por hora (bins + kg), sus bins recibidos y lo que le va
+  // FALTANDO EN PISO a ESE folio. Solo se incluyen los folios con actividad (vaciado o merma) el
+  // día seleccionado. Reusa evDia/pesadasDia/ajustesDia/merDia (mismos números que las tarjetas).
+  const foliosReporte = (() => {
+    const porHoraDe = (arr) => {
+      const acc = {};
+      arr.forEach((e) => {
+        const h = String(e.hora || "").split(":")[0] || "—";
+        acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0);
+      });
+      return acc;
+    };
+    return recibidos.map((m) => {
+      const vacPorHora = porHoraDe([...evDia(m), ...pesadasDia(m), ...ajustesDia(m)]);
+      const merPorHora = porHoraDe(merDia(m));
+      const totVac = Object.values(vacPorHora).reduce((a, b) => a + b, 0);
+      const totMer = Object.values(merPorHora).reduce((a, b) => a + b, 0);
+      return {
+        folio: m.folio || m.remision || m.id,
+        lote: loteDe(m),
+        remision: m.remision || "",
+        binsRecibidos: parseFloat(m.vaciado?.binsRecibidos) || 0,
+        recibido: kgRecibidosDe(m),
+        enPiso: kgEnPisoDe(m),
+        vacPorHora, merPorHora, totVac, totMer,
+      };
+    }).filter((f) => f.totVac > 0 || f.totMer > 0);
   })();
 
   // Inventario y merma por lote (sobre los recibidos del día).
@@ -1490,7 +1482,7 @@ export default function Modulo9() {
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div className="text-[10px] font-semibold text-gray-400 uppercase">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · <b>bins = kg netos ÷ {kgPorBin}</b></span></div>
               {porHora.length > 0 && (() => {
-                const args = { dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote };
+                const args = { dia: diaReporte, kgPorBin, foliosReporte, totKgVacDia };
                 return (
                   <div className="flex items-center gap-2">
                     <button onClick={() => generarExcelVaciadoHora(args)}
