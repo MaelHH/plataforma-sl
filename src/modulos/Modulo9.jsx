@@ -916,6 +916,7 @@ export default function Modulo9() {
     .filter((m) => !fDestino || m.destino === fDestino)
     .filter(buscaVac);
   const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
+  const atendido = (m) => m.recepcion?.estado === "recibido" || m.recepcion?.estado === "rechazado";
   // "Recibidos" = REGISTRO de todo lo que llegó y NO se rechazó (pendientes de entrada + ya
   // recibidos), para llevar el historial de cada flete: al dar recepción NO desaparecen. Se ordena
   // con los que faltan dar entrada primero, luego los recibidos por fecha (más reciente arriba).
@@ -927,11 +928,14 @@ export default function Modulo9() {
       if (pa !== pb) return pa - pb;
       return String(b.fecha || "").localeCompare(String(a.fecha || ""));
     });
+  // "Historial por Recibir" = recibidos + rechazados. Aquí viven los YA recibidos con su botón
+  // "Mandar a SAP" (envío TOTAL de una), para cuando NO se hace el vaciado por hora.
+  const historialArr = movimientos.filter(atendido);
   const conNovedad = recibidos.filter((m) => m.recepcion?.condicion === "con_novedad");
   const qLow = q.trim().toLowerCase();
-  // Pestaña "Recibidos" → el registro; "historial" (ahora Rechazados) → solo los rechazados.
-  const lista = (tabRec === "pendientes" ? pendientes : rechazados).filter((m) => {
+  const lista = (tabRec === "pendientes" ? pendientes : historialArr).filter((m) => {
     if (tabRec === "pendientes" && fTipo && (m.recepcion?.estado || "pendiente") !== fTipo) return false;
+    if (tabRec === "historial" && fTipo && (m.recepcion?.estado || "") !== fTipo) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (qLow) {
       const campos = [m.folio, m.remision, m.rancho, m.lote, m.linea, m.chofer, m.origen, m.destino, m.viaje];
@@ -1533,7 +1537,7 @@ export default function Modulo9() {
         // OCULTO (no se usa por ahora): pestaña "Cliente Directo". La lógica y los datos siguen
         // intactos; solo se quita el botón. Para reactivarla, descomenta esta línea:
         // { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
-        { key: "historial", label: "Rechazados", count: rechazados.length },
+        { key: "historial", label: "Historial por Recibir", count: historialArr.length },
         { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
         { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
       ]} />
@@ -1913,7 +1917,7 @@ export default function Modulo9() {
       ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Recibidos — registro de fletes que llegaron" : "Fletes rechazados"} ({lista.length})</span>
+          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Recibidos — registro de fletes que llegaron" : "Historial por Recibir — recibidos (mandar a SAP de una) y rechazados"} ({lista.length})</span>
         </div>
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
@@ -1924,6 +1928,10 @@ export default function Modulo9() {
             {tabRec === "pendientes" && (
               <div className="w-full sm:w-48"><SearchSelect className={INP} value={fTipo} onChange={setFTipo} placeholder="Estado: todos"
                 options={[{ value: "", label: "Estado: todos" }, { value: "pendiente", label: "Falta dar entrada" }, { value: "recibido", label: "Ya recibidos" }]} /></div>
+            )}
+            {tabRec === "historial" && (
+              <div className="w-full sm:w-48"><SearchSelect className={INP} value={fTipo} onChange={setFTipo} placeholder="Tipo: todos"
+                options={[{ value: "", label: "Tipo: todos" }, { value: "recibido", label: "Recepción" }, { value: "rechazado", label: "Rechazo" }]} /></div>
             )}
             {hayFiltros && <button onClick={() => { setQ(""); setFTipo(""); setFDestino(""); }} className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 whitespace-nowrap">Limpiar filtros</button>}
             <button onClick={exportarExcel} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-green-700 inline-flex items-center justify-center gap-1 whitespace-nowrap w-full sm:w-auto"><FileText size={14} /> Excel{hayFiltros ? " (filtrado)" : ""}</button>
