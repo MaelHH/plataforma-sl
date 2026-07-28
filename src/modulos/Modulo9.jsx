@@ -1586,9 +1586,12 @@ export default function Modulo9() {
                     const des = destareDe(m); // desglose de destare (ejote)
                     // kg recibido a mostrar en el input: lo capturado, o el ejote neto (si hay
                     // destare), o el peso de la recepción.
+                    // El número grande de RECIBIDO muestra SIEMPRE lo que de verdad se usa (kgRecibidosDe):
+                    // ejote neto si hay destare, o bruto − trailer si es provisional. Así cuadra con el
+                    // "en piso" de abajo (antes mostraba el bruto pelón y no coincidía).
                     const kgRecVal = (m.vaciado && "kgRecibidos" in m.vaciado)
                       ? m.vaciado.kgRecibidos
-                      : (rcp.destareAplicar ? (des.neto || "") : (rcp.pesoRecibido || m.pesoBascula || ""));
+                      : (rcp.destareAplicar ? (des.neto || "") : (Math.round(kgRecibidosDe(m)) || ""));
                     // Barra de flujo (mismos helpers, solo lectura).
                     const enviadoKg = Math.min(kgEnviadosSAP(m), vacK);
                     const sinEnviarKg = Math.max(0, vacK - enviadoKg);
@@ -1655,7 +1658,9 @@ export default function Modulo9() {
                               <span className="inline-flex items-center gap-1">
                                 {rcp.destareAplicar
                                   ? <>bruto {fmt(des.bruto)} − material {fmt(des.taraTotal)} = <b className={des.bruto > 0 && des.taraTotal >= des.bruto ? "text-red-600" : "text-green-700"}>ejote {fmt(des.neto)}</b></>
-                                  : <>peso recepción: {fmt(parseFloat(rcp.pesoRecibido) || 0)} kg</>}
+                                  : (des.trailer > 0
+                                      ? <>bruto {fmt(des.brutoBascula)} − trailer {fmt(des.trailer)} = {fmt(des.bruto)} <span className="text-amber-600">· falta destare</span></>
+                                      : <>peso recepción: {fmt(des.brutoBascula)} kg <span className="text-amber-600">· falta trailer y destare</span></>)}
                                 {/* Bins RECIBIDOS: conteo FÍSICO de bins que llegaron (para el reporte de jefes). */}
                                 <span className="text-gray-400">· bins rec.</span>
                                 <input type="number" min="0" value={m.vaciado?.binsRecibidos ?? ""} onChange={(e) => setRecibido(m.id, "binsRecibidos", e.target.value)} placeholder="—"
