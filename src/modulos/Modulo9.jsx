@@ -2149,7 +2149,9 @@ export default function Modulo9() {
               {(() => {
                 const cajas = parseFloat(form.bultosRecibidos) || 0;
                 const parrillas = (parseFloat(form.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
-                const bruto = parseFloat(form.pesoRecibido) || 0;
+                const brutoBascula = parseFloat(form.pesoRecibido) || 0;
+                const trailer = parseFloat(recibir?.pesoTrailer) || 0;     // viene del movimiento
+                const bruto = Math.max(0, brutoBascula - trailer);          // carga (taras + fruta), sin trailer
                 const pK = parseFloat(form.destareParrillaKg) || 0;
                 const cK = parseFloat(form.destareCajaKg) || 0;
                 const taraP = parrillas * pK, taraC = cajas * cK, taraT = taraP + taraC;
@@ -2163,7 +2165,15 @@ export default function Modulo9() {
                         <div><label className={LBL}>Peso por caja (kg)</label><input type="number" step="0.01" className={INP} value={form.destareCajaKg} onChange={(e) => upd("destareCajaKg", e.target.value)} /></div>
                       </div>
                       <div className="text-xs bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
-                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso bruto (recibido)</span><b className="text-gray-800">{fmt(bruto)} kg</b></div>
+                        <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso de báscula (bruto, con trailer)</span><b className="text-gray-800">{fmt(brutoBascula)} kg</b></div>
+                        {trailer > 0 ? (
+                          <>
+                            <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso del trailer vacío</span><span className="text-red-600">− {fmt(trailer)} kg</span></div>
+                            <div className="flex justify-between px-3 py-1.5 bg-gray-50"><span className="text-gray-700 font-semibold">Carga (bruto − trailer)</span><b className="text-gray-800">{fmt(bruto)} kg</b></div>
+                          </>
+                        ) : (
+                          <div className="px-3 py-1.5 text-[11px] text-amber-700 inline-flex items-center gap-1"><AlertTriangle size={13} /> Falta el <b>peso del trailer</b> (se captura en el movimiento) — el neto es PROVISIONAL.</div>
+                        )}
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Parrillas: {parrillas} × {pK} kg</span><span className="text-red-600">− {fmt(taraP)} kg</span></div>
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Cajas: {fmt(cajas)} × {cK} kg</span><span className="text-red-600">− {fmt(taraC)} kg</span></div>
                         <div className="flex justify-between px-3 py-1.5"><span className="text-gray-700 font-semibold">Material de empaque (tara)</span><b className="text-red-700">− {fmt(taraT)} kg</b></div>

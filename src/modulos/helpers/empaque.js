@@ -9,10 +9,20 @@
 // recepción en Modulo9, por eso se exporta.
 export const CAJAS_POR_PARRILLA = 64;
 
-// Destare de una recepción: { aplicar, bruto, parrillas, cajas, taraParrillas, taraCajas, taraTotal, neto }.
+// Peso del trailer vacío (se captura en el movimiento). Se resta del bruto de báscula para llegar
+// a la carga real (taras + fruta) ANTES del destare de empaque.
+export const pesoTrailerDe = (m) => parseFloat(m?.pesoTrailer) || 0;
+// ¿Ya tenemos el peso del trailer? Sin él, el recibido es PROVISIONAL (trae el peso del trailer).
+export const faltaPesoTrailer = (m) => (parseFloat(m?.pesoBascula) || 0) > 0 && pesoTrailerDe(m) <= 0;
+
+// Destare de una recepción: { aplicar, bruto, trailer, cargaBruta, parrillas, cajas, taraParrillas,
+// taraCajas, taraTotal, neto }. Cadena: bruto − trailer − (parrillas+cajas) = ejote neto.
 export const destareDe = (m) => {
   const r = m.recepcion || {};
-  const bruto = (parseFloat(r.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+  // Bruto de báscula (con trailer). Se le resta el trailer para tener la carga real.
+  const brutoBascula = (parseFloat(r.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+  const trailer = pesoTrailerDe(m);
+  const bruto = Math.max(0, brutoBascula - trailer);   // carga (taras + fruta), ya sin el trailer
   const cajas = parseFloat(r.bultosRecibidos) || 0;
   // parrillas: las capturadas; si no hay, se estiman por la razón cajas/parrilla.
   const parrillas = (parseFloat(r.parrillasRecibidas) || 0) || (cajas ? Math.round(cajas / CAJAS_POR_PARRILLA) : 0);
@@ -23,14 +33,25 @@ export const destareDe = (m) => {
   const taraCajas = cajas * cK;
   const taraTotal = taraParrillas + taraCajas;
   const neto = Math.max(0, bruto - taraTotal);
-  return { aplicar: !!r.destareAplicar, bruto, parrillas, cajas, parrillaKg: pK, cajaKg: cK, taraParrillas, taraCajas, taraTotal, neto };
+  return { aplicar: !!r.destareAplicar, brutoBascula, trailer, bruto, cargaBruta: bruto, parrillas, cajas, parrillaKg: pK, cajaKg: cK, taraParrillas, taraCajas, taraTotal, neto };
 };
-// kg recibido para vaciar: el override manual, o el ejote NETO si hay destare, o el bruto
-// (peso de recepción / báscula).
+// kg recibido para vaciar (el objetivo / ejote neto ESTIMADO):
+//   1) el override manual, si lo pusieron;
+//   2) el ejote neto = bruto − trailer − destare, si hay destare;
+//   3) si no, la carga = bruto − trailer (provisional, todavía trae taras);
+//   4) si tampoco hay trailer, el bruto pelón (más provisional aún).
+// El vaciado por hora NO depende de esto: es solo el objetivo contra el que se compara al final.
 export const kgRecibidosDe = (m) => {
   if (m.vaciado && "kgRecibidos" in m.vaciado) return parseFloat(m.vaciado.kgRecibidos) || 0;
   if (m.recepcion?.destareAplicar) return destareDe(m).neto;
-  return (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+  const brutoBascula = (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+  return Math.max(0, brutoBascula - pesoTrailerDe(m));
+};
+// ¿El recibido de este folio es PROVISIONAL? (falta el trailer o falta el destare para el neto exacto)
+// Se usa para avisar y para no mandar el FALTANTE a SAP con un número que aún no es real.
+export const recibidoProvisional = (m) => {
+  if (m?.vaciado && "kgRecibidos" in m.vaciado) return false;   // lo fijaron a mano → definitivo
+  return faltaPesoTrailer(m) || !m?.recepcion?.destareAplicar;
 };
 // ── Vaciado POR HORA ──
 // Cada pesada se pesa CON su empaque, y muchas veces hay DOS cosas que descontar: los

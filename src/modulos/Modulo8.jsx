@@ -314,7 +314,7 @@ export default function Modulo8() {
     marcaModelo: "", placaTracto: "", economicoCaja: "", placaCaja: "",
     telOperador: "", inicioPreenfriado: "", terminoPreenfriado: "", flete: "",
     // extra
-    remision: "", pesoBascula: "",
+    remision: "", pesoBascula: "", pesoTrailer: "",
     responsable: "Oscar",
   };
   const [form, setForm] = useState(formVacio);
@@ -833,10 +833,27 @@ export default function Modulo8() {
                 <button onClick={addCargaItem} className="mt-2 text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg font-medium">+ Agregar fila</button>
               </div>
 
-              {/* Remisión + báscula */}
+              {/* Remisión + báscula (BRUTO con trailer) + peso del trailer vacío */}
               <div className="grid grid-cols-2 gap-2">
                 <div><label className={LBL}>Remisión</label><input className={INP} value={form.remision} onChange={(e) => setForm((f) => ({ ...f, remision: e.target.value }))} /></div>
-                <div><label className={LBL}>Peso de báscula (kg)</label><input className={INP} value={form.pesoBascula} onChange={(e) => setForm((f) => ({ ...f, pesoBascula: e.target.value }))} placeholder="kg" /></div>
+                <div><label className={LBL}>Peso de báscula (kg) <span className="text-gray-400 font-normal">· bruto, con trailer</span></label><input className={INP} value={form.pesoBascula} onChange={(e) => setForm((f) => ({ ...f, pesoBascula: e.target.value }))} placeholder="kg" /></div>
+              </div>
+              {/* PESO DEL TRAILER VACÍO: se resta del bruto para llegar a la carga. Se puede dejar en
+                  blanco y capturar DESPUÉS (el trailer se pesa vacío hasta que se descarga). */}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
+                  <label className={LBL}>Peso del trailer vacío (kg)</label>
+                  <input type="number" className={INP} value={form.pesoTrailer} onChange={(e) => setForm((f) => ({ ...f, pesoTrailer: e.target.value }))} placeholder="se puede capturar después" />
+                </div>
+                <div className="flex items-end pb-1">
+                  {(() => {
+                    const bruto = parseFloat(form.pesoBascula) || 0;
+                    const trailer = parseFloat(form.pesoTrailer) || 0;
+                    if (!bruto) return <span className="text-[11px] text-gray-400">Captura el bruto de báscula.</span>;
+                    if (!trailer) return <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1"><AlertTriangle size={13} /> Falta el peso del trailer (se puede poner luego)</span>;
+                    return <span className="text-[11px] text-gray-600">Carga (bruto − trailer): <b className="text-green-700">{(bruto - trailer).toLocaleString()} kg</b> <span className="text-gray-400">· falta el destare para el ejote neto</span></span>;
+                  })()}
+                </div>
               </div>
 
               {/* Transporte */}
