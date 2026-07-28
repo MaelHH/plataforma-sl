@@ -842,13 +842,6 @@ export default function Modulo9() {
       detalle: `Vaciado reabierto por ${usuarioActual?.full_name || "—"}` });
   };
 
-  const devolverManifiesto = async (id) => {
-    if (!(await dlg.confirm({ title: "Devolver manifiesto", message: "¿Devolver este manifiesto a 'Vaciado a Empaque'? Se quitarán los vaciados y mermas registrados y el piso volverá completo.", confirmText: "Devolver", danger: true }))) return;
-    setMovimientos((prev) => prev.map((m) => (m.id === id
-      ? { ...m, vaciado: { ...baseVac(m), eventos: [], mermas: [], terminado: undefined } }
-      : m)));
-  };
-
   // ── Rezaga suelta (no viene de manifiesto) → Historial Mermado ──
   const abrirRezaga = () => setRezagaForm({ fecha: hoyISO(), hora: ahoraHM(), tipo: "Rezaga", origen: "Cuarto frío", kg: "", comentario: "" });
   const updRezaga = (campo, val) => setRezagaForm((f) => ({ ...f, [campo]: val }));
@@ -1794,13 +1787,16 @@ export default function Modulo9() {
                                   : <>Captura los kg recibidos para empezar.</>}
                           </span>
                           <div className="flex items-center gap-2 flex-wrap">
-                            {term ? (<>
-                              <button onClick={() => reabrirVaciado(m)} title={puedeAprobar ? "Reabrir el folio (vuelve a 'en piso')" : "Solo la encargada puede reabrir un folio terminado"}
+                            {term ? (
+                              // Un folio TERMINADO solo se puede REABRIR (para vaciar lo que faltó o kilos
+                              // sin pesar) — no borra nada, solo lo saca del archivado, y solo la encargada.
+                              // Se QUITÓ "Devolver": borraba vaciados/mermas y, si algo ya se mandó a SAP,
+                              // dejaba la app fuera de sincronía con SAP. "Lo que pasó, ya pasó."
+                              <button onClick={() => reabrirVaciado(m)} title={puedeAprobar ? "Reabrir el folio (vuelve a 'en piso' para vaciar lo que faltó; no borra nada)" : "Solo la encargada puede reabrir un folio terminado"}
                                 className={`text-xs px-3 py-1.5 border rounded-lg font-medium whitespace-nowrap inline-flex items-center gap-1 ${puedeAprobar ? "border-amber-300 text-amber-700 hover:bg-amber-50" : "border-gray-200 text-gray-300 cursor-not-allowed"}`}>
                                 <RotateCcw size={14} /> Reabrir
                               </button>
-                              <button onClick={() => devolverManifiesto(m.id)} title="Devolver a 'Vaciado a Empaque' (deshace vaciados y mermas)" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg font-medium hover:bg-gray-50 whitespace-nowrap"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Devolver</span></button>
-                            </>) : recK > 0 && (!puedeEditarVaciado ? (
+                            ) : recK > 0 && (!puedeEditarVaciado ? (
                               <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
                             ) : (<>
                               {pisoK > 0 && (
