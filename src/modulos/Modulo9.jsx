@@ -1005,11 +1005,12 @@ export default function Modulo9() {
     });
     return acc;
   })();
-  // RECIBIDO por lote (kg neto): el objetivo, para calcular en el reporte cuánto va quedando EN
-  // PISO después de cada hora (recibido − vaciado acumulado − merma acumulada).
-  const recibidoPorLote = (() => {
+  // EN PISO real por lote COMPLETO (inventario actual = suma de kgEnPisoDe de todos sus folios).
+  // Es el mismo "en piso" que se ve en las tarjetas; el reporte lo usa para reconstruir cuánto va
+  // quedando en piso hora a hora (arranca en el inventario del inicio del día y baja).
+  const enPisoPorLote = (() => {
     const acc = {};
-    recibidos.forEach((m) => { acc[loteDe(m)] = (acc[loteDe(m)] || 0) + kgRecibidosDe(m); });
+    recibidos.forEach((m) => { acc[loteDe(m)] = (acc[loteDe(m)] || 0) + kgEnPisoDe(m); });
     return acc;
   })();
   // Merma por HORA y LOTE (para descontarla del "en piso" hora a hora en el reporte).
@@ -1467,7 +1468,7 @@ export default function Modulo9() {
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div className="text-[10px] font-semibold text-gray-400 uppercase">Vaciado por hora <span className="text-gray-300 normal-case">· del día seleccionado · <b>bins = kg netos ÷ {kgPorBin}</b></span></div>
               {porHora.length > 0 && (() => {
-                const args = { dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, recibidoPorLote, mermaHoraLote };
+                const args = { dia: diaReporte, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote };
                 return (
                   <div className="flex items-center gap-2">
                     <button onClick={() => generarExcelVaciadoHora(args)}

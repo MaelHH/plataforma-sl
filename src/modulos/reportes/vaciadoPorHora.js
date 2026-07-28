@@ -17,7 +17,7 @@ const BREAK_HOURS = [14];   // 02:00 A 03:00 (comida) → naranja, como el Excel
 const COL = { verde: "a9c48d", naranja: "f6a500", amarillo: "ffff00", salmon: "f4b183", verdeClaro: "cfe2b0" };
 
 // Prepara TODO lo que necesitan ambas salidas a partir de los datos del módulo.
-function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, recibidoPorLote, mermaHoraLote }) {
+function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote }) {
   const kgb = parseFloat(kgPorBin) || 260;
   const reales = lotesHora.length ? lotesHora : [];
   const lotes = [...reales];
@@ -34,9 +34,15 @@ function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibid
   const franja = (h) => `${h12(h)}:00 A ${h12((h + 1) % 24)}:00`;
   const kgLoteHora = (v, l) => (esPh(l) ? 0 : (v?.lotes?.[l] || 0));
 
-  // "En piso" que va quedando por lote: arranca en el recibido y baja cada hora (vaciado + merma).
+  // "En piso" que va quedando por lote. El inventario REAL al final del día es `enPisoPorLote`; el
+  // running arranca en (inventario final + lo que se vació/mermó HOY) y baja cada hora, terminando
+  // exactamente en el inventario real. Así el "falta en piso" cuadra con las tarjetas.
   const restante = {};
-  reales.forEach((l) => { restante[l] = recibidoPorLote?.[l] || 0; });
+  reales.forEach((l) => {
+    const vacHoy = porHora.reduce((a, [, v]) => a + (v.lotes[l] || 0), 0);
+    const merHoy = horas.reduce((a, h) => a + ((mermaHoraLote?.[String(h)]?.[l]) || 0), 0);
+    restante[l] = (enPisoPorLote?.[l] || 0) + vacHoy + merHoy;
+  });
   const filas = horas.map((h) => {
     const v = mapaH[String(h)];
     const kgHora = v?.kg || 0;
@@ -72,7 +78,12 @@ function _preparar({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibid
     mermaPct: totMermaPct,
   };
 
-  return { dia, kgb, lotes, reales, esPh, rotulo, horas, filas, totales, totKgLote, totBinsProc, totKgVacDia };
+  // Total EN PISO (todos los lotes) para el resumen de abajo, en kg y en bins.
+  const totEnPisoKg = reales.reduce((a, l) => a + (enPisoPorLote?.[l] || 0), 0);
+  const totBinsPiso = bins(totEnPisoKg, kgb);
+  const enPisoLote = enPisoPorLote || {};
+
+  return { dia, kgb, lotes, reales, esPh, rotulo, horas, filas, totales, totKgLote, totBinsProc, totKgVacDia, totBinsPiso, totEnPisoKg, enPisoLote };
 }
 
 // ─────────────────────────── PDF (window.print) ───────────────────────────
@@ -100,9 +111,10 @@ export function generarPDFVaciadoHora(args) {
     <td class="num">${D.totales.mermaPct}%</td>
   </tr>`;
 
+  // Bloque de abajo: por lote, bins procesados Y lo que FALTA EN PISO (kg) del lote completo.
   const filasAbajo = D.reales.map((l) =>
-    `<tr><td class="lote">${esc(String(l).toUpperCase())}</td><td class="num">${fmt(bins(D.totKgLote[l], D.kgb))}</td></tr>`).join("")
-    + Array.from({ length: Math.max(0, 4 - D.reales.length) }, () => `<tr><td class="lote">0</td><td class="num">0</td></tr>`).join("");
+    `<tr><td class="lote">${esc(String(l).toUpperCase())}</td><td class="num">${fmt(bins(D.totKgLote[l], D.kgb))}</td><td class="num piso">${fmt(D.enPisoLote[l] || 0)}</td></tr>`).join("")
+    + Array.from({ length: Math.max(0, 4 - D.reales.length) }, () => `<tr><td class="lote">0</td><td class="num">0</td><td class="num piso">0</td></tr>`).join("");
 
   win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8" />
   <title>Vaciado por hora — ${esc(D.dia || "")}</title>
@@ -132,6 +144,8 @@ export function generarPDFVaciadoHora(args) {
     .resumen td.lote { font-weight: bold; }
     .resumen td.num { text-align: right; font-weight: bold; min-width: 70px; }
     .resumen tr.tot-dia td.lbl { background: #${COL.salmon}; }
+    .resumen td.hdr.piso { background: #${COL.salmon}; }
+    .resumen td.piso { background: #fde9d9; }
     .kg-sl { background: #${COL.amarillo}; border: 1px solid #000; padding: 6px 14px; font-size: 12px; font-weight: bold; }
     @media print { body { margin: 0; } .noprint { display: none; } }
     .noprint { margin: 10px 0; }
@@ -162,10 +176,10 @@ export function generarPDFVaciadoHora(args) {
     </table>
     <div class="abajo">
       <table class="resumen">
-        <tr><td class="hdr" colspan="2">TOTAL</td></tr>
-        <tr><td class="lbl">BINS PISO</td><td class="num">0</td></tr>
+        <tr><td class="hdr">TOTAL</td><td class="hdr">BINS PROC.</td><td class="hdr piso">FALTA PISO (kg)</td></tr>
+        <tr><td class="lbl">BINS EN PISO</td><td class="num">${fmt(D.totBinsPiso)}</td><td class="num piso">${fmt(D.totEnPisoKg)}</td></tr>
         ${filasAbajo}
-        <tr class="tot-dia"><td class="lbl">TOTAL DEL DÍA</td><td class="num">${fmt(D.totBinsProc)}</td></tr>
+        <tr class="tot-dia"><td class="lbl">TOTAL DEL DÍA</td><td class="num">${fmt(D.totBinsProc)}</td><td class="num piso">${fmt(D.totEnPisoKg)}</td></tr>
       </table>
       <div class="kg-sl">KG PROCESADOS DE SL : ${fmt(D.totKgVacDia)}</div>
     </div>
@@ -246,12 +260,20 @@ export async function generarExcelVaciadoHora(args) {
   { const c = ws.getRow(r).getCell(cMerma); c.value = D.totales.mermaPct / 100; c.numFmt = "0%"; c.fill = fill(COL.amarillo); c.font = { bold: true, name: "Arial", size: 10 }; c.border = borde; c.alignment = der; }
   const rTot = r; r += 2;
 
-  // Bloque de abajo (TOTAL / BINS PISO / lotes / TOTAL DEL DÍA).
-  set(r, 1, "TOTAL", { bg: COL.verde, bold: true, align: { horizontal: "left" } }); set(r, 2, "", { bg: COL.verde }); r++;
-  set(r, 1, "BINS PISO", { bg: COL.verdeClaro, bold: true, align: { horizontal: "left" } }); set(r, 2, 0, { bold: true, align: der, num: true }); r++;
-  D.reales.forEach((l) => { set(r, 1, String(l).toUpperCase(), { bold: true, align: { horizontal: "left" } }); set(r, 2, bins(D.totKgLote[l], D.kgb), { bold: true, align: der, num: true }); r++; });
-  for (let k = D.reales.length; k < 4; k++) { set(r, 1, "0", { bold: true, align: { horizontal: "left" } }); set(r, 2, 0, { bold: true, align: der, num: true }); r++; }
-  set(r, 1, "TOTAL DEL DÍA", { bg: COL.salmon, bold: true, align: { horizontal: "left" } }); set(r, 2, D.totBinsProc, { bg: COL.salmon, bold: true, align: der, num: true }); r += 2;
+  // Bloque de abajo (TOTAL / BINS PISO / por lote: bins proc. + falta en piso kg / TOTAL DEL DÍA).
+  set(r, 1, "TOTAL", { bg: COL.verde, bold: true, align: { horizontal: "left" } });
+  set(r, 2, "BINS PROC.", { bg: COL.verde, bold: true }); set(r, 3, "FALTA PISO (kg)", { bg: COL.salmon, bold: true }); r++;
+  set(r, 1, "BINS EN PISO", { bg: COL.verdeClaro, bold: true, align: { horizontal: "left" } });
+  set(r, 2, D.totBinsPiso, { bold: true, align: der, num: true }); set(r, 3, D.totEnPisoKg, { bg: "fde9d9", bold: true, align: der, num: true }); r++;
+  D.reales.forEach((l) => {
+    set(r, 1, String(l).toUpperCase(), { bold: true, align: { horizontal: "left" } });
+    set(r, 2, bins(D.totKgLote[l], D.kgb), { bold: true, align: der, num: true });
+    set(r, 3, D.enPisoLote[l] || 0, { bg: "fde9d9", bold: true, align: der, num: true }); r++;
+  });
+  for (let k = D.reales.length; k < 4; k++) { set(r, 1, "0", { bold: true, align: { horizontal: "left" } }); set(r, 2, 0, { bold: true, align: der, num: true }); set(r, 3, 0, { bg: "fde9d9", bold: true, align: der, num: true }); r++; }
+  set(r, 1, "TOTAL DEL DÍA", { bg: COL.salmon, bold: true, align: { horizontal: "left" } });
+  set(r, 2, D.totBinsProc, { bg: COL.salmon, bold: true, align: der, num: true });
+  set(r, 3, D.totEnPisoKg, { bg: COL.salmon, bold: true, align: der, num: true }); r += 2;
 
   // KG PROCESADOS DE SL (amarillo).
   set(r, 1, "KG PROCESADOS DE SL", { bg: COL.amarillo, bold: true, align: { horizontal: "left" } });
