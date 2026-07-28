@@ -1819,10 +1819,6 @@ export default function Modulo9() {
                             </>) : recK > 0 && (!puedeEditarVaciado ? (
                               <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
                             ) : (<>
-                              {/* Completar el destare (parrillas/cajas) aquí mismo → ejote neto exacto.
-                                  Resalta si el recibido es provisional (falta afinar el neto). */}
-                              <button onClick={() => abrirDestare(m)} title="Capturar parrillas y cajas para calcular el ejote neto exacto (aquí mismo, sin abrir recepción)"
-                                className={`inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ${recibidoProvisional(m) ? "bg-amber-500 text-white hover:bg-amber-600" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}><FlaskConical size={14} /> {recibidoProvisional(m) ? "Completar destare" : "Destare"}</button>
                               {pisoK > 0 && (
                                 <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                               )}
@@ -2066,9 +2062,12 @@ export default function Modulo9() {
                             </>
                           ) : rechazado ? (
                             <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
-                          ) : (
+                          ) : (<>
+                            {/* El DESTARE (parrillas/cajas → ejote neto) se hace aquí, en Recibidos, junto
+                                con muestreo/inspección. Luego el folio pasa a "Vaciado a Empaque". */}
+                            <button onClick={() => abrirDestare(m)} className="text-xs border border-amber-300 text-amber-700 px-3 py-1.5 rounded-lg font-semibold hover:bg-amber-50 inline-flex items-center gap-1"><FlaskConical size={14} /> Destare</button>
                             <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar recepción</button>
-                          )}
+                          </>)}
                       </div>
                     </div>
                   );
