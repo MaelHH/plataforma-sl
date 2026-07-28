@@ -433,6 +433,28 @@ export default function Modulo9() {
   };
   const reabrirHoraFn = (m, horaId) =>
     setHoras(m.id, (hs) => hs.map((h) => (h.id === horaId && h.estado === "cerrada" ? { ...h, estado: "abierta", cerradaEn: undefined, aprobacion: undefined } : h)));
+  // Cancelar (borrar) una hora abierta por error. Bloqueada si ya se mandó/está pendiente en SAP
+  // (borrarla desincronizaría). Si tiene pesadas, se avisa antes (se pierden).
+  const cancelarHoraFn = async (m, horaId) => {
+    const h = (m.vaciado?.horas || []).find((x) => x.id === horaId);
+    if (!h) return;
+    if (h.sapEnvio || h.sapPendiente) {
+      await dlg.alerta({ title: "No se puede cancelar", message: "Esta hora ya tiene envío a SAP (o pendiente de confirmar). Cancelarla dejaría la app fuera de sincronía con SAP." });
+      return;
+    }
+    const nPes = (h.pesadas || []).length;
+    const ok = await dlg.confirm({
+      title: "Cancelar hora",
+      message: nPes > 0
+        ? `Esta hora tiene ${nPes} pesada(s) (${fmt(netoHora(h))} kg). Si la cancelas, se PIERDEN. ¿Cancelarla?`
+        : "¿Cancelar esta hora vacía?",
+      confirmText: "Sí, cancelar hora", danger: nPes > 0,
+    });
+    if (!ok) return;
+    setHoras(m.id, (hs) => hs.filter((x) => x.id !== horaId));
+    registrarEvento?.({ evento: "hora_cancelada", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+      detalle: `Se canceló ${h.etiqueta}${nPes > 0 ? ` (tenía ${nPes} pesadas, ${fmt(netoHora(h))} kg)` : " (vacía)"}` });
+  };
 
   const abrirEnvioHora = (m, hora) => { setHoraSapError(""); setHoraKgCub(6); setHoraSap({ m, hora }); cargarOrdenSAP(ordenSAPde(m)?.absoluteEntry); };
   const confirmarEnvioHora = async () => {
@@ -2775,7 +2797,13 @@ export default function Modulo9() {
                           )}
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border ${h.estado === "enviada" ? "bg-green-50 text-green-700 border-green-200" : h.estado === "cerrada" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-700 border-indigo-200"}`}>{h.estado === "enviada" ? "Enviada" : h.estado === "cerrada" ? "Cerrada" : "Abierta"}</span>
                         </span>
-                        <span className="text-xs text-gray-600 inline-flex items-center gap-1"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub<InfoTip>{fmt(neto)} kg ÷ 6 kg/cubeta = <b>{cub} cubetas</b> (redondeado). Es lo que se manda a SAP.</InfoTip></span>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-xs text-gray-600 inline-flex items-center gap-1"><b className="text-gray-800">{fmt(neto)} kg</b> · {cub} cub<InfoTip>{fmt(neto)} kg ÷ 6 kg/cubeta = <b>{cub} cubetas</b> (redondeado). Es lo que se manda a SAP.</InfoTip></span>
+                          {/* Cancelar la hora (borrarla) — solo si NO se mandó a SAP. Para horas abiertas por error. */}
+                          {!h.sapEnvio && !h.sapPendiente && (
+                            <button onClick={() => cancelarHoraFn(m, h.id)} title="Cancelar esta hora (borrarla) — por si se abrió por error" className="text-gray-300 hover:text-red-600 shrink-0"><X size={15} /></button>
+                          )}
+                        </span>
                       </div>
                       <div className="p-3">
                         {(h.pesadas || []).length > 0 && (
