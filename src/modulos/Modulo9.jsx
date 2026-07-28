@@ -93,6 +93,9 @@ export default function Modulo9() {
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
   const [tabRec, setTabRec] = useState("pendientes"); // pendientes | vaciado | historial
+  // Completar el DESTARE desde la tarjeta de En Piso (parrillas/cajas → ejote neto exacto).
+  const [destareMov, setDestareMov] = useState(null);
+  const [destareForm, setDestareForm] = useState({ parrillas: "", cajas: "", pP: String(TARA_PARRILLA), pC: String(TARA_CAJA) });
   const [mermarMov, setMermarMov] = useState(null); // movimiento al que se le registra una merma (no entró a empaque)
   const [mermarKg, setMermarKg] = useState("");
   const [mermarFecha, setMermarFecha] = useState("");
@@ -735,6 +738,36 @@ export default function Modulo9() {
       : m)));
 
   // ── Mermado (no entró a empaque) ── también descuenta del piso.
+  // ── COMPLETAR EL DESTARE desde la tarjeta (parrillas/cajas → ejote neto exacto) ──
+  // El destare deja de hacerse SOLO en el modal de recepción: se puede afinar aquí, en Empaque,
+  // cuando ya se tenga el peso del trailer. Al guardar, el recibido pasa de provisional al neto.
+  const abrirDestare = (m) => {
+    const r = m.recepcion || {};
+    // Cajas/parrillas: lo capturado en recepción, o lo declarado en el manifiesto (cargaItems).
+    const cajasMan = sumar(m.cargaItems, "bultos");
+    const parrMan = sumar(m.cargaItems, "parrillas");
+    setDestareForm({
+      parrillas: r.parrillasRecibidas ?? (parrMan ? String(parrMan) : ""),
+      cajas: r.bultosRecibidos ?? (cajasMan ? String(cajasMan) : ""),
+      pP: r.destareParrillaKg ?? String(TARA_PARRILLA),
+      pC: r.destareCajaKg ?? String(TARA_CAJA),
+    });
+    setDestareMov(m);
+  };
+  const guardarDestare = (m) => {
+    const f = destareForm;
+    setMovimientos((prev) => prev.map((x) => (x.id === m.id
+      ? { ...x, recepcion: { ...(x.recepcion || {}), estado: "recibido",
+          pesoRecibido: (x.recepcion?.pesoRecibido ?? x.pesoBascula) || "",
+          parrillasRecibidas: f.parrillas, bultosRecibidos: f.cajas,
+          destareParrillaKg: f.pP, destareCajaKg: f.pC,
+          destareAplicar: true, recepcionPendiente: false } }
+      : x)));
+    registrarEvento?.({ evento: "destare_completado", modulo: "M9", actor: "Empaque", destino: m.folio, ref: m.id,
+      detalle: `Destare completado: ${f.parrillas || 0} parrillas × ${f.pP} + ${f.cajas || 0} cajas × ${f.pC}` });
+    setDestareMov(null);
+  };
+
   const abrirMermar = (m) => { setMermarKg(""); setMermarMotivo(""); setMermarComentario(""); setMermarFecha(hoyISO()); setMermarHora(ahoraHM()); setMermarError(""); setMermarMov(m); };
   // Mermar es DESCARTAR producto: se valida como el resto del apartado (tope al piso, motivo
   // obligatorio) y queda registrado QUIÉN lo hizo, igual que la aprobación y el cierre.
@@ -1194,7 +1227,7 @@ export default function Modulo9() {
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
         {stat("Total fletes", movimientos.length, "text-gray-900", "bg-gray-400")}
-        {stat("Por recibir", pendientes.length, "text-orange-600", "bg-orange-500", "pendientes")}
+        {stat("Recibidos", pendientes.length, "text-orange-600", "bg-orange-500", "pendientes")}
         {stat("Recibidos", recibidos.length, "text-green-700", "bg-green-500", "historial")}
         {stat("Rechazados", rechazados.length, "text-red-600", "bg-red-500", "historial")}
         {stat("Con novedad", conNovedad.length, "text-amber-600", "bg-amber-500", "historial")}
@@ -1515,12 +1548,12 @@ export default function Modulo9() {
       <AvisoSAP>Al dar recepción se generará en SAP una <b>orden de producción</b> (materia prima) y una <b>orden de compra</b> (flete).</AvisoSAP>
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
-        { key: "pendientes", label: "Por recibir", count: pendientes.length },
+        { key: "pendientes", label: "Recibidos", count: pendientes.length },
         { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
         // OCULTO (no se usa por ahora): pestaña "Cliente Directo". La lógica y los datos siguen
         // intactos; solo se quita el botón. Para reactivarla, descomenta esta línea:
         // { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
-        { key: "historial", label: "Historial por Recibir", count: historialArr.length },
+        { key: "historial", label: "Historial de recibidos", count: historialArr.length },
         { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
         { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
       ]} />
@@ -1786,6 +1819,10 @@ export default function Modulo9() {
                             </>) : recK > 0 && (!puedeEditarVaciado ? (
                               <span title="No tienes permiso para capturar el vaciado (empaque.vaciado.editar) — solo lectura" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-medium cursor-not-allowed whitespace-nowrap inline-flex items-center justify-center gap-1"><Ban size={13} /> Solo lectura</span>
                             ) : (<>
+                              {/* Completar el destare (parrillas/cajas) aquí mismo → ejote neto exacto.
+                                  Resalta si el recibido es provisional (falta afinar el neto). */}
+                              <button onClick={() => abrirDestare(m)} title="Capturar parrillas y cajas para calcular el ejote neto exacto (aquí mismo, sin abrir recepción)"
+                                className={`inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap ${recibidoProvisional(m) ? "bg-amber-500 text-white hover:bg-amber-600" : "border border-gray-200 text-gray-600 hover:bg-gray-50"}`}><FlaskConical size={14} /> {recibidoProvisional(m) ? "Completar destare" : "Destare"}</button>
                               {pisoK > 0 && (
                                 <button onClick={() => abrirMermar(m)} className="inline-flex items-center justify-center gap-1 text-xs px-3 py-1.5 border border-red-300 text-red-600 rounded-lg font-medium hover:bg-red-50 whitespace-nowrap"><AlertTriangle size={14} /> Mermar</button>
                               )}
@@ -1900,7 +1937,7 @@ export default function Modulo9() {
       ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes por recibir" : "Historial (recibidos y rechazados)"} ({lista.length})</span>
+          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Fletes recibidos (falta destare / vaciado)" : "Historial (recibidos y rechazados)"} ({lista.length})</span>
         </div>
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
@@ -1936,7 +1973,7 @@ export default function Modulo9() {
                       : { t: "Recibido", c: "bg-green-50 text-green-700 border-green-200", i: <Check size={13} /> })
                     : rechazado
                       ? { t: "Rechazado", c: "bg-red-50 text-red-700 border-red-200", i: <X size={13} /> }
-                      : { t: "Por recibir", c: "bg-orange-50 text-orange-700 border-orange-200", i: <Clock size={13} /> };
+                      : { t: "Llegó · falta dar entrada", c: "bg-orange-50 text-orange-700 border-orange-200", i: <Clock size={13} /> };
                   const dato = (etiqueta, valor) => (
                     <div className="min-w-0">
                       <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">{etiqueta}</div>
@@ -2495,6 +2532,62 @@ export default function Modulo9() {
       )}
 
       {/* ── Modal: registrar merma (no entró a empaque) ── */}
+      {/* ── Completar DESTARE desde la tarjeta ── parrillas/cajas → ejote neto exacto ── */}
+      {destareMov && (() => {
+        const m = movimientos.find((x) => x.id === destareMov.id) || destareMov;
+        const brutoBascula = (parseFloat(m.recepcion?.pesoRecibido) || 0) || (parseFloat(m.pesoBascula) || 0);
+        const trailer = parseFloat(m.pesoTrailer) || 0;
+        const carga = Math.max(0, brutoBascula - trailer);
+        const parr = parseFloat(destareForm.parrillas) || 0;
+        const cajas = parseFloat(destareForm.cajas) || 0;
+        const pP = parseFloat(destareForm.pP) || 0;
+        const pC = parseFloat(destareForm.pC) || 0;
+        const taraP = parr * pP, taraC = cajas * pC, taraT = taraP + taraC;
+        const neto = Math.max(0, carga - taraT);
+        const inv = parr > 0 && cajas > 0 && parr > cajas;
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4" onClick={() => setDestareMov(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                <div className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900"><FlaskConical size={16} /> Completar destare — Folio {m.remision || m.folio || "—"}</div>
+                <button onClick={() => setDestareMov(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="text-[11px] text-gray-500">Captura las <b>parrillas</b> y <b>cajas</b> que llegaron para calcular el <b>ejote neto exacto</b>. El peso del trailer se toma del movimiento.</div>
+                {trailer <= 0 && brutoBascula > 0 && (
+                  <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex items-start gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Todavía <b>falta el peso del trailer</b> (se captura en el movimiento). El neto seguirá <b>provisional</b> hasta ponerlo.</div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className={LBL}>Parrillas</label><input type="number" min="0" className={INP} value={destareForm.parrillas} onChange={(e) => setDestareForm((f) => ({ ...f, parrillas: e.target.value }))} placeholder="Nº" /></div>
+                  <div><label className={LBL}>Cajas (bultos)</label><input type="number" min="0" className={INP} value={destareForm.cajas} onChange={(e) => setDestareForm((f) => ({ ...f, cajas: e.target.value }))} placeholder="Nº" /></div>
+                  <div><label className={LBL}>Peso por parrilla (kg)</label><input type="number" step="0.01" className={INP} value={destareForm.pP} onChange={(e) => setDestareForm((f) => ({ ...f, pP: e.target.value }))} /></div>
+                  <div><label className={LBL}>Peso por caja (kg)</label><input type="number" step="0.01" className={INP} value={destareForm.pC} onChange={(e) => setDestareForm((f) => ({ ...f, pC: e.target.value }))} /></div>
+                </div>
+                {inv && (
+                  <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-start justify-between gap-2">
+                    <span>⚠️ <b>¿Parrillas y cajas invertidas?</b> Hay más parrillas ({fmt(parr)}) que cajas ({fmt(cajas)}).</span>
+                    <button type="button" onClick={() => setDestareForm((f) => ({ ...f, parrillas: f.cajas, cajas: f.parrillas }))} className="shrink-0 px-2 py-1 rounded-md bg-red-600 text-white font-semibold hover:bg-red-700">Intercambiar</button>
+                  </div>
+                )}
+                <div className="text-xs bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Peso de báscula (bruto)</span><b className="text-gray-800">{fmt(brutoBascula)} kg</b></div>
+                  <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Trailer vacío</span><span className={trailer > 0 ? "text-red-600" : "text-amber-600"}>{trailer > 0 ? `− ${fmt(trailer)} kg` : "falta"}</span></div>
+                  <div className="flex justify-between px-3 py-1.5 bg-gray-50"><span className="text-gray-700 font-semibold">Carga (bruto − trailer)</span><b className="text-gray-800">{fmt(carga)} kg</b></div>
+                  <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Parrillas: {fmt(parr)} × {pP}</span><span className="text-red-600">− {fmt(taraP)} kg</span></div>
+                  <div className="flex justify-between px-3 py-1.5"><span className="text-gray-600">Cajas: {fmt(cajas)} × {pC}</span><span className="text-red-600">− {fmt(taraC)} kg</span></div>
+                  <div className="flex justify-between px-3 py-1.5 bg-green-50"><span className="text-green-800 font-semibold">Ejote neto (a vaciar)</span><b className="text-green-700">{fmt(neto)} kg</b></div>
+                </div>
+                {carga > 0 && taraT >= carga && <div className="text-[11px] text-red-600 font-semibold">⚠️ La tara supera a la carga — revisa parrillas/cajas.</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setDestareMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={() => guardarDestare(m)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700">Guardar destare</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {mermarMov && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-xl">
