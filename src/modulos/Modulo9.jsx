@@ -2001,11 +2001,17 @@ export default function Modulo9() {
 
                       {/* Acciones */}
                       <div className="px-4 py-2.5 flex items-center justify-end gap-2 flex-wrap">
-                          <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><span className="inline-flex items-center gap-1"><FlaskConical size={14} /> {nMu ? "Calidad" : "Muestreo"}</span></button>
-                          <button onClick={() => abrirInspeccion(m)} className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}><Truck size={14} /> {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? <span className="inline-flex items-center gap-1">Inspección <AlertTriangle size={14} /></span> : <span className="inline-flex items-center gap-1">Inspección <Check size={14} /></span>) : "Inspección"}</button>
+                          {/* Muestreo e Inspección SOLO en "Recibidos" (ahí se hace la entrada);
+                              en "Historial por Recibir" solo van las acciones de SAP. */}
+                          {tabRec === "pendientes" && (<>
+                            <button onClick={() => abrirMuestreo(m)} className="text-xs px-2 py-1 border border-indigo-200 rounded-lg bg-white hover:bg-indigo-50 text-indigo-600"><span className="inline-flex items-center gap-1"><FlaskConical size={14} /> {nMu ? "Calidad" : "Muestreo"}</span></button>
+                            <button onClick={() => abrirInspeccion(m)} className={`inline-flex items-center gap-1 text-xs px-2 py-1 border rounded-lg bg-white ${m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? "border-red-200 hover:bg-red-50 text-red-600" : "border-teal-200 hover:bg-teal-50 text-teal-600") : "border-teal-200 hover:bg-teal-50 text-teal-600"}`}><Truck size={14} /> {m.inspeccion ? (inspeccionConHallazgo(m.inspeccion) ? <span className="inline-flex items-center gap-1">Inspección <AlertTriangle size={14} /></span> : <span className="inline-flex items-center gap-1">Inspección <Check size={14} /></span>) : "Inspección"}</button>
+                          </>)}
                           {recibido ? (
                             <>
-                              <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> Ver</button>
+                              {/* En Recibidos, "Editar neto" (recalcular el destare si se equivocaron); en
+                                  Historial por Recibir, solo "Ver". Los dos abren el mismo modal. */}
+                              <button onClick={() => abrirRecepcion(m)} className="inline-flex items-center gap-1 text-xs px-2 py-1 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600"><Eye size={14} /> {tabRec === "pendientes" ? "Editar neto" : "Ver"}</button>
                               {/* Progreso a SAP del folio: cubetas ya reportadas y cuánto falta */}
                               {(cubetasEnviadasSAP(m) > 0 || kgPendienteSAP(m) > 0) && (
                                 <span title="Cubetas ya reportadas a SAP · lo que falta por mandar de lo ya vaciado"
@@ -2042,18 +2048,17 @@ export default function Modulo9() {
                                   </button>
                                 );
                               })()}
-                              {tieneEnvioSAP(m) ? (
-                                <span title="No se puede reabrir: el folio ya tuvo envíos a SAP (total, por hora o faltante)" className="text-xs px-2 py-1 border border-gray-200 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed inline-flex items-center justify-center gap-1"><Ban size={14} /> Reabrir</span>
-                              ) : (
-                                <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
-                              )}
+                              {/* Ya NO hay "Reabrir" en los recibidos: borraba el vaciado. Para corregir
+                                  el peso, se usa "Editar neto" (recalcular el destare sin perder nada). */}
                             </>
                           ) : rechazado ? (
-                            <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir</span></button>
+                            // Los rechazados SÍ conservan "Reabrir" (es la única forma de recuperar un
+                            // rechazo hecho por error; no hay vaciado que perder).
+                            <button onClick={() => reabrir(m.id)} className="text-xs px-2 py-1 border border-amber-200 rounded-lg bg-white hover:bg-amber-50 text-amber-600"><span className="inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir rechazo</span></button>
                           ) : (
-                            // "Dar recepción" es donde se hace el DESTARE (ejote neto) Y se guardan los
-                            // datos de la recepción (fecha/hora/recibe/condición/cliente directo).
-                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar recepción</button>
+                            // Da ENTRADA a empaque: aquí se calcula el ejote NETO (destare) y se guardan
+                            // los datos de la recepción (fecha/hora/recibe/condición/cliente directo).
+                            <button onClick={() => abrirRecepcion(m)} className="text-xs bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold hover:bg-emerald-700">Dar entrada / calcular neto</button>
                           )}
                       </div>
                     </div>
