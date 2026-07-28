@@ -103,9 +103,12 @@ export const kgEnPisoDe = (m) => (estaTerminado(m)
   : Math.max(0, kgRecibidosDe(m) - kgVaciadosDe(m) - kgMermadosDe(m)));
 
 // ── Para el Dashboard (Dirección): predicados/agregados reusables ──
-// ¿el folio está RECIBIDO en empaque (no cliente directo)? — mismo predicado que usa Empaque (M9),
-// para que los números del dashboard cuadren EXACTO con el módulo.
-export const esRecibidoEmpaque = (m) => m?.recepcion?.estado === "recibido" && !m?.recepcion?.clienteDirecto;
+// ¿el folio está EN EMPAQUE (vaciable)? — mismo predicado que usa Empaque (M9), para que los
+// números del dashboard cuadren EXACTO con el módulo. Un folio es vaciable en cuanto tiene BRUTO
+// de báscula (ya llegó), aunque no se le haya dado recepción formal (el peso neto se afina después
+// y no limita el vaciado). También los ya recibidos. Se excluyen rechazados y cliente directo.
+export const esRecibidoEmpaque = (m) => !m?.recepcion?.clienteDirecto && m?.recepcion?.estado !== "rechazado"
+  && ((parseFloat(m?.pesoBascula) || 0) > 0 || m?.recepcion?.estado === "recibido");
 // Cubetas ya enviadas a SAP de un folio: total + por hora + faltante (ajustes).
 export const cubetasEnviadasSAP = (m) =>
   (m?.recepcion?.sapEnvio?.cubetas || 0)

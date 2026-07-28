@@ -920,8 +920,12 @@ export default function Modulo9() {
   // "Cliente Directo": recibido pero NO entra a empaque (se va con el cliente) → su propia pestaña.
   const esClienteDirecto = (m) => m.recepcion?.estado === "recibido" && m.recepcion?.clienteDirecto;
   const clienteDirectoList = movimientos.filter(esClienteDirecto);
-  // Los recibidos que SÍ van a empaque (excluye los de cliente directo).
-  const recibidos = movimientos.filter((m) => m.recepcion?.estado === "recibido" && !m.recepcion?.clienteDirecto);
+  // VACIABLE ("Vaciado a Empaque"): un folio se puede vaciar en cuanto tiene BRUTO de báscula
+  // (ya llegó y se pesó), AUNQUE no se le haya dado recepción formal ni se tenga el peso del
+  // trailer/destare. El peso neto se afina después (Recibidos) y NO limita el vaciado. También
+  // entran los ya recibidos. Se excluyen rechazados y cliente directo.
+  const recibidos = movimientos.filter((m) => !m.recepcion?.clienteDirecto && m.recepcion?.estado !== "rechazado"
+    && ((parseFloat(m.pesoBascula) || 0) > 0 || m.recepcion?.estado === "recibido"));
   // El kg es lo que manda (los bins son guía a grosso modo): "completo" = sin kg en piso.
   // Un folio se archiva SOLO cuando una persona le da "Terminado". Antes se archivaba solo al
   // llegar el piso a 0, y eso escondía folios con trabajo pendiente: se podía tener todo vaciado
