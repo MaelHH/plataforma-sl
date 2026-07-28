@@ -1526,12 +1526,12 @@ export default function Modulo9() {
 
       <ColaTabs tab={tabRec} setTab={setTabRec} tabs={[
         { key: "pendientes", label: "Recibidos", count: pendientes.length },
-        { key: "vaciado", label: "Vaciado a Empaque", count: enPisoLista.length },
+        { key: "vaciado", label: "Vaciado por hora", count: enPisoLista.length },
         // OCULTO (no se usa por ahora): pestaña "Cliente Directo". La lógica y los datos siguen
         // intactos; solo se quita el botón. Para reactivarla, descomenta esta línea:
         // { key: "clienteDirecto", label: "Cliente Directo", count: clienteDirectoList.length },
-        { key: "historial", label: "Historial por Recibir", count: historialArr.length },
-        { key: "histVaciado", label: "Historial Vaciado a Empaque", count: vaciadosHist.length },
+        { key: "historial", label: "Vaciado completo", count: historialArr.length },
+        { key: "histVaciado", label: "Vaciados terminados", count: vaciadosHist.length },
         { key: "histMermado", label: "Historial Mermado (No entró a Empaque)", count: mermadosHist.length },
       ]} />
 
@@ -1541,7 +1541,7 @@ export default function Modulo9() {
             <div>
               <span className="text-sm font-semibold text-gray-900">
                 {tabRec === "histVaciado"
-                  ? `Vaciados completos (${filasVac.length})`
+                  ? `Vaciados terminados (${filasVac.length})`
                   : tabRec === "histMermado"
                     ? `Mermados — no entraron a empaque (${filasVac.length})`
                     : `En piso para vaciar a producción (${filasVac.length})`}
@@ -1913,7 +1913,7 @@ export default function Modulo9() {
       ) : (
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Recibidos — registro de fletes que llegaron" : "Historial por Recibir — recibidos (mandar a SAP de una) y rechazados"} ({lista.length})</span>
+          <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Recibidos — registro de fletes que llegaron" : "Vaciado completo — mandar el folio entero a SAP de una vez (y rechazados)"} ({lista.length})</span>
         </div>
         {movimientos.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
