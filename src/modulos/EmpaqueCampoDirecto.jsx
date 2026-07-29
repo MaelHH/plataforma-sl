@@ -3,6 +3,7 @@ import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, Che
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
+import ComboLibre from "../components/ComboLibre";
 import { hoyISO } from "../utils/fecha";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,13 +262,11 @@ export default function EmpaqueCampoDirecto() {
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
               </Campo>
               <Campo lab="Lote (escribe o elige)">
-                <input list="cd-lotes" value={form.rancho} onChange={(e) => onLote(e.target.value)} placeholder="Ramos…" className={INP} />
-                <datalist id="cd-lotes">{loteOpts.map((l) => <option key={l} value={l} />)}</datalist>
-                <span className="text-[11px] text-gray-400">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
+                <ComboLibre value={form.rancho} onChange={onLote} options={loteOpts} placeholder="Ramos…" className={INP} />
+                <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
               </Campo>
               <Campo lab="Tabla (departamento)">
-                <input list="cd-tablas" value={form.departamento} onChange={(e) => upd({ departamento: e.target.value })} placeholder="Tabla…" className={INP} />
-                <datalist id="cd-tablas">{tablaOpts.map((t) => <option key={t} value={t} />)}</datalist>
+                <ComboLibre value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} placeholder="Tabla…" className={INP} />
               </Campo>
               <Campo lab="Transporte">
                 <input value={form.transporte} onChange={(e) => upd({ transporte: e.target.value })} placeholder="Camión blanco Z-JN3 607" className={INP} />
