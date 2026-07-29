@@ -178,11 +178,18 @@ export default function EmpaqueCampoDirecto() {
     cerrarForm();
   };
 
+  // ¿El folio ya tocó SAP? (recibo por hora enviado/pendiente, o OC creada) → NO se puede borrar
+  // (borrarlo dejaría la app fuera de sincronía con SAP).
+  const tieneSAPcd = (m) => (m.vaciado?.horas || []).some((h) => h.sapEnvio || h.sapPendiente) || !!m.ocSAP;
   const borrar = async (m) => {
+    if (tieneSAPcd(m)) {
+      await dlg.alerta({ title: "No se puede borrar", message: `El folio ${m.folio} ya tiene envíos a SAP (recibo por hora u orden de compra). Borrarlo dejaría la app fuera de sincronía con SAP, así que no se puede eliminar.` });
+      return;
+    }
     const ok = await dlg.confirm({ title: "Borrar folio", message: `¿Borrar el folio ${m.folio} de campo directo? Esta acción no se puede deshacer.`, confirmText: "Sí, borrar", danger: true });
     if (!ok) return;
     setMovimientosCampo((prev) => prev.filter((x) => x.id !== m.id));
-    registrarEvento?.({ evento: "campo_directo_borrado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Borró folio campo directo ${m.folio}` });
+    registrarEvento?.({ evento: "campo_directo_borrado", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `Borró folio campo directo ${m.folio}` });
   };
 
   // Totales para el resumen.
@@ -574,7 +581,11 @@ export default function EmpaqueCampoDirecto() {
                     <span title="Documentos creados en SAP" className="text-[10px] px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={12} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}{(estadosOC[m.id]?.factura ?? m.ocSAP?.factura)?.existe ? " · Facturada" : ""}</span>
                   )}
                   <button onClick={() => abrirEditar(m)} className="text-gray-400 hover:text-emerald-700 p-1" title="Editar"><Pencil size={15} /></button>
-                  <button onClick={() => borrar(m)} className="text-gray-300 hover:text-red-600 p-1" title="Borrar"><Trash2 size={15} /></button>
+                  {tieneSAPcd(m) ? (
+                    <span title="No se puede borrar: ya tiene envíos a SAP (recibo u OC)" className="text-gray-200 p-1 cursor-not-allowed"><Trash2 size={15} /></span>
+                  ) : (
+                    <button onClick={() => borrar(m)} className="text-gray-300 hover:text-red-600 p-1" title="Borrar"><Trash2 size={15} /></button>
+                  )}
                 </div>
                 {abierto && (
                   <div className="border-t border-gray-100">
