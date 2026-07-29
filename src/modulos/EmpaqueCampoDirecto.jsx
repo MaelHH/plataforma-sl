@@ -210,10 +210,16 @@ export default function EmpaqueCampoDirecto() {
   const totPiso = lista.reduce((a, m) => a + kgEnPisoDe(m), 0);
 
   // ── Datos POR FOLIO para el reporte (jefes) — misma tabla por folio que logística ──
-  // Cada folio: su vaciado por hora (kg), sus bins mandados y lo que le falta en piso, del día
-  // seleccionado. El reporte los mide en BINS (kg netos ÷ kgPorBin). Solo folios con actividad ese día.
+  // Los jefes cuentan en BINS: 1 bin = kgPorBin (260) kg. El módulo lleva el neto real, pero el
+  // REPORTE se muestra como lo cuentan ellas: KG PROCESADOS = bins × 260, BINS PROCESADOS = los bins
+  // reales (por eso se alimenta bins × kgPorBin y el generador divide entre kgPorBin → bins exactos).
   const foliosReporteCD = useMemo(() => {
-    const porHoraDe = (arr) => {
+    const binsPorHora = (arr) => {
+      const acc = {};
+      arr.forEach((e) => { const h = String(e.hora || "").split(":")[0] || "—"; acc[h] = (acc[h] || 0) + (parseFloat(e.bins) || 0); });
+      return acc;
+    };
+    const mermaPorHoraF = (arr) => {
       const acc = {};
       arr.forEach((e) => { const h = String(e.hora || "").split(":")[0] || "—"; acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0); });
       return acc;
@@ -221,16 +227,22 @@ export default function EmpaqueCampoDirecto() {
     return lista.map((m) => {
       const evsDia = (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
       const merDia = (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
-      const vacPorHora = porHoraDe(evsDia);
-      const merPorHora = porHoraDe(merDia);
+      // Vaciado por hora en KG = (bins de esa hora) × 260 (su conteo).
+      const binsH = binsPorHora(evsDia);
+      const vacPorHora = Object.fromEntries(Object.entries(binsH).map(([h, b]) => [h, b * kgPorBin]));
+      const merPorHora = mermaPorHoraF(merDia);
+      const binsRec = parseFloat(m.bins) || 0;
+      const binsVacTot = (m.vaciado?.eventos || []).reduce((a, e) => a + (parseFloat(e.bins) || 0), 0);
+      const recibido = binsRec * kgPorBin;   // bins mandados × 260
+      const enPiso = estaTerminado(m) ? 0 : Math.max(0, (binsRec - binsVacTot) * kgPorBin - kgMermadosDe(m));
       const totVac = Object.values(vacPorHora).reduce((a, b) => a + b, 0);
       const totMer = Object.values(merPorHora).reduce((a, b) => a + b, 0);
       return {
         folio: m.folio, lote: m.rancho || "—", remision: "",
-        binsRecibidos: parseFloat(m.bins) || 0, recibido: kgRecibidosDe(m), enPiso: kgEnPisoDe(m),
-        vacPorHora, merPorHora, totVac, totMer,
+        binsRecibidos: binsRec, recibido, enPiso, vacPorHora, merPorHora, totVac, totMer,
       };
     }).filter((f) => f.totVac > 0 || Object.keys(f.merPorHora).length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, diaReporte]);
   const totKgVacDiaCD = foliosReporteCD.reduce((a, f) => a + f.totVac, 0);
   const argsReporte = { dia: diaReporte, kgPorBin, foliosReporte: foliosReporteCD, totKgVacDia: totKgVacDiaCD };
@@ -562,7 +574,7 @@ export default function EmpaqueCampoDirecto() {
       {/* Reporte del día (PDF/Excel) — tabla por folio, igual que logística */}
       <div className="mb-4 flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-xl px-3 py-2.5">
         <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de vaciado por hora</span>
-        <span className="text-[11px] text-gray-400">· una tabla por folio · bins = {fmt(kgPorBin)} kg netos</span>
+        <span className="text-[11px] text-gray-400">· una tabla por folio · bins = {fmt(kgPorBin)} kg</span>
         <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
           <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
         </label>

@@ -151,7 +151,7 @@ export function generarPDFVaciadoHora({ dia, kgPorBin, foliosReporte = [], totKg
   </style></head><body>
     <div class="noprint"><button class="btn" onclick="window.print()">Imprimir / Guardar PDF</button></div>
     <h1>Vaciado por hora — SL Logística</h1>
-    <div class="sub-top">Reporte del día <b>${esc(dia || "—")}</b> · una tabla por folio · medido en BINS (cada ${fmt(kgb)} kg netos = 1 bin) · ${fmt(totBins)} bins procesados en total</div>
+    <div class="sub-top">Reporte del día <b>${esc(dia || "—")}</b> · una tabla por folio · medido en BINS (cada ${fmt(kgb)} kg = 1 bin) · ${fmt(totBins)} bins procesados en total</div>
     ${cuerpo}
     <table class="resumen">
       <tr><td class="hdr">RESUMEN DEL DÍA</td><td class="hdr">BINS</td><td class="hdr piso">KG</td></tr>
@@ -199,7 +199,7 @@ export async function generarExcelVaciadoHora({ dia, kgPorBin, foliosReporte = [
   let r = 1;
   // Título.
   ws.mergeCells(r, 1, r, 6);
-  set(r, 1, `Vaciado por hora — SL Logística · ${dia || "—"} · bins = ${fmt(kgb)} kg netos`, { bold: true, align: izq });
+  set(r, 1, `Vaciado por hora — SL Logística · ${dia || "—"} · bins = ${fmt(kgb)} kg`, { bold: true, align: izq });
   ws.getRow(r).getCell(1).font = { bold: true, name: "Arial", size: 12 };
   r += 2;
 
