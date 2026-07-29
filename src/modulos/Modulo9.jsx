@@ -17,6 +17,23 @@ import { generarReporteCalidad, generarReporteInspeccion } from "./reportes/repo
 import ColaTabs from "../components/ColaTabs";
 import AvisoSAP from "../components/AvisoSAP";
 import { useDialog } from "../components/Dialog";
+import EmpaqueCampoDirecto from "./EmpaqueCampoDirecto";
+
+// Switch de página del módulo Empaque (logística / campo directo). Se muestra en ambas vistas.
+function PaginaEmpaqueTabs({ vista, setVista }) {
+  const tab = (key, label, sub) => (
+    <button onClick={() => setVista(key)}
+      className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${vista === key ? "bg-emerald-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}>
+      {label}<span className={`hidden sm:inline font-normal ${vista === key ? "text-emerald-100" : "text-gray-400"}`}> · {sub}</span>
+    </button>
+  );
+  return (
+    <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+      {tab("logistica", "Empaque logística", "fletes que pasan por logística")}
+      {tab("campo", "Empaque campo directo", "carros directos de campo")}
+    </div>
+  );
+}
 
 // Muestreo vacío. Arrastra lote y fecha del movimiento de campo, y un folio
 // consecutivo autogenerado.
@@ -90,6 +107,10 @@ export default function Modulo9() {
   const toleranciaKg = parseFloat(configEmpaque?.toleranciaKg) || 0;
   const esHist = (m) => esHistoricoSAP(m, goLiveSAP);
 
+  // Switch de página DENTRO del módulo Empaque: "logistica" = el flujo de siempre (fletes que
+  // pasan por logística); "campo" = EMPAQUE CAMPO DIRECTO (carros que llegan directo de campo,
+  // flujo independiente). No comparte datos con el de logística.
+  const [vista, setVista] = useState("logistica");
   const [recibir, setRecibir] = useState(null); // movimiento que se está recibiendo
   const [form, setForm] = useState(null);
   const [tabRec, setTabRec] = useState("pendientes"); // pendientes | vaciado | historial
@@ -1221,8 +1242,20 @@ export default function Modulo9() {
     );
   };
 
+  // EMPAQUE CAMPO DIRECTO: flujo INDEPENDIENTE (componente aparte). No comparte nada con el de
+  // logística salvo el switch de página de arriba.
+  if (vista === "campo") {
+    return (
+      <div>
+        <PaginaEmpaqueTabs vista={vista} setVista={setVista} />
+        <EmpaqueCampoDirecto />
+      </div>
+    );
+  }
+
   return (
     <div>
+      <PaginaEmpaqueTabs vista={vista} setVista={setVista} />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Empaque</h1>

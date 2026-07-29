@@ -388,6 +388,7 @@ const CONFIG = {
   responsables: { tipo: "kv", seed: ["Francisco Flores", "Kiko"] },
   lineas: { tipo: "col", seed: LINEAS_INICIAL },
   movimientos: { tipo: "col", seed: null },
+  movimientosCampo: { tipo: "col", seed: null }, // EMPAQUE CAMPO DIRECTO: flujo INDEPENDIENTE de campo→empaque. Carros que llegan directo de campo, se pesan y se vacían aquí sin pasar por logística. No mezcla con `movimientos`.
   movMateriales: { tipo: "col", seed: null }, // movimientos de materiales (Movimiento Materiales) — fletero + materiales arriba del trailer
   cargaCampo: { tipo: "col", seed: CARGA_CAMPO_INICIAL },
   ubicaciones: { tipo: "kv", seed: UBICACIONES_INICIAL },
@@ -408,8 +409,14 @@ const CONFIG = {
   // fuera). Vacío = sin corte (no bloquea nada). Reversible: solo se cambia la fecha.
   //   goLiveSAP  → línea de corte. toleranciaKg → margen al cerrar. kgPorBin → cuántos kg netos
   //   equivalen a 1 bin en el reporte de "Vaciado por hora" que ven los jefes (default 260).
-  configEmpaque: { tipo: "kv", seed: { goLiveSAP: "", toleranciaKg: "", kgPorBin: 260 } },
+  //   campoDirecto → parámetros del bin de EMPAQUE CAMPO DIRECTO (editables): brutoPorBin (kg
+  //   bruto por bin), taraBin (kg que pesa el bin vacío) → neto teórico/bin = bruto − tara;
+  //   cubetasPorBin (conversión informativa del ticket: 1 bin = 40 cubetas).
+  configEmpaque: { tipo: "kv", seed: { goLiveSAP: "", toleranciaKg: "", kgPorBin: 260, campoDirecto: { brutoPorBin: 260, taraBin: 43, cubetasPorBin: 40 } } },
 };
+
+// Defaults del bin de campo directo (respaldo si configEmpaque aún no trae `campoDirecto`).
+export const CAMPO_DIRECTO_DEFAULT = { brutoPorBin: 260, taraBin: 43, cubetasPorBin: 40 };
 
 // Factor por defecto del reporte por bins (kg netos por 1 bin). El real sale de configEmpaque.
 export const KG_POR_BIN_DEFAULT = 260;
@@ -469,6 +476,7 @@ export function DatosProvider({ children }) {
   const [responsables, setResponsables] = useState(guardado.responsables ?? ["Francisco Flores", "Kiko"]); // nombres usados en monitoreo
   const [lineas, setLineas] = useState(guardado.lineas ?? LINEAS_INICIAL); // catálogo de líneas de transporte
   const [movimientos, setMovimientos] = useState(guardado.movimientos ?? []); // movimientos internos campo→empaque
+  const [movimientosCampo, setMovimientosCampo] = useState(guardado.movimientosCampo ?? []); // EMPAQUE CAMPO DIRECTO (flujo independiente)
   const [movMateriales, setMovMateriales] = useState(guardado.movMateriales ?? []); // movimientos de materiales (fletero + materiales arriba del trailer)
   const [cargaCampo, setCargaCampo] = useState(guardado.cargaCampo ?? CARGA_CAMPO_INICIAL); // catálogo de qué se carga
   const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
@@ -494,6 +502,7 @@ export function DatosProvider({ children }) {
     catalogo: setCatalogo, cultivos: setCultivos, programa: setPrograma,
     requerimientoGen: setRequerimientoGen, requerimientoMeta: setRequerimientoMeta,
     responsables: setResponsables, lineas: setLineas, movimientos: setMovimientos,
+    movimientosCampo: setMovimientosCampo,
     movMateriales: setMovMateriales,
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
     materiales: setMateriales, contenedores: setContenedores, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
@@ -501,7 +510,7 @@ export function DatosProvider({ children }) {
     zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
     configEmpaque: setConfigEmpaque,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -571,7 +580,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -585,6 +594,7 @@ export function DatosProvider({ children }) {
     catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma,
     requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
+    movimientosCampo, setMovimientosCampo,
     movMateriales, setMovMateriales,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,
