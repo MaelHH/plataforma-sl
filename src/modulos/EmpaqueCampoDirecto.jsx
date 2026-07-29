@@ -6,6 +6,7 @@ import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import { guardarFolioOC } from "../utils/folioOC";
+import { generarPDFVaciadoHora, generarExcelVaciadoHora } from "./reportes/vaciadoPorHora";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
@@ -69,6 +70,8 @@ export default function EmpaqueCampoDirecto() {
   const cubetasPorBin = parseFloat(cd.cubetasPorBin) || CAMPO_DIRECTO_DEFAULT.cubetasPorBin;
   const netoPorBin = Math.max(0, brutoPorBin - taraBin);
   const setCd = (patch) => setConfigEmpaque({ ...(configEmpaque || {}), campoDirecto: { ...cd, ...patch } });
+  // Factor del reporte por BINS (el que ven los jefes): cada `kgPorBin` kg netos = 1 bin (mismo que logística).
+  const kgPorBin = parseFloat(configEmpaque?.kgPorBin) || 260;
 
   // Índice lote→temporada: recorre proyectos[].ranchos[] (en esta app rancho = "Lote", proyecto =
   // "Temporada", departamento = "Tabla"). Al elegir/escribir un lote conocido, autollena su temporada.
@@ -112,6 +115,7 @@ export default function EmpaqueCampoDirecto() {
   const [editId, setEditId] = useState(null);
   const [cfgAbierto, setCfgAbierto] = useState(false);
   const [expandido, setExpandido] = useState(null);   // id del folio con detalle abierto
+  const [diaReporte, setDiaReporte] = useState(hoyISO());   // día del reporte PDF/Excel
 
   const upd = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -204,6 +208,32 @@ export default function EmpaqueCampoDirecto() {
   const totNeto = lista.reduce((a, m) => a + (parseFloat(m.netoTeorico) || 0), 0);
   const totVaciado = lista.reduce((a, m) => a + kgVaciadosDe(m), 0);
   const totPiso = lista.reduce((a, m) => a + kgEnPisoDe(m), 0);
+
+  // ── Datos POR FOLIO para el reporte (jefes) — misma tabla por folio que logística ──
+  // Cada folio: su vaciado por hora (kg), sus bins mandados y lo que le falta en piso, del día
+  // seleccionado. El reporte los mide en BINS (kg netos ÷ kgPorBin). Solo folios con actividad ese día.
+  const foliosReporteCD = useMemo(() => {
+    const porHoraDe = (arr) => {
+      const acc = {};
+      arr.forEach((e) => { const h = String(e.hora || "").split(":")[0] || "—"; acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0); });
+      return acc;
+    };
+    return lista.map((m) => {
+      const evsDia = (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+      const merDia = (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+      const vacPorHora = porHoraDe(evsDia);
+      const merPorHora = porHoraDe(merDia);
+      const totVac = Object.values(vacPorHora).reduce((a, b) => a + b, 0);
+      const totMer = Object.values(merPorHora).reduce((a, b) => a + b, 0);
+      return {
+        folio: m.folio, lote: m.rancho || "—", remision: "",
+        binsRecibidos: parseFloat(m.bins) || 0, recibido: kgRecibidosDe(m), enPiso: kgEnPisoDe(m),
+        vacPorHora, merPorHora, totVac, totMer,
+      };
+    }).filter((f) => f.totVac > 0 || Object.keys(f.merPorHora).length > 0);
+  }, [lista, diaReporte]);
+  const totKgVacDiaCD = foliosReporteCD.reduce((a, f) => a + f.totVac, 0);
+  const argsReporte = { dia: diaReporte, kgPorBin, foliosReporte: foliosReporteCD, totKgVacDia: totKgVacDiaCD };
 
   const netoDe = (m) => parseFloat(m.netoTeorico) || (parseFloat(m.bins) || 0) * netoPorBin;
 
@@ -527,6 +557,24 @@ export default function EmpaqueCampoDirecto() {
             {s.sub && <div className="text-[10px] text-gray-400">{s.sub}</div>}
           </div>
         ))}
+      </div>
+
+      {/* Reporte del día (PDF/Excel) — tabla por folio, igual que logística */}
+      <div className="mb-4 flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-xl px-3 py-2.5">
+        <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de vaciado por hora</span>
+        <span className="text-[11px] text-gray-400">· una tabla por folio · bins = {fmt(kgPorBin)} kg netos</span>
+        <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
+          <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
+        </label>
+        <div className="flex-1" />
+        {foliosReporteCD.length === 0 ? (
+          <span className="text-[11px] text-gray-400 italic">Sin vaciados el día seleccionado</span>
+        ) : (
+          <>
+            <button onClick={() => generarExcelVaciadoHora(argsReporte)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+            <button onClick={() => generarPDFVaciadoHora(argsReporte)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+          </>
+        )}
       </div>
 
       {/* Config del bin */}
