@@ -24,7 +24,15 @@ const franja = (h) => `${h12(h)}:00 A ${h12((h + 1) % 24)}:00`;
 // running que arranca en (piso final + lo vaciado/mermado hoy) y baja cada hora, terminando EXACTO
 // en el piso real de ese folio. Así el "falta en piso" cuadra con la tarjeta del folio.
 function _folio(f, kgb) {
-  const vac = f.vacPorHora || {}, mer = f.merPorHora || {};
+  // Normaliza las horas: las capturadas vienen con cero adelante ("08","09") y aquí se buscan por
+  // número ("8","9") → sin normalizar, las horas antes de las 10am no cuadraban (no salían en su
+  // fila pero sí en el total, y el "falta en piso" no las restaba). Se colapsan a clave numérica.
+  const norm = (obj) => {
+    const o = {};
+    Object.entries(obj || {}).forEach(([k, v]) => { const n = Number(k); if (!Number.isNaN(n)) o[String(n)] = (o[String(n)] || 0) + v; });
+    return o;
+  };
+  const vac = norm(f.vacPorHora), mer = norm(f.merPorHora);
   const turno = Array.from({ length: 14 }, (_, i) => 8 + i);   // 8 → 21 (08:00 a 10:00)
   const conActividad = [...new Set([...Object.keys(vac), ...Object.keys(mer)])].map(Number).filter((n) => !Number.isNaN(n));
   const extras = conActividad.filter((h) => !turno.includes(h)).sort((a, b) => a - b);
