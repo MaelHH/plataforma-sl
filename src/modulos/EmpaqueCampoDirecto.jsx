@@ -7,10 +7,18 @@ import SearchSelect from "../components/SearchSelect";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
-// Hora actual "HH:MM" para prellenar los registros de vaciado.
+// Hora actual "HH:MM" (24h) para GUARDAR los registros de vaciado (formato inequívoco).
 function ahoraHM() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+// Convierte "HH:MM" (24h) a 12h para MOSTRAR, ej. "5:55 PM".
+function hm12(hm) {
+  const [h, m] = String(hm || "").split(":").map(Number);
+  if (Number.isNaN(h)) return hm || "—";
+  const ap = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m || 0).padStart(2, "0")} ${ap}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -504,7 +512,7 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
             <div>
               <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora (automática)</label>
               <div className="text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold tabular-nums inline-flex items-center gap-1.5" title="Se registra con la hora real del momento; no se puede cambiar">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {reloj}
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {hm12(reloj)}
               </div>
             </div>
             <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
@@ -519,7 +527,7 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
             <div className="mt-2 space-y-1">
               {evs.map((e) => (
                 <div key={e.id} className="flex items-center justify-between text-xs bg-white border border-gray-100 rounded px-2 py-1 gap-2">
-                  <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {e.hora || "—"}{e.fecha ? ` · ${e.fecha}` : ""}</span></span>
+                  <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {hm12(e.hora)}{e.fecha ? ` · ${e.fecha}` : ""}</span></span>
                   <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
                 </div>
               ))}
@@ -542,7 +550,7 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
               <div className="mt-1 space-y-1">
                 {mrs.map((x) => (
                   <div key={x.id} className="flex items-center justify-between text-xs bg-white border border-red-100 rounded px-2 py-1 gap-2">
-                    <span className="text-red-600"><b>{fmt(x.kg)} kg</b> merma{x.motivo ? ` · ${x.motivo}` : ""} <span className="text-gray-400">· {x.hora || "—"}</span></span>
+                    <span className="text-red-600"><b>{fmt(x.kg)} kg</b> merma{x.motivo ? ` · ${x.motivo}` : ""} <span className="text-gray-400">· {hm12(x.hora)}</span></span>
                     <button onClick={() => onDelMerma(x.id)} className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
                   </div>
                 ))}
