@@ -199,13 +199,18 @@ export default function EmpaqueCampoDirecto() {
     updVac(m.id, (v) => ({ ...v, horas: [...(v.horas || []), { id: nuevoId("HCD_"), etiqueta: `Hora ${(v.horas || []).length + 1}`, estado: "abierta", fecha: hoyISO(), ts: ahora().iso }] }));
     registrarEvento?.({ evento: "campo_directo_hora_abierta", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Abrió una hora en el folio ${m.folio}` });
   };
-  const registrarVaciado = (m, horaId, binsN) => {
+  // Se pesa el BRUTO real de báscula y se restan los bins (cada uno pesa `taraBin`, ej. 43 kg):
+  //   neto real = bruto − (bins × taraBin).  Así el neto es el de verdad (no todo pesa igual) y se
+  // puede comparar contra el teórico para ver si viene de más o de menos.
+  const registrarVaciado = (m, horaId, bruto, binsN) => {
+    const br = parseFloat(bruto) || 0;
     const b = parseFloat(binsN) || 0;
-    if (b <= 0 || !horaId) return;
-    const npb = netoPorBinDe(m);
-    const ev = { id: nuevoId("VD_"), horaId, bins: b, kg: b * npb, fecha: hoyISO(), hora: ahoraHM() };
+    if (br <= 0 || !horaId) return;
+    const tara = parseFloat(m.binParams?.taraBin) || taraBin;
+    const kg = Math.max(0, br - b * tara);
+    const ev = { id: nuevoId("VD_"), horaId, bruto: br, bins: b, tara, kg, fecha: hoyISO(), hora: ahoraHM() };
     updVac(m.id, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
-    registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins (${fmt(b * npb)} kg) del folio ${m.folio}` });
+    registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins · bruto ${fmt(br)} − tara ${fmt(b * tara)} = ${fmt(kg)} kg (folio ${m.folio})` });
   };
   const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
   const cerrarHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
@@ -346,7 +351,8 @@ export default function EmpaqueCampoDirecto() {
                     <VaciadoPanel
                       m={m} netoPorBin={npb} fmt={fmt} orden={ordenDe(m)}
                       onAbrirHora={() => abrirHoraCD(m)}
-                      onRegistrar={(horaId, bins) => registrarVaciado(m, horaId, bins)}
+                      onRegistrar={(horaId, bruto, bins) => registrarVaciado(m, horaId, bruto, bins)}
+                      taraBin={parseFloat(m.binParams?.taraBin) || taraBin}
                       onDelEvento={(evId) => delVaciado(m, evId)}
                       onCerrarHora={(horaId) => cerrarHoraCD(m, horaId)}
                       onReabrirHora={(horaId) => reabrirHoraCD(m, horaId)}
@@ -462,7 +468,7 @@ function Dato({ lab, val }) {
 // Como logística: se ABRE una hora, se registran bins DENTRO de ella, se CIERRA y luego se manda
 // esa hora a SAP (Fase 3) a su orden de fabricación. El kg de cada hora = suma de sus registros;
 // el "en piso" y las cubetas (neto ÷ 6) salen de los helpers de empaque (mismos números).
-function VaciadoPanel({ m, netoPorBin, fmt, orden, onAbrirHora, onRegistrar, onDelEvento, onCerrarHora, onReabrirHora, onCancelarHora, onMerma, onDelMerma, onTerminar, onReabrir }) {
+function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, onAbrirHora, onRegistrar, onDelEvento, onCerrarHora, onReabrirHora, onCancelarHora, onMerma, onDelMerma, onTerminar, onReabrir }) {
   const rec = kgRecibidosDe(m);
   const vac = kgVaciadosDe(m);
   const mer = kgMermadosDe(m);
@@ -517,6 +523,23 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onAbrirHora, onRegistrar, onD
         {mer > 0 && (<><Flecha /><Flujo lab="Mermado" val={`${fmt(mer)} kg`} color="text-red-600" /></>)}
       </div>
 
+      {/* Real (pesado) vs teórico (bins × neto/bin): para ver si viene de MÁS o de MENOS */}
+      {(() => {
+        const binsVac = evs.reduce((a, e) => a + (parseFloat(e.bins) || 0), 0);
+        if (binsVac <= 0) return null;
+        const teorico = binsVac * netoPorBin;
+        const diff = Math.round(vac - teorico);
+        const cuadra = Math.abs(diff) <= 1;
+        return (
+          <div className="mb-3">
+            <span className={`text-[11px] px-2.5 py-1 rounded-lg border inline-flex items-center gap-1 ${cuadra ? "bg-gray-50 text-gray-500 border-gray-200" : diff > 0 ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+              <b>Real vs teórico</b> ({fmt(binsVac)} bins pesados): {fmt(vac)} kg reales vs {fmt(teorico)} teóricos →{" "}
+              {cuadra ? "cuadra ✓" : diff > 0 ? `viene de MÁS +${fmt(diff)} kg` : `viene de MENOS ${fmt(diff)} kg`}
+            </span>
+          </div>
+        );
+      })()}
+
       {term ? (
         <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 flex-wrap gap-2">
           <span className="text-sm text-gray-600 inline-flex items-center gap-1.5"><Check size={15} className="text-gray-500" /> Folio <b>terminado</b> por {m.vaciado?.terminado?.por || "—"}{kgSobranteCierre(m) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(m))} kg` : ""}</span>
@@ -538,9 +561,9 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onAbrirHora, onRegistrar, onD
           ) : (
             <div className="space-y-2">
               {horas.map((h) => (
-                <HoraCampo key={h.id} h={h} netoPorBin={netoPorBin} fmt={fmt} reloj={reloj}
-                  registros={evsDe(h.id)} kgHora={kgDe(h.id)} binsPiso={binsPiso}
-                  onRegistrar={(bins) => onRegistrar(h.id, bins)}
+                <HoraCampo key={h.id} h={h} taraBin={taraBin} fmt={fmt} reloj={reloj}
+                  registros={evsDe(h.id)} kgHora={kgDe(h.id)}
+                  onRegistrar={(bruto, bins) => onRegistrar(h.id, bruto, bins)}
                   onDelEvento={onDelEvento}
                   onCerrar={() => onCerrarHora(h.id)}
                   onReabrirHora={() => onReabrirHora(h.id)}
@@ -594,15 +617,19 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onAbrirHora, onRegistrar, onD
   );
 }
 
-// Una HORA del vaciado: se registran bins mientras está abierta; al cerrarla queda lista para SAP.
-function HoraCampo({ h, netoPorBin, fmt, reloj, registros, kgHora, binsPiso, onRegistrar, onDelEvento, onCerrar, onReabrirHora, onCancelar }) {
+// Una HORA del vaciado: se pesan bins mientras está abierta (bruto de báscula − bins×tara = neto
+// real); al cerrarla queda lista para SAP.
+function HoraCampo({ h, taraBin, fmt, reloj, registros, kgHora, onRegistrar, onDelEvento, onCerrar, onReabrirHora, onCancelar }) {
+  const [bruto, setBruto] = useState("");
   const [bins, setBins] = useState("");
+  const brutoN = parseFloat(bruto) || 0;
   const binsN = parseFloat(bins) || 0;
-  const kgPrev = binsN * netoPorBin;
+  const taraTotal = binsN * taraBin;
+  const netoPrev = Math.max(0, brutoN - taraTotal);
   const cub = cubetasDe(kgHora);   // neto ÷ 6 → lo que se manda a SAP de esta hora
   const abierta = h.estado === "abierta";
   const enviada = h.estado === "enviada";
-  const doReg = () => { if (binsN <= 0) return; onRegistrar(binsN); setBins(""); };
+  const doReg = () => { if (brutoN <= 0) return; onRegistrar(brutoN, binsN); setBruto(""); setBins(""); };
 
   return (
     <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
@@ -624,18 +651,24 @@ function HoraCampo({ h, netoPorBin, fmt, reloj, registros, kgHora, binsPiso, onR
           <div className="space-y-1 mb-2">
             {registros.map((e) => (
               <div key={e.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
-                <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {hm12(e.hora)}</span></span>
+                <span className="text-gray-600 min-w-0">
+                  <b className="text-gray-800">{fmt(e.bins)} bins</b> · bruto {fmt(e.bruto)} − tara {fmt((parseFloat(e.bins) || 0) * (parseFloat(e.tara) || taraBin))} = <b className="text-green-700">{fmt(e.kg)} kg</b> <span className="text-gray-400">· {hm12(e.hora)}</span>
+                </span>
                 {abierta && <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>}
               </div>
             ))}
           </div>
         )}
-        {/* Registrar bins en la hora abierta */}
+        {/* Pesar bins en la hora abierta (bruto de báscula − bins×tara) */}
         {abierta && (
           <div className="flex items-end gap-2 flex-wrap bg-emerald-50/50 rounded-lg p-2">
             <div className="w-28">
-              <label className="text-[10px] text-gray-500 block mb-0.5">Bins vaciados</label>
-              <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder={binsPiso > 0 ? String(binsPiso) : "0"} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+              <label className="text-[10px] text-gray-500 block mb-0.5">Bruto báscula (kg)</label>
+              <input type="number" min="0" step="0.1" value={bruto} onChange={(e) => setBruto(e.target.value)} placeholder="kg" className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+            </div>
+            <div className="w-20">
+              <label className="text-[10px] text-gray-500 block mb-0.5">Nº bins</label>
+              <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder="0" className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
             </div>
             <div>
               <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora (automática)</label>
@@ -643,9 +676,8 @@ function HoraCampo({ h, netoPorBin, fmt, reloj, registros, kgHora, binsPiso, onR
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {hm12(reloj)}
               </div>
             </div>
-            <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
-            <button onClick={doReg} disabled={binsN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
-            {binsPiso > 0 && <button onClick={() => { onRegistrar(binsPiso); setBins(""); }} className="text-xs px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg font-semibold hover:bg-emerald-50 inline-flex items-center gap-1"><Truck size={14} /> Todo lo que resta ({binsPiso} bins)</button>}
+            <div className="text-xs text-gray-600 pb-2">− tara {fmt(taraTotal)} = <b className="text-green-700">{fmt(netoPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(taraBin)})</span></div>
+            <button onClick={doReg} disabled={brutoN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
           </div>
         )}
         {/* Acciones de la hora */}
