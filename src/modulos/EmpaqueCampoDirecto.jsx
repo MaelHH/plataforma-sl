@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock } from "lucide-react";
+import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
@@ -191,15 +191,35 @@ export default function EmpaqueCampoDirecto() {
     ? { ...m, vaciado: fn({ kgRecibidos: m.netoTeorico || 0, eventos: [], mermas: [], ...(m.vaciado || {}) }), actualizado: ahora().iso }
     : m));
 
-  const registrarVaciado = (m, binsN, hora) => {
+  // ── HORAS (para poder pesar por hora y mandar cada hora a SAP, como logística) ──
+  // Cada hora es un bloque: se abre, se registran bins DENTRO de ella (evento con horaId), se
+  // cierra y luego se manda a SAP. El kg de una hora = suma de sus eventos. Solo UNA hora abierta
+  // a la vez (se pesa la hora en curso, se cierra y se abre la siguiente).
+  const abrirHoraCD = (m) => {
+    updVac(m.id, (v) => ({ ...v, horas: [...(v.horas || []), { id: nuevoId("HCD_"), etiqueta: `Hora ${(v.horas || []).length + 1}`, estado: "abierta", fecha: hoyISO(), ts: ahora().iso }] }));
+    registrarEvento?.({ evento: "campo_directo_hora_abierta", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Abrió una hora en el folio ${m.folio}` });
+  };
+  const registrarVaciado = (m, horaId, binsN) => {
     const b = parseFloat(binsN) || 0;
-    if (b <= 0) return;
+    if (b <= 0 || !horaId) return;
     const npb = netoPorBinDe(m);
-    const ev = { id: nuevoId("VD_"), bins: b, kg: b * npb, fecha: hoyISO(), hora: hora || ahoraHM() };
+    const ev = { id: nuevoId("VD_"), horaId, bins: b, kg: b * npb, fecha: hoyISO(), hora: ahoraHM() };
     updVac(m.id, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
     registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins (${fmt(b * npb)} kg) del folio ${m.folio}` });
   };
   const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
+  const cerrarHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
+  const reabrirHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "abierta" } : h) }));
+  const cancelarHoraCD = async (m, horaId) => {
+    const v = m.vaciado || {};
+    const h = (v.horas || []).find((x) => x.id === horaId);
+    if (!h) return;
+    if (h.sapEnvio || h.sapPendiente) { dlg.alerta({ title: "No se puede cancelar", message: "Esta hora ya tiene envío a SAP (o pendiente de confirmar)." }); return; }
+    const regs = (v.eventos || []).filter((e) => e.horaId === horaId);
+    const ok = await dlg.confirm({ title: "Cancelar hora", message: regs.length ? `Esta hora tiene ${regs.length} registro(s). Si la cancelas, se PIERDEN. ¿Cancelarla?` : "¿Cancelar esta hora vacía?", confirmText: "Sí, cancelar hora", danger: regs.length > 0 });
+    if (!ok) return;
+    updVac(m.id, (v2) => ({ ...v2, horas: (v2.horas || []).filter((x) => x.id !== horaId), eventos: (v2.eventos || []).filter((e) => e.horaId !== horaId) }));
+  };
 
   const registrarMermaCD = (m, kg, motivo) => {
     const k = parseFloat(kg) || 0;
@@ -325,8 +345,12 @@ export default function EmpaqueCampoDirecto() {
                   <div className="border-t border-gray-100">
                     <VaciadoPanel
                       m={m} netoPorBin={npb} fmt={fmt} orden={ordenDe(m)}
-                      onRegistrar={(bins, hora) => registrarVaciado(m, bins, hora)}
+                      onAbrirHora={() => abrirHoraCD(m)}
+                      onRegistrar={(horaId, bins) => registrarVaciado(m, horaId, bins)}
                       onDelEvento={(evId) => delVaciado(m, evId)}
+                      onCerrarHora={(horaId) => cerrarHoraCD(m, horaId)}
+                      onReabrirHora={(horaId) => reabrirHoraCD(m, horaId)}
+                      onCancelarHora={(horaId) => cancelarHoraCD(m, horaId)}
                       onMerma={(kg, mot) => registrarMermaCD(m, kg, mot)}
                       onDelMerma={(id) => delMermaCD(m, id)}
                       onTerminar={() => terminarCD(m)}
@@ -434,35 +458,32 @@ function Dato({ lab, val }) {
   );
 }
 
-// ── Panel de VACIADO por bins de un folio ──
-// Registran cuántos bins vaciaron (y a qué hora si quieren): cada bin = su neto calculado.
-// Total = "Vaciar lo que resta" (un registro con todos los bins); por hora = varios registros.
-// El "en piso" y las cubetas a SAP (neto ÷ 6) salen de los helpers de empaque (mismos números).
-function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onMerma, onDelMerma, onTerminar, onReabrir }) {
+// ── Panel de VACIADO por HORAS de un folio ──
+// Como logística: se ABRE una hora, se registran bins DENTRO de ella, se CIERRA y luego se manda
+// esa hora a SAP (Fase 3) a su orden de fabricación. El kg de cada hora = suma de sus registros;
+// el "en piso" y las cubetas (neto ÷ 6) salen de los helpers de empaque (mismos números).
+function VaciadoPanel({ m, netoPorBin, fmt, orden, onAbrirHora, onRegistrar, onDelEvento, onCerrarHora, onReabrirHora, onCancelarHora, onMerma, onDelMerma, onTerminar, onReabrir }) {
   const rec = kgRecibidosDe(m);
   const vac = kgVaciadosDe(m);
   const mer = kgMermadosDe(m);
   const piso = kgEnPisoDe(m);
   const term = estaTerminado(m);
+  const horas = m.vaciado?.horas || [];
   const evs = m.vaciado?.eventos || [];
   const mrs = m.vaciado?.mermas || [];
+  const sueltos = evs.filter((e) => !e.horaId);   // registros viejos sin hora (datos previos)
   const binsPiso = netoPorBin > 0 ? Math.round(piso / netoPorBin) : 0;
   const cubetas = cubetasDe(vac);   // neto ÷ 6, lo que irá a SAP
+  const hayAbierta = horas.some((h) => h.estado === "abierta");
+  const evsDe = (horaId) => evs.filter((e) => e.horaId === horaId);
+  const kgDe = (horaId) => evsDe(horaId).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
 
-  const [bins, setBins] = useState("");
   const [reloj, setReloj] = useState(ahoraHM());   // reloj en tiempo real (no editable)
   const [mermaOpen, setMermaOpen] = useState(false);
   const [mermaKg, setMermaKg] = useState("");
   const [mermaMot, setMermaMot] = useState("");
-
-  // Tic tac: la hora del registro es SIEMPRE la hora real del momento (no se puede cambiar).
   useEffect(() => { const t = setInterval(() => setReloj(ahoraHM()), 1000); return () => clearInterval(t); }, []);
 
-  const binsN = parseFloat(bins) || 0;
-  const kgPrev = binsN * netoPorBin;
-
-  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, ahoraHM()); setBins(""); };
-  const vaciarResto = () => { if (binsPiso <= 0) return; onRegistrar(binsPiso, ""); };
   const doMerma = () => { const k = parseFloat(mermaKg) || 0; if (k <= 0) return; onMerma(k, mermaMot); setMermaKg(""); setMermaMot(""); setMermaOpen(false); };
 
   return (
@@ -503,34 +524,44 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
         </div>
       ) : (
         <>
-          {/* Registrar vaciado */}
-          <div className="flex items-end gap-2 flex-wrap bg-white border border-emerald-200 rounded-lg p-2.5">
-            <div className="w-28">
-              <label className="text-[10px] text-gray-500 block mb-0.5">Bins vaciados</label>
-              <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder={binsPiso > 0 ? String(binsPiso) : "0"} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora (automática)</label>
-              <div className="text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold tabular-nums inline-flex items-center gap-1.5" title="Se registra con la hora real del momento; no se puede cambiar">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {hm12(reloj)}
-              </div>
-            </div>
-            <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
-            <button onClick={doRegistrar} disabled={binsN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
-            {binsPiso > 0 && <button onClick={vaciarResto} className="text-xs px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg font-semibold hover:bg-emerald-50 inline-flex items-center gap-1"><Truck size={14} /> Vaciar lo que resta ({binsPiso} bins)</button>}
+          {/* Acciones: abrir hora + terminar */}
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <button onClick={onAbrirHora} disabled={hayAbierta} title={hayAbierta ? "Cierra la hora abierta antes de abrir otra" : ""} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Abrir hora</button>
+            {hayAbierta && <span className="text-[11px] text-gray-400">Registra los bins en la hora abierta; ciérrala para abrir otra.</span>}
             <div className="flex-1" />
-            <button onClick={onTerminar} className="text-xs px-3 py-2 border border-amber-300 text-amber-700 rounded-lg font-semibold hover:bg-amber-50 inline-flex items-center gap-1"><Check size={14} /> Terminar</button>
+            <button onClick={onTerminar} className="text-xs px-3 py-2 border border-amber-300 text-amber-700 rounded-lg font-semibold hover:bg-amber-50 inline-flex items-center gap-1"><Check size={14} /> Terminar folio</button>
           </div>
 
-          {/* Registros de vaciado */}
-          {evs.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {evs.map((e) => (
-                <div key={e.id} className="flex items-center justify-between text-xs bg-white border border-gray-100 rounded px-2 py-1 gap-2">
-                  <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {hm12(e.hora)}{e.fecha ? ` · ${e.fecha}` : ""}</span></span>
-                  <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
-                </div>
+          {/* Horas */}
+          {horas.length === 0 ? (
+            <div className="text-xs text-gray-400 italic py-2">Aún no hay horas. Da clic en <b className="text-gray-500">Abrir hora</b> para empezar a registrar el vaciado.</div>
+          ) : (
+            <div className="space-y-2">
+              {horas.map((h) => (
+                <HoraCampo key={h.id} h={h} netoPorBin={netoPorBin} fmt={fmt} reloj={reloj}
+                  registros={evsDe(h.id)} kgHora={kgDe(h.id)} binsPiso={binsPiso}
+                  onRegistrar={(bins) => onRegistrar(h.id, bins)}
+                  onDelEvento={onDelEvento}
+                  onCerrar={() => onCerrarHora(h.id)}
+                  onReabrirHora={() => onReabrirHora(h.id)}
+                  onCancelar={() => onCancelarHora(h.id)}
+                />
               ))}
+            </div>
+          )}
+
+          {/* Registros viejos sin hora (datos previos) */}
+          {sueltos.length > 0 && (
+            <div className="mt-2 border border-gray-200 rounded-lg p-2 bg-white">
+              <div className="text-[11px] text-gray-500 mb-1">Vaciado sin hora (registros previos)</div>
+              <div className="space-y-1">
+                {sueltos.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
+                    <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {hm12(e.hora)}</span></span>
+                    <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -559,6 +590,78 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// Una HORA del vaciado: se registran bins mientras está abierta; al cerrarla queda lista para SAP.
+function HoraCampo({ h, netoPorBin, fmt, reloj, registros, kgHora, binsPiso, onRegistrar, onDelEvento, onCerrar, onReabrirHora, onCancelar }) {
+  const [bins, setBins] = useState("");
+  const binsN = parseFloat(bins) || 0;
+  const kgPrev = binsN * netoPorBin;
+  const cub = cubetasDe(kgHora);   // neto ÷ 6 → lo que se manda a SAP de esta hora
+  const abierta = h.estado === "abierta";
+  const enviada = h.estado === "enviada";
+  const doReg = () => { if (binsN <= 0) return; onRegistrar(binsN); setBins(""); };
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/70 gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-2">
+          <b className="text-sm text-gray-800">{h.etiqueta}</b>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${enviada ? "bg-green-50 text-green-700 border-green-200" : abierta ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>{enviada ? "Enviada" : abierta ? "Abierta" : "Cerrada"}</span>
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="text-xs text-gray-600"><b className="text-gray-800">{fmt(kgHora)} kg</b> · {cub} cub</span>
+          {!h.sapEnvio && !h.sapPendiente && (
+            <button onClick={onCancelar} title="Cancelar esta hora (borrarla) — por si se abrió por error" className="text-gray-300 hover:text-red-600 shrink-0"><X size={15} /></button>
+          )}
+        </span>
+      </div>
+      <div className="p-2.5">
+        {/* Registros de la hora */}
+        {registros.length > 0 && (
+          <div className="space-y-1 mb-2">
+            {registros.map((e) => (
+              <div key={e.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
+                <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {hm12(e.hora)}</span></span>
+                {abierta && <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>}
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Registrar bins en la hora abierta */}
+        {abierta && (
+          <div className="flex items-end gap-2 flex-wrap bg-emerald-50/50 rounded-lg p-2">
+            <div className="w-28">
+              <label className="text-[10px] text-gray-500 block mb-0.5">Bins vaciados</label>
+              <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder={binsPiso > 0 ? String(binsPiso) : "0"} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora (automática)</label>
+              <div className="text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white text-gray-700 font-semibold tabular-nums inline-flex items-center gap-1.5" title="Se registra con la hora real del momento">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {hm12(reloj)}
+              </div>
+            </div>
+            <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
+            <button onClick={doReg} disabled={binsN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
+            {binsPiso > 0 && <button onClick={() => { onRegistrar(binsPiso); setBins(""); }} className="text-xs px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg font-semibold hover:bg-emerald-50 inline-flex items-center gap-1"><Truck size={14} /> Todo lo que resta ({binsPiso} bins)</button>}
+          </div>
+        )}
+        {/* Acciones de la hora */}
+        <div className="flex items-center gap-2 flex-wrap justify-end mt-2">
+          {abierta && <button onClick={onCerrar} disabled={registros.length === 0} className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Cerrar hora</button>}
+          {h.estado === "cerrada" && (
+            <>
+              <button onClick={onReabrirHora} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
+              <span title="El envío a SAP de esta hora se habilita en la siguiente fase" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</span>
+            </>
+          )}
+          {enviada && h.sapEnvio && (
+            <span className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Enviado a SAP{h.sapEnvio.docNum ? ` · #${h.sapEnvio.docNum}` : ""}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
