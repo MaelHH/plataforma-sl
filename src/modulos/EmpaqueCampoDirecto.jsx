@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
@@ -442,15 +442,18 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
   const cubetas = cubetasDe(vac);   // neto ÷ 6, lo que irá a SAP
 
   const [bins, setBins] = useState("");
-  const [hora, setHora] = useState(ahoraHM());   // se prellena con la hora actual (como logística)
+  const [reloj, setReloj] = useState(ahoraHM());   // reloj en tiempo real (no editable)
   const [mermaOpen, setMermaOpen] = useState(false);
   const [mermaKg, setMermaKg] = useState("");
   const [mermaMot, setMermaMot] = useState("");
 
+  // Tic tac: la hora del registro es SIEMPRE la hora real del momento (no se puede cambiar).
+  useEffect(() => { const t = setInterval(() => setReloj(ahoraHM()), 1000); return () => clearInterval(t); }, []);
+
   const binsN = parseFloat(bins) || 0;
   const kgPrev = binsN * netoPorBin;
 
-  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, hora || ahoraHM()); setBins(""); setHora(ahoraHM()); };
+  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, ahoraHM()); setBins(""); };
   const vaciarResto = () => { if (binsPiso <= 0) return; onRegistrar(binsPiso, ""); };
   const doMerma = () => { const k = parseFloat(mermaKg) || 0; if (k <= 0) return; onMerma(k, mermaMot); setMermaKg(""); setMermaMot(""); setMermaOpen(false); };
 
@@ -498,9 +501,11 @@ function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onM
               <label className="text-[10px] text-gray-500 block mb-0.5">Bins vaciados</label>
               <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder={binsPiso > 0 ? String(binsPiso) : "0"} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
             </div>
-            <div className="w-28">
-              <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora</label>
-              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora (automática)</label>
+              <div className="text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 font-semibold tabular-nums inline-flex items-center gap-1.5" title="Se registra con la hora real del momento; no se puede cambiar">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {reloj}
+              </div>
             </div>
             <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
             <button onClick={doRegistrar} disabled={binsN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
