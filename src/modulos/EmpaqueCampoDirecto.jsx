@@ -64,6 +64,14 @@ export default function EmpaqueCampoDirecto() {
     lista.forEach((m) => m.departamento && s.add(m.departamento));
     return [...s].sort((a, b) => a.localeCompare(b)).map((t) => ({ value: t, label: t }));
   }, [loteIndex, lista]);
+  // Transportes y choferes YA usados antes en campo directo (para reelegir sin re-teclear).
+  const usados = (campo) => {
+    const s = new Set();
+    lista.forEach((m) => { const v = (m[campo] || "").trim(); if (v) s.add(v); });
+    return [...s].sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: v }));
+  };
+  const transporteOpts = useMemo(() => usados("transporte"), [lista]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const choferOpts = useMemo(() => usados("chofer"), [lista]);           // eslint-disable-line react-hooks/exhaustive-deps
 
   const [form, setForm] = useState(null);   // null = form cerrado; objeto = creando/editando
   const [editId, setEditId] = useState(null);
@@ -269,10 +277,10 @@ export default function EmpaqueCampoDirecto() {
                 <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom placeholder="Tabla…" className={INP} />
               </Campo>
               <Campo lab="Transporte">
-                <input value={form.transporte} onChange={(e) => upd({ transporte: e.target.value })} placeholder="Camión blanco Z-JN3 607" className={INP} />
+                <SearchSelect value={form.transporte} onChange={(v) => upd({ transporte: v })} options={transporteOpts} allowCustom placeholder="Camión blanco Z-JN3 607" className={INP} />
               </Campo>
               <Campo lab="Chofer">
-                <input value={form.chofer} onChange={(e) => upd({ chofer: e.target.value })} placeholder="Rubén Cota" className={INP} />
+                <SearchSelect value={form.chofer} onChange={(v) => upd({ chofer: v })} options={choferOpts} allowCustom placeholder="Rubén Cota" className={INP} />
               </Campo>
               <Campo lab="Bins mandados *">
                 <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} placeholder="36" className={INP} />
