@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send } from "lucide-react";
+import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send, Ban, Search } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
-import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre } from "./helpers/empaque";
+import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
+import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
 // Hora actual "HH:MM" (24h) para GUARDAR los registros de vaciado (formato inequívoco).
@@ -48,8 +49,14 @@ const INP = "w-full text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-w
 
 export default function EmpaqueCampoDirecto() {
   const { movimientosCampo, setMovimientosCampo, proyectos, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
-  const { usuario } = useAuth() || {};
+  const { usuario, can } = useAuth() || {};
   const dlg = useDialog();
+  // Candados RBAC del envío a SAP (igual que logística): aprobar (encargada) y enviar a SAP.
+  const puedeAprobar = can ? can("empaque.vaciado.aprobar") : false;
+  const puedeEnviarSap = can ? can("empaque.vaciado.enviar_sap") : false;
+  // Línea de corte SAP: folios anteriores a esta fecha son HISTÓRICO → no se mandan a SAP.
+  const goLiveSAP = configEmpaque?.goLiveSAP || "";
+  const actorNombre = usuario?.full_name || usuario?.nombre || usuario?.email || "Empaque";
 
   const lista = useMemo(() => (Array.isArray(movimientosCampo) ? movimientosCampo : []), [movimientosCampo]);
 
@@ -214,7 +221,10 @@ export default function EmpaqueCampoDirecto() {
   };
   const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
   const cerrarHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
-  const reabrirHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "abierta" } : h) }));
+  // Reabrir para corregir: vuelve a "abierta" y BORRA la aprobación (hay que re-aprobar antes de SAP).
+  const reabrirHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "abierta", aprobacion: undefined } : h) }));
+  // kg neto de una hora = suma de sus eventos (registros con ese horaId).
+  const kgHoraDe = (m, horaId) => (m.vaciado?.eventos || []).filter((e) => e.horaId === horaId).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
   const cancelarHoraCD = async (m, horaId) => {
     const v = m.vaciado || {};
     const h = (v.horas || []).find((x) => x.id === horaId);
@@ -252,7 +262,85 @@ export default function EmpaqueCampoDirecto() {
     const ok = await dlg.confirm({ title: "Reabrir folio", message: "El folio volverá a contar como en piso para seguir vaciando. ¿Reabrir?", confirmText: "Sí, reabrir" });
     if (!ok) return;
     updVac(m.id, (v) => { const c = { ...v }; delete c.terminado; return c; });
-    registrarEvento?.({ evento: "campo_directo_reabierto", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Reabrió el folio ${m.folio}` });
+    registrarEvento?.({ evento: "campo_directo_reabierto", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `Reabrió el folio ${m.folio}` });
+  };
+
+  // ── ENVÍO A SAP POR HORA (mismo patrón que logística: aprobar → mandar → estados/verificar) ──
+  const [enviandoHora, setEnviandoHora] = useState("");   // clave de la hora que se está enviando
+  const [verificandoCD, setVerificandoCD] = useState(""); // clave que se está verificando (G4)
+  const [verifMsgCD, setVerifMsgCD] = useState(null);     // { horaId, ok, texto }
+  const [sapErrHora, setSapErrHora] = useState(null);     // { horaId, msg }
+
+  // Aprobación del cálculo (2ª persona): la encargada revisa y habilita el envío a SAP.
+  const aprobarHoraCD = async (m, h) => {
+    if (!puedeAprobar) { await dlg.alerta({ title: "No puedes aprobar", message: "Solo la encargada (gerente o admin) puede aprobar el cálculo y habilitar el envío a SAP. Pídele que revise y apruebe desde su cuenta." }); return; }
+    const neto = kgHoraDe(m, h.id);
+    const cub = cubetasDe(neto);
+    const ord = ordenDe(m);
+    const ok = await dlg.confirm({
+      title: "Aprobar el cálculo antes de SAP",
+      message: `¿Seguro que el cálculo es correcto? Se enviarán ${cub} cubetas (${fmt(neto)} kg ÷ 6) a la orden #${(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}. Quedará registrado a TU nombre. Al aprobar se habilita el botón de mandar a SAP.`,
+      confirmText: "Sí, es correcto — aprobar",
+    });
+    if (!ok) return;
+    const aprobacion = { por: actorNombre, porId: usuario?.id ?? null, tipo: usuario?.tipo_nombre ?? null, ts: ahora().iso };
+    updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, aprobacion } : x) }));
+    registrarEvento?.({ evento: "campo_directo_hora_aprobada", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: cálculo aprobado (${cub} cub) por ${actorNombre} — habilita envío a SAP`, meta: { horaId: h.id, cubetas: cub, porId: aprobacion.porId } });
+  };
+
+  // Mandar una hora a SAP: reciboProduccionSAP (cubetas = neto/6) a la orden de fabricación, con
+  // clave idempotente `${folio}_${hora}` (anti doble conteo) y el aprobador. Si no hay respuesta,
+  // queda PENDIENTE (G4) y solo se ofrece "Verificar en SAP" (nunca reenvío a ciegas).
+  const enviarHoraSAPCD = async (m0, h0) => {
+    const m = movimientosCampo.find((x) => x.id === m0.id) || m0;             // datos vivos
+    const h = (m.vaciado?.horas || []).find((x) => x.id === h0.id) || h0;
+    const ord = ordenDe(m);
+    const neto = kgHoraDe(m, h.id);
+    const cub = cubetasDe(neto);
+    setSapErrHora(null);
+    if (esHistoricoSAP(m, goLiveSAP)) { setSapErrHora({ horaId: h.id, msg: `Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): no se manda a SAP desde aquí.` }); return; }
+    if (!h.aprobacion) { setSapErrHora({ horaId: h.id, msg: "Falta APROBAR el cálculo antes de mandar a SAP." }); return; }
+    if (!ord?.absoluteEntry) { setSapErrHora({ horaId: h.id, msg: "Este folio no tiene orden de fabricación en SAP." }); return; }
+    if (!(cub > 0)) { setSapErrHora({ horaId: h.id, msg: "La cantidad calculada es 0." }); return; }
+    const seguro = await dlg.confirm({
+      title: `¿Mandar ${h.etiqueta} a SAP?`,
+      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(neto)} kg ÷ 6) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry}, del folio ${m.folio} (lote ${m.rancho || "—"}).\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${h.aprobacion?.por || "—"}.`,
+      confirmText: `Sí, mandar ${cub.toLocaleString()} cubetas`, danger: true,
+    });
+    if (!seguro) return;
+    setEnviandoHora(h.id); setSapErrHora(null);
+    try {
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cub, movimientoId: m.id, claveEnvio: `${m.id}_${h.id}`, aprobadoPor: h.aprobacion?.por, aprobadoPorId: h.aprobacion?.porId != null ? String(h.aprobacion.porId) : undefined });
+      updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id
+        ? { ...x, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: 6, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: ahora().iso } }
+        : x) }));
+      registrarEvento?.({ evento: "campo_directo_recibo_hora_sap", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: ${cub} cubetas (${fmt(neto)} kg ÷ 6) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`, meta: { horaId: h.id, cubetas: cub, netoKg: neto, docNum: res.docNum } });
+    } catch (e) {
+      if (e?.sinRespuesta) {   // G4: no sabemos si quedó en SAP → PENDIENTE, no reenviar a ciegas
+        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: { clave: `${m.id}_${h.id}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: 6, netoKg: neto, ts: ahora().iso } } : x) }));
+      } else setSapErrHora({ horaId: h.id, msg: String(e?.message || e) });
+    } finally { setEnviandoHora(""); }
+  };
+
+  // G4: preguntar a SAP (SOLO GET) si el recibo ya existe; adopta su doc o libera el reenvío.
+  const verificarHoraCD = async (m, h) => {
+    const pend = h.sapPendiente;
+    if (!pend) return;
+    setVerifMsgCD(null); setVerificandoCD(pend.clave);
+    try {
+      const r = await verificarReciboSAP({ clave: pend.clave, absoluteEntry: pend.absoluteEntry, cantidad: pend.cubetas });
+      if (r.estado === "encontrado" || r.estado === "enviado") {
+        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, estado: "enviada", sapEnvio: { docEntry: r.docEntry, docNum: r.docNum, cubetas: pend.cubetas, kgPorCubeta: pend.kgPorCubeta, netoKg: pend.netoKg, absoluteEntry: pend.absoluteEntry, ts: ahora().iso, verificado: true }, sapPendiente: undefined } : x) }));
+        setVerifMsgCD({ horaId: h.id, ok: true, texto: `Sí se creó en SAP (#${r.docNum}). Ya quedó registrado; NO hay que reenviarlo.` });
+      } else if (r.estado === "no_encontrado") {
+        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: undefined } : x) }));
+        setVerifMsgCD({ horaId: h.id, ok: false, texto: "SAP NO tiene ese recibo: el envío no se completó. Ya puedes volver a mandarlo." });
+      } else {
+        setVerifMsgCD({ horaId: h.id, ok: false, texto: r.mensaje || "Hay varios recibos parecidos en SAP; revísalo allá antes de decidir." });
+      }
+    } catch (e) {
+      setVerifMsgCD({ horaId: h.id, ok: false, texto: String(e?.message || e) });
+    } finally { setVerificandoCD(""); }
   };
 
   return (
@@ -361,6 +449,15 @@ export default function EmpaqueCampoDirecto() {
                       onDelMerma={(id) => delMermaCD(m, id)}
                       onTerminar={() => terminarCD(m)}
                       onReabrir={() => reabrirCD(m)}
+                      sap={{
+                        puedeAprobar, puedeEnviarSap,
+                        esHist: esHistoricoSAP(m, goLiveSAP), goLiveSAP,
+                        onAprobar: (h) => aprobarHoraCD(m, h),
+                        onEnviar: (h) => enviarHoraSAPCD(m, h),
+                        onVerificar: (h) => verificarHoraCD(m, h),
+                        enviandoClave: enviandoHora, verificandoClave: verificandoCD,
+                        verifMsg: verifMsgCD, error: sapErrHora,
+                      }}
                     />
                     <div className="px-3 py-3 bg-gray-50/60 text-xs grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4 border-t border-gray-100">
                       <Dato lab="Cultivo" val={m.cultivo} />
@@ -468,7 +565,7 @@ function Dato({ lab, val }) {
 // Como logística: se ABRE una hora, se registran bins DENTRO de ella, se CIERRA y luego se manda
 // esa hora a SAP (Fase 3) a su orden de fabricación. El kg de cada hora = suma de sus registros;
 // el "en piso" y las cubetas (neto ÷ 6) salen de los helpers de empaque (mismos números).
-function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, onAbrirHora, onRegistrar, onDelEvento, onCerrarHora, onReabrirHora, onCancelarHora, onMerma, onDelMerma, onTerminar, onReabrir }) {
+function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, sap, onAbrirHora, onRegistrar, onDelEvento, onCerrarHora, onReabrirHora, onCancelarHora, onMerma, onDelMerma, onTerminar, onReabrir }) {
   const rec = kgRecibidosDe(m);
   const vac = kgVaciadosDe(m);
   const mer = kgMermadosDe(m);
@@ -561,7 +658,7 @@ function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, onAbrirHora, onRegis
           ) : (
             <div className="space-y-2">
               {horas.map((h) => (
-                <HoraCampo key={h.id} h={h} taraBin={taraBin} fmt={fmt} reloj={reloj}
+                <HoraCampo key={h.id} h={h} taraBin={taraBin} fmt={fmt} reloj={reloj} sap={sap}
                   registros={evsDe(h.id)} kgHora={kgDe(h.id)}
                   onRegistrar={(bruto, bins) => onRegistrar(h.id, bruto, bins)}
                   onDelEvento={onDelEvento}
@@ -619,7 +716,7 @@ function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, onAbrirHora, onRegis
 
 // Una HORA del vaciado: se pesan bins mientras está abierta (bruto de báscula − bins×tara = neto
 // real); al cerrarla queda lista para SAP.
-function HoraCampo({ h, taraBin, fmt, reloj, registros, kgHora, onRegistrar, onDelEvento, onCerrar, onReabrirHora, onCancelar }) {
+function HoraCampo({ h, taraBin, fmt, reloj, sap, registros, kgHora, onRegistrar, onDelEvento, onCerrar, onReabrirHora, onCancelar }) {
   const [bruto, setBruto] = useState("");
   const [bins, setBins] = useState("");
   const brutoN = parseFloat(bruto) || 0;
@@ -629,6 +726,12 @@ function HoraCampo({ h, taraBin, fmt, reloj, registros, kgHora, onRegistrar, onD
   const cub = cubetasDe(kgHora);   // neto ÷ 6 → lo que se manda a SAP de esta hora
   const abierta = h.estado === "abierta";
   const enviada = h.estado === "enviada";
+  const pendiente = !!h.sapPendiente;
+  const aprobada = !!h.aprobacion;
+  const enviando = sap?.enviandoClave === h.id;
+  const verificando = sap?.verificandoClave === h.sapPendiente?.clave;
+  const verifMsg = sap?.verifMsg?.horaId === h.id ? sap.verifMsg : null;
+  const errMsg = sap?.error?.horaId === h.id ? sap.error.msg : null;
   const doReg = () => { if (brutoN <= 0) return; onRegistrar(brutoN, binsN); setBruto(""); setBins(""); };
 
   return (
@@ -680,17 +783,42 @@ function HoraCampo({ h, taraBin, fmt, reloj, registros, kgHora, onRegistrar, onD
             <button onClick={doReg} disabled={brutoN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
           </div>
         )}
+        {/* Error de envío a SAP de esta hora */}
+        {errMsg && <div className="mt-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">{errMsg}</div>}
+
+        {/* Aviso ⏳ pendiente de confirmar (G4) + verificar en SAP */}
+        {pendiente && (
+          <div className="mt-2 text-xs bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 space-y-2">
+            <div className="text-amber-800"><b>⏳ Pendiente de confirmar.</b> El envío de <b>{h.sapPendiente.cubetas} cubetas</b> se interrumpió y no sabemos si quedó en SAP. <b>No lo vuelvas a mandar</b> sin verificar: podría quedar doble.</div>
+            <button onClick={() => sap.onVerificar(h)} disabled={verificando} className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded-lg font-semibold hover:bg-amber-700 disabled:opacity-50 inline-flex items-center gap-1"><Search size={14} /> {verificando ? "Consultando SAP…" : "Verificar en SAP"}</button>
+            {verifMsg && <div className={`text-[11px] rounded-lg px-2 py-1.5 ${verifMsg.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-white text-gray-700 border border-gray-200"}`}>{verifMsg.texto}</div>}
+          </div>
+        )}
+
         {/* Acciones de la hora */}
         <div className="flex items-center gap-2 flex-wrap justify-end mt-2">
           {abierta && <button onClick={onCerrar} disabled={registros.length === 0} className="text-xs px-3 py-1.5 border border-amber-300 text-amber-700 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Cerrar hora</button>}
-          {h.estado === "cerrada" && (
+          {h.estado === "cerrada" && !pendiente && (
             <>
+              {aprobada && <span className="text-[11px] text-green-700 inline-flex items-center gap-1 mr-auto"><Check size={13} /> Aprobado por {h.aprobacion.por}</span>}
               <button onClick={onReabrirHora} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={14} /> Reabrir (corregir)</button>
-              <span title="El envío a SAP de esta hora se habilita en la siguiente fase" className="text-xs px-3 py-1.5 border border-gray-200 text-gray-300 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Send size={14} /> Mandar a SAP ({cub} cub)</span>
+              {sap?.esHist ? (
+                <span title={`Folio anterior al corte (${sap.goLiveSAP}): ya se registró fuera de la app`} className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-500 bg-gray-50 rounded-lg font-semibold inline-flex items-center gap-1"><Ban size={13} /> Histórico — no se manda a SAP</span>
+              ) : !aprobada ? (
+                sap?.puedeAprobar ? (
+                  <button onClick={() => sap.onAprobar(h)} disabled={!(cub > 0)} className="text-xs px-3 py-1.5 border border-green-400 text-green-700 rounded-lg font-semibold hover:bg-green-50 disabled:opacity-40 inline-flex items-center gap-1"><Check size={14} /> Aprobar cálculo</button>
+                ) : (
+                  <span title="Solo la encargada (gerente o admin) puede aprobar y habilitar el envío a SAP" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Ban size={13} /> Solo la encargada aprueba</span>
+                )
+              ) : sap?.puedeEnviarSap ? (
+                <button onClick={() => sap.onEnviar(h)} disabled={!(cub > 0) || enviando} className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1"><Send size={14} /> {enviando ? "Enviando…" : `Mandar a SAP (${cub} cub)`}</button>
+              ) : (
+                <span title="No tienes permiso para mandar a SAP (empaque.vaciado.enviar_sap)" className="text-[11px] px-3 py-1.5 border border-gray-200 text-gray-400 rounded-lg font-semibold cursor-not-allowed inline-flex items-center gap-1"><Ban size={13} /> Sin permiso para enviar</span>
+              )}
             </>
           )}
           {enviada && h.sapEnvio && (
-            <span className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Enviado a SAP{h.sapEnvio.docNum ? ` · #${h.sapEnvio.docNum}` : ""}</span>
+            <span className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Enviado a SAP{h.sapEnvio.docNum ? ` · #${h.sapEnvio.docNum}` : ""}{h.sapEnvio.verificado ? " (verificado)" : ""}</span>
           )}
         </div>
       </div>
