@@ -1,10 +1,17 @@
 import { useState, useMemo } from "react";
-import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
+import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
+
+// Hora actual "HH:MM" para prellenar los registros de vaciado.
+function ahoraHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPAQUE CAMPO DIRECTO — flujo INDEPENDIENTE del de logística.
@@ -151,10 +158,58 @@ export default function EmpaqueCampoDirecto() {
   // Totales para el resumen.
   const totBins = lista.reduce((a, m) => a + (parseFloat(m.bins) || 0), 0);
   const totNeto = lista.reduce((a, m) => a + (parseFloat(m.netoTeorico) || 0), 0);
-  const totCub = lista.reduce((a, m) => a + (parseFloat(m.bins) || 0) * (parseFloat(m.binParams?.cubetasPorBin) || cubetasPorBin), 0);
+  const totVaciado = lista.reduce((a, m) => a + kgVaciadosDe(m), 0);
+  const totPiso = lista.reduce((a, m) => a + kgEnPisoDe(m), 0);
 
   const netoDe = (m) => parseFloat(m.netoTeorico) || (parseFloat(m.bins) || 0) * netoPorBin;
-  const cubDe = (m) => (parseFloat(m.bins) || 0) * (parseFloat(m.binParams?.cubetasPorBin) || cubetasPorBin);
+
+  // ── VACIADO (por bins) ──
+  // Neto por bin de ESTE folio (usa sus binParams congelados; si no, los defaults actuales).
+  const netoPorBinDe = (m) => Math.max(0, (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin) - (parseFloat(m.binParams?.taraBin) || taraBin));
+  // Muta el vaciado de un folio (crea el objeto base si no existe). kgRecibidos = neto teórico
+  // sembrado al crear el folio → los helpers de empaque (kgEnPisoDe, etc.) funcionan igual.
+  const updVac = (id, fn) => setMovimientosCampo((prev) => prev.map((m) => m.id === id
+    ? { ...m, vaciado: fn({ kgRecibidos: m.netoTeorico || 0, eventos: [], mermas: [], ...(m.vaciado || {}) }), actualizado: ahora().iso }
+    : m));
+
+  const registrarVaciado = (m, binsN, hora) => {
+    const b = parseFloat(binsN) || 0;
+    if (b <= 0) return;
+    const npb = netoPorBinDe(m);
+    const ev = { id: nuevoId("VD_"), bins: b, kg: b * npb, fecha: hoyISO(), hora: hora || ahoraHM() };
+    updVac(m.id, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
+    registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins (${fmt(b * npb)} kg) del folio ${m.folio}` });
+  };
+  const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
+
+  const registrarMermaCD = (m, kg, motivo) => {
+    const k = parseFloat(kg) || 0;
+    if (k <= 0) return;
+    updVac(m.id, (v) => ({ ...v, mermas: [...(v.mermas || []), { id: nuevoId("MR_"), kg: k, motivo: (motivo || "").trim(), fecha: hoyISO(), hora: ahoraHM() }] }));
+    registrarEvento?.({ evento: "campo_directo_merma", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Merma ${fmt(k)} kg del folio ${m.folio}${motivo ? ` (${motivo})` : ""}` });
+  };
+  const delMermaCD = (m, id) => updVac(m.id, (v) => ({ ...v, mermas: (v.mermas || []).filter((x) => x.id !== id) }));
+
+  const terminarCD = async (m) => {
+    const piso = kgEnPisoDe(m);
+    const npb = netoPorBinDe(m);
+    const ok = await dlg.confirm({
+      title: "Terminar vaciado",
+      message: piso > 1
+        ? `Quedan ${fmt(piso)} kg en piso (~${npb > 0 ? Math.round(piso / npb) : 0} bins). Al terminar, el folio se cierra y deja de contar como piso, pero la diferencia queda guardada para auditar. ¿Terminar?`
+        : "¿Marcar este folio como terminado?",
+      confirmText: "Sí, terminar",
+    });
+    if (!ok) return;
+    updVac(m.id, (v) => ({ ...v, terminado: { por: usuario?.nombre || "Empaque", porId: usuario?.id || "", ts: ahora().iso, pisoAlCerrar: piso } }));
+    registrarEvento?.({ evento: "campo_directo_terminado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Terminó el folio ${m.folio} (quedaban ${fmt(piso)} kg en piso)` });
+  };
+  const reabrirCD = async (m) => {
+    const ok = await dlg.confirm({ title: "Reabrir folio", message: "El folio volverá a contar como en piso para seguir vaciando. ¿Reabrir?", confirmText: "Sí, reabrir" });
+    if (!ok) return;
+    updVac(m.id, (v) => { const c = { ...v }; delete c.terminado; return c; });
+    registrarEvento?.({ evento: "campo_directo_reabierto", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Reabrió el folio ${m.folio}` });
+  };
 
   return (
     <div>
@@ -173,12 +228,13 @@ export default function EmpaqueCampoDirecto() {
         {[
           { lab: "Folios", val: lista.length, color: "text-gray-900" },
           { lab: "Bins mandados", val: fmt(totBins), color: "text-emerald-700" },
-          { lab: "Neto teórico (kg)", val: fmt(totNeto), color: "text-indigo-700" },
-          { lab: "Cubetas (ticket)", val: fmt(totCub), color: "text-amber-700" },
+          { lab: "Vaciado (kg)", val: fmt(totVaciado), color: "text-green-700" },
+          { lab: "En piso (kg)", val: fmt(totPiso), color: "text-amber-700", sub: `de ${fmt(totNeto)} kg teóricos` },
         ].map((s) => (
           <div key={s.lab} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
             <div className="text-[11px] text-gray-500">{s.lab}</div>
             <div className={`text-xl font-bold ${s.color}`}>{s.val}</div>
+            {s.sub && <div className="text-[10px] text-gray-400">{s.sub}</div>}
           </div>
         ))}
       </div>
@@ -215,37 +271,60 @@ export default function EmpaqueCampoDirecto() {
         <div className="space-y-2">
           {lista.map((m) => {
             const abierto = expandido === m.id;
+            const rec = kgRecibidosDe(m);
+            const vac = kgVaciadosDe(m);
+            const piso = kgEnPisoDe(m);
+            const term = estaTerminado(m);
+            const pct = rec > 0 ? Math.min(100, Math.round((vac / rec) * 100)) : 0;
+            const npb = netoPorBinDe(m);
+            const binsPiso = npb > 0 ? Math.round(piso / npb) : 0;
             return (
-              <div key={m.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div key={m.id} className={`bg-white border rounded-xl overflow-hidden ${term ? "border-gray-200" : abierto ? "border-emerald-300 ring-1 ring-emerald-100" : "border-gray-200"}`}>
                 <div className="flex items-center gap-3 px-3 py-2.5 flex-wrap">
-                  <div className="flex items-center gap-2 min-w-[120px]">
+                  <div className="flex items-center gap-2 min-w-[110px]">
                     <span className="text-[10px] font-bold text-white bg-emerald-600 rounded px-1.5 py-0.5">FOLIO</span>
                     <span className="font-bold text-gray-900">{m.folio}</span>
                   </div>
                   <div className="text-xs text-gray-600 flex items-center gap-1"><Sprout size={13} className="text-emerald-500" /> {m.rancho || "—"}<span className="text-gray-300">·</span><span className="text-gray-400">{temporadaDe(m.rancho) || (proyectos || []).find((p) => p.code === m.proyecto)?.nombre || "—"}</span></div>
                   {m.departamento && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Tabla: {m.departamento}</span>}
                   <div className="flex-1" />
-                  <div className="text-xs text-gray-700 inline-flex items-center gap-3">
-                    <span><b>{fmt(m.bins)}</b> bins</span>
-                    <span className="text-indigo-700"><b>{fmt(netoDe(m))}</b> kg neto</span>
-                    <span className="text-amber-700">{fmt(cubDe(m))} cub</span>
-                  </div>
-                  <button onClick={() => setExpandido(abierto ? null : m.id)} className="text-gray-400 hover:text-gray-700 p-1" title="Ver detalle">{abierto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
+                  {/* Progreso Vaciado / En piso */}
+                  {term ? (
+                    <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 inline-flex items-center gap-1"><Check size={12} /> Terminado{kgSobranteCierre(m) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(m))} kg` : ""}</span>
+                  ) : (
+                    <div className="flex items-center gap-2 min-w-[180px]">
+                      <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${pct}%` }} /></div>
+                      <span className="text-[11px] text-gray-500 whitespace-nowrap">{pct}%</span>
+                      <span className="text-xs whitespace-nowrap"><span className="text-amber-700 font-bold">{fmt(piso)}</span> <span className="text-gray-400">kg piso{binsPiso > 0 ? ` · ~${binsPiso} bins` : ""}</span></span>
+                    </div>
+                  )}
+                  <button onClick={() => setExpandido(abierto ? null : m.id)} className={`text-xs font-semibold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${abierto ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Vaciar</button>
                   <button onClick={() => abrirEditar(m)} className="text-gray-400 hover:text-emerald-700 p-1" title="Editar"><Pencil size={15} /></button>
                   <button onClick={() => borrar(m)} className="text-gray-300 hover:text-red-600 p-1" title="Borrar"><Trash2 size={15} /></button>
                 </div>
                 {abierto && (
-                  <div className="border-t border-gray-100 px-3 py-3 bg-gray-50/60 text-xs grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4">
-                    <Dato lab="Cultivo" val={m.cultivo} />
-                    <Dato lab="Transporte" val={m.transporte || "—"} />
-                    <Dato lab="Chofer" val={m.chofer || "—"} />
-                    <Dato lab="Fecha" val={m.fecha || "—"} />
-                    <Dato lab="Hora salida" val={m.horaSalida || "—"} />
-                    <Dato lab="Hora llegada" val={m.horaLlegada || "—"} />
-                    <Dato lab="Bruto teórico" val={`${fmt((parseFloat(m.bins) || 0) * (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin))} kg`} />
-                    <Dato lab="Neto teórico" val={`${fmt(netoDe(m))} kg`} />
-                    {m.observaciones && <div className="col-span-2 sm:col-span-4"><span className="text-gray-400">Observaciones:</span> {m.observaciones}</div>}
-                    <div className="col-span-2 sm:col-span-4 mt-1 text-[11px] text-gray-400 italic">El vaciado y el envío a SAP (recibo + OC) de este folio se habilitan en las siguientes fases.</div>
+                  <div className="border-t border-gray-100">
+                    <VaciadoPanel
+                      m={m} netoPorBin={npb} fmt={fmt}
+                      onRegistrar={(bins, hora) => registrarVaciado(m, bins, hora)}
+                      onDelEvento={(evId) => delVaciado(m, evId)}
+                      onMerma={(kg, mot) => registrarMermaCD(m, kg, mot)}
+                      onDelMerma={(id) => delMermaCD(m, id)}
+                      onTerminar={() => terminarCD(m)}
+                      onReabrir={() => reabrirCD(m)}
+                    />
+                    <div className="px-3 py-3 bg-gray-50/60 text-xs grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4 border-t border-gray-100">
+                      <Dato lab="Cultivo" val={m.cultivo} />
+                      <Dato lab="Transporte" val={m.transporte || "—"} />
+                      <Dato lab="Chofer" val={m.chofer || "—"} />
+                      <Dato lab="Fecha" val={m.fecha || "—"} />
+                      <Dato lab="Hora salida" val={m.horaSalida || "—"} />
+                      <Dato lab="Hora llegada" val={m.horaLlegada || "—"} />
+                      <Dato lab="Bruto teórico" val={`${fmt((parseFloat(m.bins) || 0) * (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin))} kg`} />
+                      <Dato lab="Neto teórico" val={`${fmt(netoDe(m))} kg`} />
+                      {m.observaciones && <div className="col-span-2 sm:col-span-4"><span className="text-gray-400">Observaciones:</span> {m.observaciones}</div>}
+                      <div className="col-span-2 sm:col-span-4 mt-1 text-[11px] text-gray-400 italic">El envío a SAP (recibo + OC) de este folio se habilita en las siguientes fases.</div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -335,3 +414,119 @@ function Dato({ lab, val }) {
     <div><span className="text-gray-400">{lab}:</span> <span className="text-gray-800 font-medium">{val}</span></div>
   );
 }
+
+// ── Panel de VACIADO por bins de un folio ──
+// Registran cuántos bins vaciaron (y a qué hora si quieren): cada bin = su neto calculado.
+// Total = "Vaciar lo que resta" (un registro con todos los bins); por hora = varios registros.
+// El "en piso" y las cubetas a SAP (neto ÷ 6) salen de los helpers de empaque (mismos números).
+function VaciadoPanel({ m, netoPorBin, fmt, onRegistrar, onDelEvento, onMerma, onDelMerma, onTerminar, onReabrir }) {
+  const rec = kgRecibidosDe(m);
+  const vac = kgVaciadosDe(m);
+  const mer = kgMermadosDe(m);
+  const piso = kgEnPisoDe(m);
+  const term = estaTerminado(m);
+  const evs = m.vaciado?.eventos || [];
+  const mrs = m.vaciado?.mermas || [];
+  const binsPiso = netoPorBin > 0 ? Math.round(piso / netoPorBin) : 0;
+  const cubetas = cubetasDe(vac);   // neto ÷ 6, lo que irá a SAP
+
+  const [bins, setBins] = useState("");
+  const [hora, setHora] = useState("");
+  const [mermaOpen, setMermaOpen] = useState(false);
+  const [mermaKg, setMermaKg] = useState("");
+  const [mermaMot, setMermaMot] = useState("");
+
+  const binsN = parseFloat(bins) || 0;
+  const kgPrev = binsN * netoPorBin;
+
+  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, hora); setBins(""); setHora(""); };
+  const vaciarResto = () => { if (binsPiso <= 0) return; onRegistrar(binsPiso, ""); };
+  const doMerma = () => { const k = parseFloat(mermaKg) || 0; if (k <= 0) return; onMerma(k, mermaMot); setMermaKg(""); setMermaMot(""); setMermaOpen(false); };
+
+  return (
+    <div className="p-3 bg-emerald-50/30">
+      {/* Barra de flujo: Recibido → Vaciado → En piso */}
+      <div className="flex items-stretch gap-2 mb-3 flex-wrap">
+        <Flujo lab="Recibido (teórico)" val={`${fmt(rec)} kg`} color="text-gray-800" />
+        <Flecha />
+        <Flujo lab="Vaciado" val={`${fmt(vac)} kg`} sub={`${cubetas} cub a SAP`} color="text-green-700" />
+        <Flecha />
+        <Flujo lab="En piso" val={`${fmt(piso)} kg`} sub={binsPiso > 0 ? `~${binsPiso} bins` : undefined} color="text-amber-700" big />
+        {mer > 0 && (<><Flecha /><Flujo lab="Mermado" val={`${fmt(mer)} kg`} color="text-red-600" /></>)}
+      </div>
+
+      {term ? (
+        <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 flex-wrap gap-2">
+          <span className="text-sm text-gray-600 inline-flex items-center gap-1.5"><Check size={15} className="text-gray-500" /> Folio <b>terminado</b> por {m.vaciado?.terminado?.por || "—"}{kgSobranteCierre(m) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(m))} kg` : ""}</span>
+          <button onClick={onReabrir} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 inline-flex items-center gap-1"><RotateCcw size={13} /> Reabrir</button>
+        </div>
+      ) : (
+        <>
+          {/* Registrar vaciado */}
+          <div className="flex items-end gap-2 flex-wrap bg-white border border-emerald-200 rounded-lg p-2.5">
+            <div className="w-28">
+              <label className="text-[10px] text-gray-500 block mb-0.5">Bins vaciados</label>
+              <input type="number" min="0" step="1" value={bins} onChange={(e) => setBins(e.target.value)} placeholder={binsPiso > 0 ? String(binsPiso) : "0"} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+            </div>
+            <div className="w-28">
+              <label className="text-[10px] text-gray-500 block mb-0.5 inline-flex items-center gap-1"><Clock size={11} /> Hora</label>
+              <input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg" />
+            </div>
+            <div className="text-xs text-gray-600 pb-2">= <b className="text-green-700">{fmt(kgPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(netoPorBin)})</span></div>
+            <button onClick={doRegistrar} disabled={binsN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
+            {binsPiso > 0 && <button onClick={vaciarResto} className="text-xs px-3 py-2 border border-emerald-300 text-emerald-700 rounded-lg font-semibold hover:bg-emerald-50 inline-flex items-center gap-1"><Truck size={14} /> Vaciar lo que resta ({binsPiso} bins)</button>}
+            <div className="flex-1" />
+            <button onClick={onTerminar} className="text-xs px-3 py-2 border border-amber-300 text-amber-700 rounded-lg font-semibold hover:bg-amber-50 inline-flex items-center gap-1"><Check size={14} /> Terminar</button>
+          </div>
+
+          {/* Registros de vaciado */}
+          {evs.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {evs.map((e) => (
+                <div key={e.id} className="flex items-center justify-between text-xs bg-white border border-gray-100 rounded px-2 py-1 gap-2">
+                  <span className="text-gray-600"><b className="text-gray-800">{fmt(e.bins)} bins</b> · {fmt(e.kg)} kg <span className="text-gray-400">· {e.hora || "—"}{e.fecha ? ` · ${e.fecha}` : ""}</span></span>
+                  <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Merma */}
+          <div className="mt-2">
+            {!mermaOpen ? (
+              <button onClick={() => setMermaOpen(true)} className="text-[11px] text-red-600 hover:text-red-700 inline-flex items-center gap-1"><Plus size={12} /> Registrar merma (no entró a empaque)</button>
+            ) : (
+              <div className="flex items-end gap-2 flex-wrap bg-red-50/60 border border-red-200 rounded-lg p-2">
+                <div className="w-24"><label className="text-[10px] text-gray-500 block mb-0.5">Merma (kg)</label><input type="number" min="0" value={mermaKg} onChange={(e) => setMermaKg(e.target.value)} className="w-full text-sm px-2 py-1 border border-gray-200 rounded" /></div>
+                <div className="flex-1 min-w-[140px]"><label className="text-[10px] text-gray-500 block mb-0.5">Motivo</label><input value={mermaMot} onChange={(e) => setMermaMot(e.target.value)} placeholder="(opcional)" className="w-full text-sm px-2 py-1 border border-gray-200 rounded" /></div>
+                <button onClick={doMerma} disabled={!(parseFloat(mermaKg) > 0)} className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-40">Registrar</button>
+                <button onClick={() => { setMermaOpen(false); setMermaKg(""); setMermaMot(""); }} className="text-xs px-2 py-1.5 text-gray-500 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              </div>
+            )}
+            {mrs.length > 0 && (
+              <div className="mt-1 space-y-1">
+                {mrs.map((x) => (
+                  <div key={x.id} className="flex items-center justify-between text-xs bg-white border border-red-100 rounded px-2 py-1 gap-2">
+                    <span className="text-red-600"><b>{fmt(x.kg)} kg</b> merma{x.motivo ? ` · ${x.motivo}` : ""} <span className="text-gray-400">· {x.hora || "—"}</span></span>
+                    <button onClick={() => onDelMerma(x.id)} className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Flujo({ lab, val, sub, color, big }) {
+  return (
+    <div className={`bg-white border border-gray-200 rounded-lg px-3 py-1.5 ${big ? "min-w-[110px]" : ""}`}>
+      <div className="text-[10px] text-gray-400">{lab}</div>
+      <div className={`font-bold ${big ? "text-lg" : "text-sm"} ${color}`}>{val}</div>
+      {sub && <div className="text-[10px] text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+function Flecha() { return <div className="flex items-center text-gray-300 font-bold">→</div>; }
