@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 
 // Dropdown con búsqueda. Reemplaza a <select> en toda la app para soportar
 // listas gigantes. El buscador aparece solo cuando hay más de `searchThreshold`
@@ -18,6 +18,9 @@ import { Check } from "lucide-react";
 //   className    clases del botón (mismo look que los inputs/INP de la app)
 //   disabled     deshabilita el control
 //   searchThreshold  cuántas opciones para mostrar el buscador (default 7)
+//   allowCustom  si true, permite TEXTO LIBRE: cuando lo escrito no coincide con
+//                ninguna opción, ofrece "Usar «…»" para guardar ese valor tal cual.
+//                Además el buscador siempre se muestra (para poder teclear).
 export default function SearchSelect({
   value,
   onChange,
@@ -26,6 +29,7 @@ export default function SearchSelect({
   className = "",
   disabled = false,
   searchThreshold = 7,
+  allowCustom = false,
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -35,15 +39,21 @@ export default function SearchSelect({
   const panelRef = useRef(null);
   const inputRef = useRef(null);
 
-  const selected = options.find((o) => o.value === value) || null;
+  // Con texto libre, un valor que no está en las opciones igual se muestra tal cual.
+  const selected = options.find((o) => o.value === value) || (allowCustom && value ? { value, label: value } : null);
 
   const filtradas = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return options;
-    return options.filter((o) => String(o.label).toLowerCase().includes(t));
-  }, [q, options]);
+    const base = t ? options.filter((o) => String(o.label).toLowerCase().includes(t)) : options;
+    // Texto libre: si lo escrito no coincide EXACTO con ninguna etiqueta, ofrecer "Usar «…»".
+    if (allowCustom && t) {
+      const exacto = options.some((o) => String(o.label).trim().toLowerCase() === t);
+      if (!exacto) return [{ value: q.trim(), label: `Usar «${q.trim()}»`, __custom: true }, ...base];
+    }
+    return base;
+  }, [q, options, allowCustom]);
 
-  const mostrarBuscador = options.length > searchThreshold;
+  const mostrarBuscador = options.length > searchThreshold || allowCustom;
 
   // Calcula la posición del panel a partir del botón (posición fija en viewport).
   const recalcular = useCallback(() => {
@@ -142,11 +152,12 @@ export default function SearchSelect({
                     onMouseEnter={() => setHi(i)}
                     onClick={() => elegir(o)}
                     className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
-                      o.disabled ? "text-gray-300 cursor-not-allowed" : resaltado ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
+                      o.disabled ? "text-gray-300 cursor-not-allowed" : o.__custom ? (resaltado ? "bg-emerald-50 text-emerald-700" : "text-emerald-600 hover:bg-emerald-50") : resaltado ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"
                     } ${activo ? "font-semibold" : ""}`}
                   >
+                    {o.__custom && <Plus size={13} className="shrink-0" />}
                     <span className="flex-1 truncate">{o.label}</span>
-                    {activo && <Check size={14} className="text-blue-500 shrink-0" />}
+                    {activo && !o.__custom && <Check size={14} className="text-blue-500 shrink-0" />}
                   </button>
                 );
               })

@@ -3,7 +3,7 @@ import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, Che
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
-import ComboLibre from "../components/ComboLibre";
+import SearchSelect from "../components/SearchSelect";
 import { hoyISO } from "../utils/fecha";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,14 +55,14 @@ export default function EmpaqueCampoDirecto() {
     }));
     return idx;
   }, [proyectos]);
-  const loteOpts = useMemo(() => Object.keys(loteIndex).sort((a, b) => a.localeCompare(b)), [loteIndex]);
+  const loteOpts = useMemo(() => Object.keys(loteIndex).sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex]);
   const temporadaDe = (rancho) => loteIndex[rancho]?.temporada || "";
   // Tablas (departamento) conocidas: las de los ranchos + las ya usadas en campo directo.
   const tablaOpts = useMemo(() => {
     const s = new Set();
     Object.values(loteIndex).forEach((x) => x.departamento && s.add(x.departamento));
     lista.forEach((m) => m.departamento && s.add(m.departamento));
-    return [...s].sort((a, b) => a.localeCompare(b));
+    return [...s].sort((a, b) => a.localeCompare(b)).map((t) => ({ value: t, label: t }));
   }, [loteIndex, lista]);
 
   const [form, setForm] = useState(null);   // null = form cerrado; objeto = creando/editando
@@ -262,11 +262,11 @@ export default function EmpaqueCampoDirecto() {
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
               </Campo>
               <Campo lab="Lote (escribe o elige)">
-                <ComboLibre value={form.rancho} onChange={onLote} options={loteOpts} placeholder="Ramos…" className={INP} />
+                <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom placeholder="Ramos…" className={INP} />
                 <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
               </Campo>
               <Campo lab="Tabla (departamento)">
-                <ComboLibre value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} placeholder="Tabla…" className={INP} />
+                <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom placeholder="Tabla…" className={INP} />
               </Campo>
               <Campo lab="Transporte">
                 <input value={form.transporte} onChange={(e) => upd({ transporte: e.target.value })} placeholder="Camión blanco Z-JN3 607" className={INP} />
