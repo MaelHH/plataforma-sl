@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send, Ban, Search } from "lucide-react";
+import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send, Ban, Search, AlertTriangle } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
-import { reciboProduccionSAP, verificarReciboSAP } from "../store/api";
+import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
@@ -270,6 +270,20 @@ export default function EmpaqueCampoDirecto() {
   const [verificandoCD, setVerificandoCD] = useState(""); // clave que se está verificando (G4)
   const [verifMsgCD, setVerifMsgCD] = useState(null);     // { horaId, ok, texto }
   const [sapErrHora, setSapErrHora] = useState(null);     // { horaId, msg }
+  // Modal de envío a SAP (rico, como logística): { m, h } + factor kg/cubeta + ficha de la orden
+  // leída EN VIVO de SAP (solo GET) para confirmar contra qué orden se suma.
+  const [horaSapModal, setHoraSapModal] = useState(null); // { mId, hId }
+  const [horaKgCub, setHoraKgCub] = useState(6);
+  const [ordSap, setOrdSap] = useState(null);
+  const [ordSapCargando, setOrdSapCargando] = useState(false);
+  const [ordSapError, setOrdSapError] = useState("");
+  const cargarOrdenSAP = (absoluteEntry) => {
+    setOrdSap(null); setOrdSapError("");
+    if (!absoluteEntry) return;
+    setOrdSapCargando(true);
+    getOrdenFabricacionSAP(absoluteEntry).then((r) => setOrdSap(r)).catch((e) => setOrdSapError(String(e?.message || e))).finally(() => setOrdSapCargando(false));
+  };
+  const abrirEnvioHora = (m, h) => { setSapErrHora(null); setVerifMsgCD(null); setHoraKgCub(6); setHoraSapModal({ mId: m.id, hId: h.id }); cargarOrdenSAP(ordenDe(m)?.absoluteEntry); };
 
   // Aprobación del cálculo (2ª persona): la encargada revisa y habilita el envío a SAP.
   const aprobarHoraCD = async (m, h) => {
@@ -288,36 +302,35 @@ export default function EmpaqueCampoDirecto() {
     registrarEvento?.({ evento: "campo_directo_hora_aprobada", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: cálculo aprobado (${cub} cub) por ${actorNombre} — habilita envío a SAP`, meta: { horaId: h.id, cubetas: cub, porId: aprobacion.porId } });
   };
 
-  // Mandar una hora a SAP: reciboProduccionSAP (cubetas = neto/6) a la orden de fabricación, con
-  // clave idempotente `${folio}_${hora}` (anti doble conteo) y el aprobador. Si no hay respuesta,
-  // queda PENDIENTE (G4) y solo se ofrece "Verificar en SAP" (nunca reenvío a ciegas).
-  const enviarHoraSAPCD = async (m0, h0) => {
-    const m = movimientosCampo.find((x) => x.id === m0.id) || m0;             // datos vivos
-    const h = (m.vaciado?.horas || []).find((x) => x.id === h0.id) || h0;
+  // Confirmar el envío DESDE EL MODAL: reciboProduccionSAP (cubetas = neto ÷ kgc) a la orden de
+  // fabricación, con clave idempotente `${folio}_${hora}` (anti doble conteo) y el aprobador. Si no
+  // hay respuesta, queda PENDIENTE (G4) y solo se ofrece "Verificar en SAP" (nunca reenvío a ciegas).
+  const confirmarEnvioHoraModal = async () => {
+    if (!horaSapModal) return;
+    const m = movimientosCampo.find((x) => x.id === horaSapModal.mId);
+    const h = (m?.vaciado?.horas || []).find((x) => x.id === horaSapModal.hId);
+    if (!m || !h) { setHoraSapModal(null); return; }
     const ord = ordenDe(m);
     const neto = kgHoraDe(m, h.id);
-    const cub = cubetasDe(neto);
+    const kgc = parseFloat(horaKgCub) || 6;
+    const cub = cubetasDe(neto, kgc);
     setSapErrHora(null);
     if (esHistoricoSAP(m, goLiveSAP)) { setSapErrHora({ horaId: h.id, msg: `Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): no se manda a SAP desde aquí.` }); return; }
     if (!h.aprobacion) { setSapErrHora({ horaId: h.id, msg: "Falta APROBAR el cálculo antes de mandar a SAP." }); return; }
     if (!ord?.absoluteEntry) { setSapErrHora({ horaId: h.id, msg: "Este folio no tiene orden de fabricación en SAP." }); return; }
     if (!(cub > 0)) { setSapErrHora({ horaId: h.id, msg: "La cantidad calculada es 0." }); return; }
-    const seguro = await dlg.confirm({
-      title: `¿Mandar ${h.etiqueta} a SAP?`,
-      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(neto)} kg ÷ 6) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry}, del folio ${m.folio} (lote ${m.rancho || "—"}).\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${h.aprobacion?.por || "—"}.`,
-      confirmText: `Sí, mandar ${cub.toLocaleString()} cubetas`, danger: true,
-    });
-    if (!seguro) return;
     setEnviandoHora(h.id); setSapErrHora(null);
     try {
       const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cub, movimientoId: m.id, claveEnvio: `${m.id}_${h.id}`, aprobadoPor: h.aprobacion?.por, aprobadoPorId: h.aprobacion?.porId != null ? String(h.aprobacion.porId) : undefined });
       updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id
-        ? { ...x, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: 6, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: ahora().iso } }
+        ? { ...x, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: ahora().iso } }
         : x) }));
-      registrarEvento?.({ evento: "campo_directo_recibo_hora_sap", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: ${cub} cubetas (${fmt(neto)} kg ÷ 6) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`, meta: { horaId: h.id, cubetas: cub, netoKg: neto, docNum: res.docNum } });
+      registrarEvento?.({ evento: "campo_directo_recibo_hora_sap", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: ${cub} cubetas (${fmt(neto)} kg ÷ ${kgc}) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`, meta: { horaId: h.id, cubetas: cub, netoKg: neto, docNum: res.docNum } });
+      setHoraSapModal(null);
     } catch (e) {
       if (e?.sinRespuesta) {   // G4: no sabemos si quedó en SAP → PENDIENTE, no reenviar a ciegas
-        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: { clave: `${m.id}_${h.id}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: 6, netoKg: neto, ts: ahora().iso } } : x) }));
+        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: { clave: `${m.id}_${h.id}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: kgc, netoKg: neto, ts: ahora().iso } } : x) }));
+        setHoraSapModal(null);
       } else setSapErrHora({ horaId: h.id, msg: String(e?.message || e) });
     } finally { setEnviandoHora(""); }
   };
@@ -453,7 +466,7 @@ export default function EmpaqueCampoDirecto() {
                         puedeAprobar, puedeEnviarSap,
                         esHist: esHistoricoSAP(m, goLiveSAP), goLiveSAP,
                         onAprobar: (h) => aprobarHoraCD(m, h),
-                        onEnviar: (h) => enviarHoraSAPCD(m, h),
+                        onEnviar: (h) => abrirEnvioHora(m, h),
                         onVerificar: (h) => verificarHoraCD(m, h),
                         enviandoClave: enviandoHora, verificandoClave: verificandoCD,
                         verifMsg: verifMsgCD, error: sapErrHora,
@@ -542,6 +555,78 @@ export default function EmpaqueCampoDirecto() {
           </div>
         </div>
       )}
+
+      {/* Modal de envío a SAP (rico, como logística) */}
+      {horaSapModal && (() => {
+        const m = movimientosCampo.find((x) => x.id === horaSapModal.mId);
+        const h = (m?.vaciado?.horas || []).find((x) => x.id === horaSapModal.hId);
+        if (!m || !h) return null;
+        const ord = ordenDe(m);
+        const neto = kgHoraDe(m, h.id);
+        const kgc = parseFloat(horaKgCub) || 6;
+        const cubetas = cubetasDe(neto, kgc);
+        const loteFolio = (m.rancho || "").trim().toUpperCase();
+        const loteSap = (ordSap?.lote || "").trim().toUpperCase();
+        const difiere = !!(ordSap && loteSap && loteFolio && loteSap !== loteFolio);
+        const errMsg = sapErrHora?.horaId === h.id ? sapErrHora.msg : null;
+        const fila = (l, v) => (
+          <div className="flex items-start justify-between gap-3 px-2.5 py-1">
+            <span className="text-gray-500 shrink-0">{l}</span>
+            <span className="text-gray-800 font-semibold text-right break-words">{v ?? "—"}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setHoraSapModal(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-gray-100 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900 w-full"><Send size={16} /> Mandar {h.etiqueta} a SAP — Folio {m.folio || "—"}</div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><div className="text-gray-400">Temporada</div><div className="font-semibold">{ord?.temporada || "—"}</div></div>
+                  <div><div className="text-gray-400">Rancho</div><div className="font-semibold">{ord?.rancho || "—"}</div></div>
+                  <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}</div></div>
+                  <div><div className="text-gray-400">Ejote neto de la hora</div><div className="font-semibold">{fmt(neto)} kg</div></div>
+                </div>
+                {h.aprobacion && <div className="text-[11px] text-green-700 inline-flex items-center gap-1"><Check size={13} /> Cálculo aprobado por {h.aprobacion.por}</div>}
+                {/* Ficha de la orden leída EN VIVO de SAP (solo GET) */}
+                <div className="text-[11px] border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-2.5 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-700 inline-flex items-center gap-1"><Search size={12} /> Orden de fabricación (leída de SAP)</span>
+                    {ordSapCargando && <span className="text-gray-400">consultando…</span>}
+                  </div>
+                  {ordSapError ? (
+                    <div className="px-2.5 py-2 text-amber-700 bg-amber-50">No se pudo leer la orden en SAP para verificar ({ordSapError}). Revisa el número antes de mandar.</div>
+                  ) : ordSap ? (
+                    <div className="divide-y divide-gray-100">
+                      {fila("Nº de orden en SAP", <span className="text-indigo-700">#{ordSap.docNum ?? ordSap.absoluteEntry}</span>)}
+                      {fila("Artículo", <>{ordSap.item}{ordSap.descripcion ? ` · ${ordSap.descripcion}` : ""}</>)}
+                      {fila("Lote (rancho) en SAP", <span className={difiere ? "text-red-700" : "text-gray-800"}>{ordSap.lote || "—"}</span>)}
+                      {ordSap.departamento ? fila("Departamento en SAP", ordSap.departamento) : null}
+                      {ordSap.proyecto ? fila("Proyecto en SAP", ordSap.proyecto) : null}
+                      {fila("Avance de la orden", <>{fmt(ordSap.completado)} / {fmt(ordSap.planeado)} · faltan <b className="text-amber-700">{fmt(ordSap.restante)}</b></>)}
+                      {difiere && (
+                        <div className="px-2.5 py-2 bg-red-50 text-red-700">⚠️ <b>El lote NO coincide.</b> La orden #{ordSap.docNum ?? ordSap.absoluteEntry} es del lote <b>{ordSap.lote}</b>, pero este folio es del lote <b>{m.rancho}</b>. Verifícalo antes de mandar.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="px-2.5 py-2 text-gray-400">Consultando la orden en SAP…</div>
+                  )}
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs mb-1"><span className="text-gray-500">kg por cubeta</span><input type="number" value={horaKgCub} onChange={(e) => setHoraKgCub(e.target.value)} className="w-20 text-sm px-2 py-1 border border-gray-200 rounded text-right" /></div>
+                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-2xl font-bold text-indigo-700">{cubetas.toLocaleString()}</span></div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">{fmt(neto)} kg ÷ {kgc} = {cubetas} cubetas → suma a "Cantidad completada".</div>
+                </div>
+                {!ord?.absoluteEntry && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este folio no tiene orden de fabricación en SAP.</div>}
+                {errMsg && <div className="text-[11px] text-red-600">No se pudo enviar: {errMsg}</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setHoraSapModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={confirmarEnvioHoraModal} disabled={enviandoHora === h.id || !ord?.absoluteEntry || !(cubetas > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{enviandoHora === h.id ? "Enviando…" : "Confirmar envío a SAP"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
