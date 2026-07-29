@@ -1033,7 +1033,9 @@ function HoraCampo({ h, taraBin, fmt, reloj, sap, registros, kgHora, onRegistrar
   const verificando = sap?.verificandoClave === h.sapPendiente?.clave;
   const verifMsg = sap?.verifMsg?.horaId === h.id ? sap.verifMsg : null;
   const errMsg = sap?.error?.horaId === h.id ? sap.error.msg : null;
-  const doReg = () => { if (brutoN <= 0) return; onRegistrar(brutoN, binsN); setBruto(""); setBins(""); };
+  // Al registrar se limpia SOLO el bruto; el Nº bins se queda pegado (pesan de 1 en 1 o de 2 en 2
+  // sin re-teclearlo cada vez).
+  const doReg = () => { if (brutoN <= 0) return; onRegistrar(brutoN, binsN); setBruto(""); };
 
   return (
     <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
