@@ -64,6 +64,17 @@ export default function EmpaqueCampoDirecto() {
   }, [proyectos]);
   const loteOpts = useMemo(() => Object.keys(loteIndex).sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex]);
   const temporadaDe = (rancho) => loteIndex[rancho]?.temporada || "";
+  // Orden de fabricación (SAP) del folio: se resuelve igual que en logística (ordenSAPde),
+  // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
+  const ordenDe = (m) => {
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    const ords = r?.sap?.ordenes || [];
+    const o0 = ords[0];
+    const absoluteEntry = (o0 && typeof o0 === "object") ? o0.absoluteEntry : o0;
+    const docNum = (o0 && typeof o0 === "object") ? (o0.docNum ?? o0.DocNum) : undefined;
+    return { absoluteEntry, docNum, item: r?.sap?.item, temporada: proj?.nombre, rancho: r?.nombre, varias: ords.length > 1, hayCatalogo: !!r };
+  };
   // Tablas (departamento) conocidas: las de los ranchos + las ya usadas en campo directo.
   const tablaOpts = useMemo(() => {
     const s = new Set();
@@ -305,7 +316,7 @@ export default function EmpaqueCampoDirecto() {
                 {abierto && (
                   <div className="border-t border-gray-100">
                     <VaciadoPanel
-                      m={m} netoPorBin={npb} fmt={fmt}
+                      m={m} netoPorBin={npb} fmt={fmt} orden={ordenDe(m)}
                       onRegistrar={(bins, hora) => registrarVaciado(m, bins, hora)}
                       onDelEvento={(evId) => delVaciado(m, evId)}
                       onMerma={(kg, mot) => registrarMermaCD(m, kg, mot)}
@@ -419,7 +430,7 @@ function Dato({ lab, val }) {
 // Registran cuántos bins vaciaron (y a qué hora si quieren): cada bin = su neto calculado.
 // Total = "Vaciar lo que resta" (un registro con todos los bins); por hora = varios registros.
 // El "en piso" y las cubetas a SAP (neto ÷ 6) salen de los helpers de empaque (mismos números).
-function VaciadoPanel({ m, netoPorBin, fmt, onRegistrar, onDelEvento, onMerma, onDelMerma, onTerminar, onReabrir }) {
+function VaciadoPanel({ m, netoPorBin, fmt, orden, onRegistrar, onDelEvento, onMerma, onDelMerma, onTerminar, onReabrir }) {
   const rec = kgRecibidosDe(m);
   const vac = kgVaciadosDe(m);
   const mer = kgMermadosDe(m);
@@ -431,7 +442,7 @@ function VaciadoPanel({ m, netoPorBin, fmt, onRegistrar, onDelEvento, onMerma, o
   const cubetas = cubetasDe(vac);   // neto ÷ 6, lo que irá a SAP
 
   const [bins, setBins] = useState("");
-  const [hora, setHora] = useState("");
+  const [hora, setHora] = useState(ahoraHM());   // se prellena con la hora actual (como logística)
   const [mermaOpen, setMermaOpen] = useState(false);
   const [mermaKg, setMermaKg] = useState("");
   const [mermaMot, setMermaMot] = useState("");
@@ -439,12 +450,31 @@ function VaciadoPanel({ m, netoPorBin, fmt, onRegistrar, onDelEvento, onMerma, o
   const binsN = parseFloat(bins) || 0;
   const kgPrev = binsN * netoPorBin;
 
-  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, hora); setBins(""); setHora(""); };
+  const doRegistrar = () => { if (binsN <= 0) return; onRegistrar(binsN, hora || ahoraHM()); setBins(""); setHora(ahoraHM()); };
   const vaciarResto = () => { if (binsPiso <= 0) return; onRegistrar(binsPiso, ""); };
   const doMerma = () => { const k = parseFloat(mermaKg) || 0; if (k <= 0) return; onMerma(k, mermaMot); setMermaKg(""); setMermaMot(""); setMermaOpen(false); };
 
   return (
     <div className="p-3 bg-emerald-50/30">
+      {/* Orden de fabricación (SAP) a la que corresponde este folio */}
+      <div className="mb-2.5">
+        {orden?.absoluteEntry != null ? (
+          <span className="inline-flex items-center gap-1.5 text-xs bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5">
+            <Package size={13} className="text-indigo-600" />
+            <span className="text-gray-600">Orden de fabricación:</span>
+            <b className="text-indigo-700">{orden.docNum != null ? `#${orden.docNum}` : `entry ${orden.absoluteEntry}`}</b>
+            {orden.item && <span className="text-gray-400">· art. {orden.item}</span>}
+            {orden.varias && <span className="text-amber-600" title="El lote tiene varias órdenes; se usa la primera">· (varias, se usa la 1ª)</span>}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-2.5 py-1.5">
+            <Package size={13} />
+            {orden?.hayCatalogo
+              ? "Este lote no tiene orden de fabricación en SAP."
+              : "Lote fuera del catálogo SAP: no se podrá mandar a SAP hasta elegir un lote válido."}
+          </span>
+        )}
+      </div>
       {/* Barra de flujo: Recibido → Vaciado → En piso */}
       <div className="flex items-stretch gap-2 mb-3 flex-wrap">
         <Flujo lab="Recibido (teórico)" val={`${fmt(rec)} kg`} color="text-gray-800" />
