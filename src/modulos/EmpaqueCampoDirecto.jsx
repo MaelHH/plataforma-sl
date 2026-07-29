@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send, Ban, Search, AlertTriangle } from "lucide-react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Plus, Trash2, Truck, Save, X, Sprout, Pencil, Package, ChevronDown, ChevronUp, Check, RotateCcw, Clock, Send, Ban, Search, AlertTriangle, FileText, RefreshCw } from "lucide-react";
 import { useDatos, nuevoId, ahora, CAMPO_DIRECTO_DEFAULT } from "../store/datos";
 import { useAuth } from "../store/auth";
 import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
-import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP } from "../store/api";
+import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { guardarFolioOC } from "../utils/folioOC";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
@@ -43,12 +44,13 @@ const formVacio = () => ({
   transporte: "", chofer: "", bins: "",
   rancho: "", proyecto: "", departamento: "",
   horaSalida: "", horaLlegada: "", observaciones: "",
+  flete: "",   // precio del flete (OPCIONAL; se puede llenar después para la OC)
 });
 
 const INP = "w-full text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-emerald-400";
 
 export default function EmpaqueCampoDirecto() {
-  const { movimientosCampo, setMovimientosCampo, proyectos, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
+  const { movimientosCampo, setMovimientosCampo, proyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
   const { usuario, can } = useAuth() || {};
   const dlg = useDialog();
   // Candados RBAC del envío a SAP (igual que logística): aprobar (encargada) y enviar a SAP.
@@ -127,6 +129,7 @@ export default function EmpaqueCampoDirecto() {
       transporte: m.transporte || "", chofer: m.chofer || "", bins: m.bins ?? "",
       rancho: m.rancho || "", proyecto: m.proyecto || "", departamento: m.departamento || "",
       horaSalida: m.horaSalida || "", horaLlegada: m.horaLlegada || "", observaciones: m.observaciones || "",
+      flete: m.flete ?? "",
     });
   };
   const cerrarForm = () => { setForm(null); setEditId(null); };
@@ -153,6 +156,7 @@ export default function EmpaqueCampoDirecto() {
       departamento: (form.departamento || "").trim(),
       horaSalida: form.horaSalida || "", horaLlegada: form.horaLlegada || "",
       observaciones: (form.observaciones || "").trim(),
+      flete: (form.flete ?? "").toString().trim(),   // precio del flete (opcional)
       // Parámetros con los que se calculó el neto (se congelan por folio para auditar).
       binParams: { brutoPorBin, taraBin, cubetasPorBin },
       // Neto teórico como "recibido": así los helpers de empaque (kgRecibidosDe/kgEnPisoDe) y el
@@ -356,6 +360,125 @@ export default function EmpaqueCampoDirecto() {
     } finally { setVerificandoCD(""); }
   };
 
+  // ── ORDEN DE COMPRA DE FLETE (igual que el movimiento de logística) ──
+  const [ocMov, setOcMov] = useState(null);        // folio para el que se crea la OC
+  const [ocCardCode, setOcCardCode] = useState("");
+  const [ocItem, setOcItem] = useState("");
+  const [ocTax, setOcTax] = useState("");
+  const [ocCultivo, setOcCultivo] = useState("");
+  const [ocDepto, setOcDepto] = useState("");
+  const [ocFecha, setOcFecha] = useState("");
+  const [ocComentario, setOcComentario] = useState("");
+  const [ocDetalle, setOcDetalle] = useState("");
+  const [ocCargando, setOcCargando] = useState(false);
+  const [ocError, setOcError] = useState("");
+  const [ocConfirm, setOcConfirm] = useState(false);   // 2do paso: confirmar antes de escribir en SAP
+  const [itemsFlete, setItemsFlete] = useState([]);
+  const [taxCodes, setTaxCodes] = useState([]);
+  const [cultivosOC, setCultivosOC] = useState([]);
+  const [departamentos, setDepartamentos] = useState([]);
+  const [flCargando, setFlCargando] = useState(false);
+  const [flError, setFlError] = useState("");
+  const [flInfo, setFlInfo] = useState("");
+
+  // Tablas (Departamento SAP, dim 3): catálogo COMPLETO de SAP, con las ya usadas en ese rancho arriba.
+  const tablasUsadas = (rancho) => {
+    if (!rancho) return [];
+    const cuenta = {};
+    (movimientosCampo || []).forEach((m) => { if (m.rancho !== rancho) return; const d = (m.departamento || "").trim(); if (d) cuenta[d] = (cuenta[d] || 0) + 1; });
+    return Object.entries(cuenta).sort((a, b) => b[1] - a[1]).map(([d]) => d);
+  };
+  const opcionesTablas = (rancho, valorActual) => {
+    const etiqueta = (code) => { const d = departamentos.find((x) => x.FactorCode === code); return d?.FactorDescription && d.FactorDescription !== code ? `${code} · ${d.FactorDescription}` : code; };
+    const usadas = tablasUsadas(rancho);
+    const resto = departamentos.map((d) => d.FactorCode).filter((c) => c && !usadas.includes(c));
+    const opts = [...usadas.map((c) => ({ value: c, label: `★ ${etiqueta(c)}` })), ...resto.map((c) => ({ value: c, label: etiqueta(c) }))];
+    if (valorActual && !opts.some((o) => o.value === valorActual)) opts.unshift({ value: valorActual, label: valorActual });
+    return opts;
+  };
+
+  const cargarProveedoresSAP = async () => {
+    setFlCargando(true); setFlError(""); setFlInfo("");
+    try {
+      const d = await getProveedoresFleteSAP("");
+      const lista = (d.value || []).map((b) => ({ cardCode: b.CardCode, nombre: b.CardName || b.CardCode, rfc: b.FederalTaxID || "", telefono: b.Phone1 || "", email: b.EmailAddress || "" }));
+      setProveedores((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const byCode = new Map(base.map((p) => [p.cardCode, p]));
+        for (const p of lista) byCode.set(p.cardCode, { ...byCode.get(p.cardCode), ...p });
+        return Array.from(byCode.values()).sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+      });
+      setFlInfo(`${lista.length} fletero(s) traídos de SAP`);
+    } catch (e) { setFlError(String(e?.message || e)); }
+    finally { setFlCargando(false); }
+  };
+  const cargarCatalogosOC = async () => {
+    try { const d = await getItemsFleteSAP(); const items = d.value || []; setItemsFlete(items); const it = items.find((x) => /acarreo de fruta/i.test(x.ItemName || "")) || items[0]; if (it) setOcItem(it.ItemCode || ""); } catch { /* noop */ }
+    try { const d = await getTaxCodesSAP(); const txs = d.value || []; setTaxCodes(txs); const t = txs.find((x) => /16/.test(`${x.Code} ${x.Name}`)) || txs[0]; if (t) setOcTax(t.Code || ""); } catch { /* noop */ }
+    try { const d = await getCultivosSAP(); setCultivosOC(d.value || []); } catch { /* noop */ }
+    try { const d = await getDepartamentosSAP(); setDepartamentos(d.value || []); } catch { /* noop */ }
+  };
+  const abrirOC = (m) => {
+    setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax("");
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    setOcCultivo(r?.cultivo || m.cultivo || "");
+    setOcDepto(m.departamento || r?.departamento || "");
+    setOcFecha(hoyISO());
+    setOcComentario(`Acarreo flete · Folio ${m.folio || ""} · ${m.rancho || ""} · ${m.fecha || ""}${m.chofer ? " · " + m.chofer : ""}`.trim());
+    setOcDetalle([`ACARREO`, r?.cultivo || m.cultivo, m.rancho ? `Lote ${m.rancho}` : ""].filter(Boolean).join(" · "));
+    setOcMov(m);
+    cargarCatalogosOC();
+  };
+  const confirmarOC = async () => {
+    const m = ocMov;
+    const precio = parseFloat(m.flete) || 0;
+    if (!ocCardCode) { setOcError("Elige el fletero."); return; }
+    if (!ocItem) { setOcError("Elige el item de flete."); return; }
+    if (!(precio > 0)) { setOcError("El folio no tiene 'Flete $' (precio). Edítalo y captura el flete antes de mandar la OC."); return; }
+    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    setOcCargando(true); setOcError("");
+    try {
+      const res = await crearOrdenCompraSAP({
+        cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax,
+        proyecto: m.proyecto || null, cultivo: ocCultivo || r?.cultivo || m.cultivo || null, lote: m.rancho || null,
+        departamento: ocDepto || r?.departamento || m.departamento || null, comentario: ocComentario,
+        detalle: ocDetalle || null, requiredDate: ocFecha || null,
+        movimientoId: m.id, origen: "campo-directo",   // idempotencia: evita doble OC en SAP
+      });
+      setMovimientosCampo((prev) => prev.map((x) => x.id === m.id ? { ...x, ocSAP: { solicitud: res.solicitud, pedido: res.pedido, cardCode: ocCardCode, item: ocItem, precio, taxCode: ocTax, ts: ahora().iso } } : x));
+      await guardarFolioOC(res?.pedido?.docEntry, m.folio);   // folio → Control de Fletes
+      registrarEvento?.({ evento: "campo_directo_oc_sap", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `OC de flete: Sol #${res.solicitud?.docNum ?? "?"} · Ped #${res.pedido?.docNum ?? "?"} ($${precio})` });
+      setOcMov(null);
+    } catch (e) { setOcError(String(e?.message || e)); }
+    finally { setOcCargando(false); }
+  };
+
+  // Estado de factura de las OC en SAP (solo lectura): al abrir y cada 5 min; una vez facturado no re-consulta.
+  const [estadosOC, setEstadosOC] = useState({});   // { [movId]: { factura, estado } }
+  const estadosOCRef = useRef(estadosOC);
+  useEffect(() => { estadosOCRef.current = estadosOC; }, [estadosOC]);
+  const movsRef = useRef(movimientosCampo);
+  useEffect(() => { movsRef.current = movimientosCampo; }, [movimientosCampo]);
+  const refrescandoOCRef = useRef(false);
+  const refrescarEstadosOC = useCallback(async () => {
+    if (refrescandoOCRef.current) return;
+    refrescandoOCRef.current = true;
+    try {
+      const pend = (movsRef.current || []).filter((m) => m.ocSAP?.pedido?.docEntry && !((estadosOCRef.current[m.id]?.factura ?? m.ocSAP?.factura)?.existe));
+      for (const m of pend) {
+        try { const est = await getEstadoOCSAP(m.ocSAP.pedido.docEntry); setEstadosOC((prev) => ({ ...prev, [m.id]: { factura: est.factura, estado: est.pedido } })); } catch { /* SAP no respondió */ }
+      }
+    } finally { refrescandoOCRef.current = false; }
+  }, []);
+  const ocKey = (movimientosCampo || []).filter((m) => m.ocSAP?.pedido?.docEntry).map((m) => m.id).join(",");
+  useEffect(() => {
+    refrescarEstadosOC();
+    const id = setInterval(refrescarEstadosOC, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [ocKey, refrescarEstadosOC]);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
@@ -444,6 +567,12 @@ export default function EmpaqueCampoDirecto() {
                     </div>
                   )}
                   <button onClick={() => setExpandido(abierto ? null : m.id)} className={`text-xs font-semibold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${abierto ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Vaciar</button>
+                  {/* OC de flete: crear si no existe; si ya está, muestra Sol/Ped (+ estado de factura) */}
+                  {!m.ocSAP ? (
+                    <button onClick={() => abrirOC(m)} title="Crear orden de compra de flete en SAP" className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-indigo-300 text-indigo-700 hover:bg-indigo-50 inline-flex items-center gap-1"><FileText size={14} /> OC</button>
+                  ) : (
+                    <span title="Documentos creados en SAP" className="text-[10px] px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={12} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}{(estadosOC[m.id]?.factura ?? m.ocSAP?.factura)?.existe ? " · Facturada" : ""}</span>
+                  )}
                   <button onClick={() => abrirEditar(m)} className="text-gray-400 hover:text-emerald-700 p-1" title="Editar"><Pencil size={15} /></button>
                   <button onClick={() => borrar(m)} className="text-gray-300 hover:text-red-600 p-1" title="Borrar"><Trash2 size={15} /></button>
                 </div>
@@ -531,6 +660,10 @@ export default function EmpaqueCampoDirecto() {
               </Campo>
               <Campo lab="Hora de llegada">
                 <input type="time" value={form.horaLlegada} onChange={(e) => upd({ horaLlegada: e.target.value })} className={INP} />
+              </Campo>
+              <Campo lab="Flete $ (opcional)">
+                <input type="number" min="0" step="0.01" value={form.flete} onChange={(e) => upd({ flete: e.target.value })} placeholder="se puede llenar después" className={INP} />
+                <span className="text-[11px] text-gray-400 mt-0.5 block">Precio del flete para la OC. Puede quedar vacío y llenarse después.</span>
               </Campo>
               <div className="sm:col-span-2">
                 <Campo lab="Observaciones">
@@ -623,6 +756,89 @@ export default function EmpaqueCampoDirecto() {
                 <button onClick={() => setHoraSapModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
                 <button onClick={confirmarEnvioHoraModal} disabled={enviandoHora === h.id || !ord?.absoluteEntry || !(cubetas > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{enviandoHora === h.id ? "Enviando…" : "Confirmar envío a SAP"}</button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal: Orden de compra de flete (Solicitud + Pedido) — igual que logística */}
+      {ocMov && (() => {
+        const m = ocMov;
+        const precio = parseFloat(m.flete) || 0;
+        const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+        const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900 inline-flex items-center gap-1"><FileText size={16} /> Orden de compra de flete — Folio {m.folio || "—"}</div>
+                <button onClick={() => setOcMov(null)} className="text-gray-400 hover:text-gray-700 inline-flex items-center"><X size={16} /></button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><span className="text-gray-400">Temporada</span><div className="font-medium text-gray-800">{temporadaDe(m.rancho) || m.proyecto || "—"}</div></div>
+                  <div><span className="text-gray-400">Rancho (lote)</span><div className="font-medium text-gray-800">{m.rancho || "—"}</div></div>
+                </div>
+                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-2 text-xs flex items-center justify-between">
+                  <span className="text-gray-500">Precio (Flete $ del folio)</span>
+                  <span className="text-lg font-bold text-indigo-700">${precio.toLocaleString()}</span>
+                </div>
+                {!(precio > 0) && <div className="text-[11px] text-amber-600 inline-flex items-center gap-1"><AlertTriangle size={14} /> Este folio no tiene "Flete $". Edítalo y captura el flete antes de mandar la OC.</div>}
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Cultivo {r?.cultivo ? <span className="text-gray-400 font-normal">· del proyecto: {r.cultivo}</span> : null}</label>
+                  <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo (norma de reparto) —"
+                    options={(() => { const opts = cultivosOC.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` })); if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo }); return opts; })()} />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Departamento (tabla) {m.departamento ? <span className="text-gray-400 font-normal">· tabla del folio: {m.departamento}</span> : (r?.departamento ? <span className="text-gray-400 font-normal">· del proyecto: {r.departamento}</span> : null)}</label>
+                  <SearchSelect className={INP} value={ocDepto} onChange={setOcDepto} searchThreshold={0} placeholder="— Departamento (tabla) —" options={opcionesTablas(m.rancho, ocDepto)} />
+                  {m.departamento && ocDepto !== m.departamento && (<div className="text-[10px] text-amber-700 mt-0.5">Ojo: cambiaste la tabla; en el folio quedó <b>{m.departamento}</b>.</div>)}
+                </div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Fletero (proveedor)</label>
+                    <button onClick={cargarProveedoresSAP} disabled={flCargando} className="text-[11px] text-indigo-600 hover:underline disabled:opacity-50">{flCargando ? "Trayendo…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Traer de SAP</span>}{flInfo ? ` · ${flInfo}` : ""}</button>
+                  </div>
+                  <SearchSelect className={INP} value={ocCardCode} onChange={setOcCardCode} searchThreshold={0} placeholder={proveedores.length ? "— Elige fletero —" : "Primero trae fleteros desde SAP"}
+                    options={proveedores.map((p) => ({ value: p.cardCode, label: `${p.nombre} · ${p.cardCode}` }))} />
+                  {flError && <div className="text-[11px] text-red-600 mt-0.5">{flError}</div>}
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Item de flete</label>
+                  <SearchSelect className={INP} value={ocItem} onChange={setOcItem} searchThreshold={0} placeholder="— Item —" options={itemsFlete.map((it) => ({ value: it.ItemCode, label: `${it.ItemCode} · ${it.ItemName}` }))} />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">IVA</label>
+                  <SearchSelect className={INP} value={ocTax} onChange={setOcTax} searchThreshold={0} placeholder="— IVA —" options={taxCodes.map((t) => ({ value: t.Code, label: `${t.Code}${t.Name ? " · " + t.Name : ""}` }))} />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Fecha necesaria</label>
+                  <input type="date" value={ocFecha} onChange={(e) => setOcFecha(e.target.value)} className={INP} />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Detalles de artículo <span className="text-gray-400">· en la línea de la OC</span></label>
+                  <textarea value={ocDetalle} onChange={(e) => setOcDetalle(e.target.value)} rows={2} className={INP} placeholder="Ej. ACARREO · Ejote · Lote Ramos" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Comentario</label>
+                  <textarea value={ocComentario} onChange={(e) => setOcComentario(e.target.value)} rows={2} className={INP} />
+                </div>
+                {ocError && <div className="text-[11px] text-red-600">No se pudo crear la OC: {ocError}</div>}
+              </div>
+              {!ocConfirm ? (
+                <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                  <button onClick={() => setOcMov(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                  <button onClick={() => { setOcError(""); setOcConfirm(true); }} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">Crear OC en SAP</button>
+                </div>
+              ) : (
+                <div className="px-5 py-3 border-t border-amber-200 bg-amber-50/60">
+                  <div className="text-[12px] text-amber-800 font-medium mb-2"><AlertTriangle size={14} className="inline-block align-text-bottom mr-1" /> ¿Seguro? Esto va a <b>crear la OC directamente en SAP</b> (Solicitud + Pedido). No se puede deshacer desde aquí.</div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setOcConfirm(false)} disabled={ocCargando} className="text-xs px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white disabled:opacity-50">No, volver</button>
+                    <button onClick={confirmarOC} disabled={ocCargando || !ocCardCode || !ocItem || !(precio > 0)} className="text-xs px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50">{ocCargando ? "Creando…" : "Sí, crear en SAP"}</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
