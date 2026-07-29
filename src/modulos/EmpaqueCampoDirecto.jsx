@@ -265,7 +265,7 @@ export default function EmpaqueCampoDirecto() {
     const kg = Math.max(0, br - b * tara);
     const ev = { id: nuevoId("VD_"), horaId, bruto: br, bins: b, tara, kg, fecha: hoyISO(), hora: ahoraHM() };
     updVac(m.id, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
-    registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins · bruto ${fmt(br)} − tara ${fmt(b * tara)} = ${fmt(kg)} kg (folio ${m.folio})` });
+    registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins · bruto ${fmt(br)} − peso bins ${fmt(b * tara)} = ${fmt(kg)} kg (folio ${m.folio})` });
   };
   const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
   const cerrarHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
@@ -580,14 +580,14 @@ export default function EmpaqueCampoDirecto() {
       {/* Config del bin */}
       <div className="mb-4 bg-emerald-50/50 border border-emerald-200 rounded-xl">
         <button onClick={() => setCfgAbierto((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-[13px] font-semibold text-emerald-800">
-          <span className="inline-flex items-center gap-1.5"><Package size={14} /> Parámetros del bin · 1 bin = {fmt(brutoPorBin)} kg bruto · tara {fmt(taraBin)} kg · <b>{fmt(netoPorBin)} kg neto</b> · {fmt(cubetasPorBin)} cubetas</span>
+          <span className="inline-flex items-center gap-1.5"><Package size={14} /> Parámetros del bin · 1 bin = {fmt(brutoPorBin)} kg bruto · peso del bin {fmt(taraBin)} kg · <b>{fmt(netoPorBin)} kg neto</b> · {fmt(cubetasPorBin)} cubetas</span>
           {cfgAbierto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
         {cfgAbierto && (
           <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-emerald-100 pt-3">
             {[
               { k: "brutoPorBin", lab: "Bruto por bin (kg)", val: cd.brutoPorBin },
-              { k: "taraBin", lab: "Tara del bin vacío (kg)", val: cd.taraBin },
+              { k: "taraBin", lab: "Peso del bin vacío (kg)", val: cd.taraBin },
               { k: "cubetasPorBin", lab: "Cubetas por bin (ticket)", val: cd.cubetasPorBin },
             ].map((c) => (
               <label key={c.k} className="block">
@@ -758,7 +758,7 @@ export default function EmpaqueCampoDirecto() {
                 <span className="inline-flex items-center gap-1 text-emerald-800 font-semibold"><Truck size={15} /> {fmt(bins)} bins</span>
                 <span className="text-gray-400">→</span>
                 <span className="text-gray-700">Bruto: <b>{fmt(brutoTotal)}</b> kg</span>
-                <span className="text-gray-700">Tara: <b>{fmt(bins * taraBin)}</b> kg</span>
+                <span className="text-gray-700">Peso de bins: <b>{fmt(bins * taraBin)}</b> kg</span>
                 <span className="text-indigo-700">Neto teórico: <b>{fmt(netoTeorico)}</b> kg</span>
                 <span className="text-amber-700">Cubetas: <b>{fmt(cubetasTicket)}</b></span>
               </div>
@@ -1142,7 +1142,7 @@ function HoraCampo({ h, taraBin, fmt, reloj, sap, registros, kgHora, onRegistrar
             {registros.map((e) => (
               <div key={e.id} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1 gap-2">
                 <span className="text-gray-600 min-w-0">
-                  <b className="text-gray-800">{fmt(e.bins)} bins</b> · bruto {fmt(e.bruto)} − tara {fmt((parseFloat(e.bins) || 0) * (parseFloat(e.tara) || taraBin))} = <b className="text-green-700">{fmt(e.kg)} kg</b> <span className="text-gray-400">· {hm12(e.hora)}</span>
+                  <b className="text-gray-800">{fmt(e.bins)} bins</b> · bruto {fmt(e.bruto)} − peso bins {fmt((parseFloat(e.bins) || 0) * (parseFloat(e.tara) || taraBin))} = <b className="text-green-700">{fmt(e.kg)} kg</b> <span className="text-gray-400">· {hm12(e.hora)}</span>
                 </span>
                 {abierta && <button onClick={() => onDelEvento(e.id)} title="Quitar" className="text-red-400 hover:text-red-600 shrink-0"><X size={13} /></button>}
               </div>
@@ -1166,7 +1166,7 @@ function HoraCampo({ h, taraBin, fmt, reloj, sap, registros, kgHora, onRegistrar
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {hm12(reloj)}
               </div>
             </div>
-            <div className="text-xs text-gray-600 pb-2">− tara {fmt(taraTotal)} = <b className="text-green-700">{fmt(netoPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(taraBin)})</span></div>
+            <div className="text-xs text-gray-600 pb-2">− peso bins {fmt(taraTotal)} = <b className="text-green-700">{fmt(netoPrev)} kg</b> <span className="text-gray-400">({binsN || 0} × {fmt(taraBin)})</span></div>
             <button onClick={doReg} disabled={brutoN <= 0} className="text-xs px-3 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 inline-flex items-center gap-1"><Plus size={14} /> Registrar</button>
           </div>
         )}
