@@ -165,10 +165,17 @@ export default function EmpaqueCampoDirecto() {
       netoTeorico: bins * (brutoPorBin - taraBin),
     };
     if (editId) {
-      setMovimientosCampo((prev) => prev.map((m) => m.id === editId
-        ? { ...m, ...base, actualizado: t.iso, vaciado: { ...(m.vaciado || {}), kgRecibidos: base.netoTeorico } }
-        : m));
-      registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio, ref: editId, detalle: `Editó folio campo directo ${folio} (${bins} bins)` });
+      setMovimientosCampo((prev) => prev.map((m) => {
+        if (m.id !== editId) return m;
+        // Si ya tocó SAP (recibo por hora u OC), NO se re-escribe todo: solo se permite cambiar el
+        // PRECIO del flete (y solo si la OC aún no tiene Nº de pedido; si ya lo tiene, ni eso).
+        if (tieneSAPcd(m)) {
+          const ocConPedido = !!(m.ocSAP?.pedido?.docNum ?? m.ocSAP?.pedido?.docEntry);
+          return ocConPedido ? m : { ...m, flete: base.flete, actualizado: t.iso };
+        }
+        return { ...m, ...base, actualizado: t.iso, vaciado: { ...(m.vaciado || {}), kgRecibidos: base.netoTeorico } };
+      }));
+      registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: actorNombre, destino: folio, ref: editId, detalle: `Editó folio campo directo ${folio}` });
     } else {
       const id = nuevoId("MOVCD_");
       const mov = { ...base, id, creado: t.iso, vaciado: { kgRecibidos: base.netoTeorico } };
@@ -486,6 +493,14 @@ export default function EmpaqueCampoDirecto() {
     return () => clearInterval(id);
   }, [ocKey, refrescarEstadosOC]);
 
+  // Bloqueo de edición del folio: si ya tocó SAP, solo el PRECIO es editable; si la OC ya tiene Nº
+  // de pedido, ni el precio (todo bloqueado).
+  const mEditando = editId ? lista.find((x) => x.id === editId) : null;
+  const lockCamposEdit = mEditando ? tieneSAPcd(mEditando) : false;
+  const lockPrecioEdit = !!(mEditando?.ocSAP?.pedido?.docNum ?? mEditando?.ocSAP?.pedido?.docEntry);
+  const inpLock = lockCamposEdit ? `${INP} bg-gray-50 text-gray-400 cursor-not-allowed` : INP;
+  const inpPrecio = lockPrecioEdit ? `${INP} bg-gray-50 text-gray-400 cursor-not-allowed` : INP;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
@@ -641,44 +656,52 @@ export default function EmpaqueCampoDirecto() {
               <button onClick={cerrarForm} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(lockCamposEdit || lockPrecioEdit) && (
+                <div className="sm:col-span-2 text-[12px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 inline-flex items-start gap-1.5">
+                  <Ban size={14} className="mt-0.5 shrink-0" />
+                  {lockPrecioEdit
+                    ? <span>Este folio ya tiene <b>OC creada en SAP</b> (Nº de pedido): ya <b>no se puede editar</b> nada.</span>
+                    : <span>Este folio ya <b>vació a SAP</b>: solo se puede cambiar el <b>Flete $</b> (por si el precio cambia antes de hacer la OC). Lo demás queda bloqueado para no desincronizar con SAP.</span>}
+                </div>
+              )}
               <Campo lab="Folio *">
-                <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} placeholder="002038" className={INP} />
+                <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} disabled={lockCamposEdit} placeholder="002038" className={inpLock} />
               </Campo>
               <Campo lab="Cultivo (fijo)">
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
               </Campo>
               <Campo lab="Lote (escribe o elige)">
-                <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom placeholder="Ramos…" className={INP} />
+                <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom disabled={lockCamposEdit} placeholder="Ramos…" className={inpLock} />
                 <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
               </Campo>
               <Campo lab="Tabla (departamento)">
-                <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom placeholder="Tabla…" className={INP} />
+                <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom disabled={lockCamposEdit} placeholder="Tabla…" className={inpLock} />
               </Campo>
               <Campo lab="Transporte">
-                <SearchSelect value={form.transporte} onChange={(v) => upd({ transporte: v })} options={transporteOpts} allowCustom placeholder="Camión blanco Z-JN3 607" className={INP} />
+                <SearchSelect value={form.transporte} onChange={(v) => upd({ transporte: v })} options={transporteOpts} allowCustom disabled={lockCamposEdit} placeholder="Camión blanco Z-JN3 607" className={inpLock} />
               </Campo>
               <Campo lab="Chofer">
-                <SearchSelect value={form.chofer} onChange={(v) => upd({ chofer: v })} options={choferOpts} allowCustom placeholder="Rubén Cota" className={INP} />
+                <SearchSelect value={form.chofer} onChange={(v) => upd({ chofer: v })} options={choferOpts} allowCustom disabled={lockCamposEdit} placeholder="Rubén Cota" className={inpLock} />
               </Campo>
               <Campo lab="Bins mandados *">
-                <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} placeholder="36" className={INP} />
+                <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
               </Campo>
               <Campo lab="Fecha de llegada">
-                <input type="date" value={form.fecha} onChange={(e) => upd({ fecha: e.target.value })} className={INP} />
+                <input type="date" value={form.fecha} onChange={(e) => upd({ fecha: e.target.value })} disabled={lockCamposEdit} className={inpLock} />
               </Campo>
               <Campo lab="Hora de salida">
-                <input type="time" value={form.horaSalida} onChange={(e) => upd({ horaSalida: e.target.value })} className={INP} />
+                <input type="time" value={form.horaSalida} onChange={(e) => upd({ horaSalida: e.target.value })} disabled={lockCamposEdit} className={inpLock} />
               </Campo>
               <Campo lab="Hora de llegada">
-                <input type="time" value={form.horaLlegada} onChange={(e) => upd({ horaLlegada: e.target.value })} className={INP} />
+                <input type="time" value={form.horaLlegada} onChange={(e) => upd({ horaLlegada: e.target.value })} disabled={lockCamposEdit} className={inpLock} />
               </Campo>
               <Campo lab="Flete $ (opcional)">
-                <input type="number" min="0" step="0.01" value={form.flete} onChange={(e) => upd({ flete: e.target.value })} placeholder="se puede llenar después" className={INP} />
+                <input type="number" min="0" step="0.01" value={form.flete} onChange={(e) => upd({ flete: e.target.value })} disabled={lockPrecioEdit} placeholder="se puede llenar después" className={inpPrecio} />
                 <span className="text-[11px] text-gray-400 mt-0.5 block">Precio del flete para la OC. Puede quedar vacío y llenarse después.</span>
               </Campo>
               <div className="sm:col-span-2">
                 <Campo lab="Observaciones">
-                  <input value={form.observaciones} onChange={(e) => upd({ observaciones: e.target.value })} placeholder="(opcional)" className={INP} />
+                  <input value={form.observaciones} onChange={(e) => upd({ observaciones: e.target.value })} disabled={lockCamposEdit} placeholder="(opcional)" className={inpLock} />
                 </Campo>
               </div>
 
@@ -693,8 +716,10 @@ export default function EmpaqueCampoDirecto() {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100">
-              <button onClick={cerrarForm} className="text-sm text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100">Cancelar</button>
-              <button onClick={guardar} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700"><Save size={15} /> {editId ? "Guardar cambios" : "Guardar folio"}</button>
+              <button onClick={cerrarForm} className="text-sm text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100">{lockPrecioEdit ? "Cerrar" : "Cancelar"}</button>
+              {!lockPrecioEdit && (
+                <button onClick={guardar} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700"><Save size={15} /> {editId ? "Guardar cambios" : "Guardar folio"}</button>
+              )}
             </div>
           </div>
         </div>
