@@ -389,6 +389,7 @@ const CONFIG = {
   lineas: { tipo: "col", seed: LINEAS_INICIAL },
   movimientos: { tipo: "col", seed: null },
   movimientosCampo: { tipo: "col", seed: null }, // EMPAQUE CAMPO DIRECTO: flujo INDEPENDIENTE de campo→empaque. Carros que llegan directo de campo, se pesan y se vacían aquí sin pasar por logística. No mezcla con `movimientos`.
+  vaciadoCampoLotes: { tipo: "col", seed: null }, // EMPAQUE CAMPO DIRECTO: el vaciado por hora vive por LOTE (id `proyecto::rancho`), no por folio. Junta los bins de todos los folios de ese lote y se manda a su orden de fabricación.
   movMateriales: { tipo: "col", seed: null }, // movimientos de materiales (Movimiento Materiales) — fletero + materiales arriba del trailer
   cargaCampo: { tipo: "col", seed: CARGA_CAMPO_INICIAL },
   ubicaciones: { tipo: "kv", seed: UBICACIONES_INICIAL },
@@ -477,6 +478,7 @@ export function DatosProvider({ children }) {
   const [lineas, setLineas] = useState(guardado.lineas ?? LINEAS_INICIAL); // catálogo de líneas de transporte
   const [movimientos, setMovimientos] = useState(guardado.movimientos ?? []); // movimientos internos campo→empaque
   const [movimientosCampo, setMovimientosCampo] = useState(guardado.movimientosCampo ?? []); // EMPAQUE CAMPO DIRECTO (flujo independiente)
+  const [vaciadoCampoLotes, setVaciadoCampoLotes] = useState(guardado.vaciadoCampoLotes ?? []); // vaciado por LOTE del campo directo
   const [movMateriales, setMovMateriales] = useState(guardado.movMateriales ?? []); // movimientos de materiales (fletero + materiales arriba del trailer)
   const [cargaCampo, setCargaCampo] = useState(guardado.cargaCampo ?? CARGA_CAMPO_INICIAL); // catálogo de qué se carga
   const [ubicaciones, setUbicaciones] = useState(guardado.ubicaciones ?? UBICACIONES_INICIAL); // ranchos/empaques
@@ -502,7 +504,7 @@ export function DatosProvider({ children }) {
     catalogo: setCatalogo, cultivos: setCultivos, programa: setPrograma,
     requerimientoGen: setRequerimientoGen, requerimientoMeta: setRequerimientoMeta,
     responsables: setResponsables, lineas: setLineas, movimientos: setMovimientos,
-    movimientosCampo: setMovimientosCampo,
+    movimientosCampo: setMovimientosCampo, vaciadoCampoLotes: setVaciadoCampoLotes,
     movMateriales: setMovMateriales,
     cargaCampo: setCargaCampo, ubicaciones: setUbicaciones, bitacora: setBitacora,
     materiales: setMateriales, contenedores: setContenedores, importaciones: setImportaciones, defectosCalidad: setDefectosCalidad,
@@ -510,7 +512,7 @@ export function DatosProvider({ children }) {
     zonas: setZonas, consignados: setConsignados, rezagas: setRezagas, proyectos: setProyectos, proveedores: setProveedores,
     configEmpaque: setConfigEmpaque,
   };
-  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
+  const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
   const prevRef = useRef(null);
   const debRef = useRef(null);
 
@@ -580,7 +582,7 @@ export function DatosProvider({ children }) {
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
@@ -594,7 +596,7 @@ export function DatosProvider({ children }) {
     catalogo, setCatalogo, cultivos, setCultivos, programa, setPrograma,
     requerimientoGen, setRequerimientoGen, requerimientoMeta, setRequerimientoMeta,
     responsables, setResponsables, lineas, setLineas, movimientos, setMovimientos,
-    movimientosCampo, setMovimientosCampo,
+    movimientosCampo, setMovimientosCampo, vaciadoCampoLotes, setVaciadoCampoLotes,
     movMateriales, setMovMateriales,
     cargaCampo, setCargaCampo, ubicaciones, setUbicaciones,
     zonas, setZonas, consignados, setConsignados, rezagas, setRezagas,

@@ -51,7 +51,7 @@ const formVacio = () => ({
 const INP = "w-full text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-emerald-400";
 
 export default function EmpaqueCampoDirecto() {
-  const { movimientosCampo, setMovimientosCampo, proyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
+  const { movimientosCampo, setMovimientosCampo, vaciadoCampoLotes, setVaciadoCampoLotes, proyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
   const { usuario, can } = useAuth() || {};
   const dlg = useDialog();
   // Candados RBAC del envío a SAP (igual que logística): aprobar (encargada) y enviar a SAP.
@@ -72,6 +72,8 @@ export default function EmpaqueCampoDirecto() {
   const setCd = (patch) => setConfigEmpaque({ ...(configEmpaque || {}), campoDirecto: { ...cd, ...patch } });
   // Factor del reporte por BINS (el que ven los jefes): cada `kgPorBin` kg netos = 1 bin (mismo que logística).
   const kgPorBin = parseFloat(configEmpaque?.kgPorBin) || 260;
+  // Clave del LOTE (temporada + rancho) = la unidad que se vacía (1 orden de fabricación).
+  const loteKeyDe = (proyecto, rancho) => `${proyecto || ""}::${rancho || ""}`;
 
   // Índice lote→temporada: recorre proyectos[].ranchos[] (en esta app rancho = "Lote", proyecto =
   // "Temporada", departamento = "Tabla"). Al elegir/escribir un lote conocido, autollena su temporada.
@@ -196,70 +198,105 @@ export default function EmpaqueCampoDirecto() {
     cerrarForm();
   };
 
-  // ¿El folio ya tocó SAP? (recibo por hora enviado/pendiente, o OC creada) → NO se puede borrar
-  // (borrarlo dejaría la app fuera de sincronía con SAP).
-  const tieneSAPcd = (m) => (m.vaciado?.horas || []).some((h) => h.sapEnvio || h.sapPendiente) || !!m.ocSAP;
+  // ¿El folio se puede tocar (borrar/editar bins)? NO si tiene OC, o si su LOTE ya mandó algo a SAP
+  // (cambiar los bins desincronizaría el recibido del lote contra lo ya enviado).
+  const loteConEnvio = (proyecto, rancho) => ((vaciadoCampoLotes || []).find((v) => v.id === loteKeyDe(proyecto, rancho))?.vaciado?.horas || []).some((h) => h.sapEnvio || h.sapPendiente);
+  const tieneSAPcd = (m) => !!m.ocSAP || loteConEnvio(m.proyecto, m.rancho);
+  // Empezar limpio: borra TODOS los folios y vaciados de campo directo (para arrancar el nuevo modelo).
+  const limpiarTodo = async () => {
+    const ok = await dlg.confirm({ title: "Limpiar campo directo", message: `¿Borrar TODOS los folios (${lista.length}) y sus vaciados de campo directo? Esto es para empezar de cero; no se puede deshacer.`, confirmText: "Sí, borrar todo", danger: true });
+    if (!ok) return;
+    setMovimientosCampo([]);
+    setVaciadoCampoLotes([]);
+    registrarEvento?.({ evento: "campo_directo_limpiado", modulo: "M9-CD", actor: actorNombre, detalle: "Limpió todos los folios y vaciados de campo directo (empezar limpio)" });
+  };
   const borrar = async (m) => {
     if (tieneSAPcd(m)) {
-      await dlg.alerta({ title: "No se puede borrar", message: `El folio ${m.folio} ya tiene envíos a SAP (recibo por hora u orden de compra). Borrarlo dejaría la app fuera de sincronía con SAP, así que no se puede eliminar.` });
+      await dlg.alerta({ title: "No se puede borrar", message: `Este folio tiene OC en SAP o su lote ya mandó vaciado a SAP. Borrarlo desincronizaría con SAP, así que no se puede eliminar.` });
       return;
     }
-    const ok = await dlg.confirm({ title: "Borrar folio", message: `¿Borrar el folio ${m.folio} de campo directo? Esta acción no se puede deshacer.`, confirmText: "Sí, borrar", danger: true });
+    const ok = await dlg.confirm({ title: "Borrar folio", message: `¿Borrar este folio (${m.folio || "s/folio"} · ${m.bins} bins · lote ${m.rancho}) de campo directo?`, confirmText: "Sí, borrar", danger: true });
     if (!ok) return;
     setMovimientosCampo((prev) => prev.filter((x) => x.id !== m.id));
-    registrarEvento?.({ evento: "campo_directo_borrado", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `Borró folio campo directo ${m.folio}` });
+    registrarEvento?.({ evento: "campo_directo_borrado", modulo: "M9-CD", actor: actorNombre, destino: m.folio || m.rancho, ref: m.id, detalle: `Borró folio ${m.folio || "(s/folio)"} · lote ${m.rancho}` });
   };
 
-  // Totales para el resumen.
-  const totBins = lista.reduce((a, m) => a + (parseFloat(m.bins) || 0), 0);
-  const totNeto = lista.reduce((a, m) => a + (parseFloat(m.netoTeorico) || 0), 0);
-  const totVaciado = lista.reduce((a, m) => a + kgVaciadosDe(m), 0);
-  const totPiso = lista.reduce((a, m) => a + kgEnPisoDe(m), 0);
+  // ── AGRUPAR FOLIOS POR LOTE (temporada + rancho) — la unidad que se VACÍA (1 orden de fabricación) ──
+  const lotes = useMemo(() => {
+    const map = {};
+    lista.forEach((m) => {
+      const key = loteKeyDe(m.proyecto, m.rancho);
+      if (!map[key]) map[key] = { key, proyecto: m.proyecto || "", rancho: m.rancho || "", folios: [], binsRec: 0 };
+      map[key].folios.push(m);
+      map[key].binsRec += parseFloat(m.bins) || 0;
+    });
+    return Object.values(map).sort((a, b) => (a.rancho || "").localeCompare(b.rancho || ""));
+  }, [lista]);
+  const loteVacDe = (key) => (vaciadoCampoLotes || []).find((v) => v.id === key)?.vaciado || {};
+  // "Movimiento" pseudo del LOTE, para reusar VaciadoPanel/helpers de empaque tal cual. El vaciado
+  // vive en `vaciadoCampoLotes`; kgRecibidos = neto teórico del lote (bins de sus folios × 217).
+  const loteMov = (lt) => {
+    const netoTeorico = lt.binsRec * netoPorBin;
+    return {
+      id: lt.key, folio: lt.rancho || "(lote)", rancho: lt.rancho, proyecto: lt.proyecto,
+      bins: lt.binsRec, binParams: { brutoPorBin, taraBin, cubetasPorBin }, netoTeorico,
+      vaciado: { eventos: [], mermas: [], horas: [], ...loteVacDe(lt.key), kgRecibidos: netoTeorico },
+    };
+  };
+  const loteMovByKey = (key) => { const lt = lotes.find((x) => x.key === key); return lt ? loteMov(lt) : null; };
 
-  // ── Datos POR FOLIO para el reporte (jefes) — misma tabla por folio que logística ──
-  // El módulo lleva el NETO real; el REPORTE de los jefes cuenta los bins como ellas: lo VACIADO
-  // (neto) ÷ 260 = bins teóricos. KG PROCESADOS = el neto vaciado; BINS PROCESADOS = neto ÷ 260.
-  // Solo folios con actividad el día seleccionado.
+  // Totales del resumen (a nivel lote, neto).
+  const totBins = lista.reduce((a, m) => a + (parseFloat(m.bins) || 0), 0);
+  const totVaciado = lotes.reduce((a, lt) => a + kgVaciadosDe(loteMov(lt)), 0);
+  const totPiso = lotes.reduce((a, lt) => a + kgEnPisoDe(loteMov(lt)), 0);
+  const totRecibido = lotes.reduce((a, lt) => a + lt.binsRec * netoPorBin, 0);
+
+  // ── Reporte (jefes): una tabla por LOTE. Conteo = neto vaciado ÷ 260 (así lo cuentan ellas). ──
   const foliosReporteCD = useMemo(() => {
     const porHoraDe = (arr) => {
       const acc = {};
       arr.forEach((e) => { const h = String(e.hora || "").split(":")[0] || "—"; acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0); });
       return acc;
     };
-    return lista.map((m) => {
-      const evsDia = (m.vaciado?.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
-      const merDia = (m.vaciado?.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+    return lotes.map((lt) => {
+      const lm = loteMov(lt);
+      const evsDia = (lm.vaciado.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
+      const merDia = (lm.vaciado.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
       const vacPorHora = porHoraDe(evsDia);   // neto vaciado por hora
       const merPorHora = porHoraDe(merDia);
       const totVac = Object.values(vacPorHora).reduce((a, b) => a + b, 0);
       const totMer = Object.values(merPorHora).reduce((a, b) => a + b, 0);
       return {
-        folio: m.folio, lote: m.rancho || "—", remision: "",
-        binsRecibidos: parseFloat(m.bins) || 0, recibido: kgRecibidosDe(m), enPiso: kgEnPisoDe(m),
+        folio: lt.rancho || "—", lote: lt.rancho || "—", remision: temporadaDe(lt.rancho) || "",
+        binsRecibidos: lt.binsRec, recibido: kgRecibidosDe(lm), enPiso: kgEnPisoDe(lm),
         vacPorHora, merPorHora, totVac, totMer,
       };
     }).filter((f) => f.totVac > 0 || Object.keys(f.merPorHora).length > 0);
-  }, [lista, diaReporte]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lista, vaciadoCampoLotes, diaReporte]);
   const totKgVacDiaCD = foliosReporteCD.reduce((a, f) => a + f.totVac, 0);
   const argsReporte = { dia: diaReporte, kgPorBin, foliosReporte: foliosReporteCD, totKgVacDia: totKgVacDiaCD };
 
-  const netoDe = (m) => parseFloat(m.netoTeorico) || (parseFloat(m.bins) || 0) * netoPorBin;
-
-  // ── VACIADO (por bins) ──
-  // Neto por bin de ESTE folio (usa sus binParams congelados; si no, los defaults actuales).
   const netoPorBinDe = (m) => Math.max(0, (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin) - (parseFloat(m.binParams?.taraBin) || taraBin));
-  // Muta el vaciado de un folio (crea el objeto base si no existe). kgRecibidos = neto teórico
-  // sembrado al crear el folio → los helpers de empaque (kgEnPisoDe, etc.) funcionan igual.
-  const updVac = (id, fn) => setMovimientosCampo((prev) => prev.map((m) => m.id === id
-    ? { ...m, vaciado: fn({ kgRecibidos: m.netoTeorico || 0, eventos: [], mermas: [], ...(m.vaciado || {}) }), actualizado: ahora().iso }
-    : m));
+
+  // ── VACIADO por LOTE ── El vaciado vive en `vaciadoCampoLotes` (id = loteKey). Los mutadores
+  // reciben el `loteMov` (id = loteKey); se reusa VaciadoPanel/HoraCampo tal cual.
+  const updVac = (lm, fn) => setVaciadoCampoLotes((prev) => {
+    const arr = Array.isArray(prev) ? prev : [];
+    const idx = arr.findIndex((v) => v.id === lm.id);
+    const curVac = idx >= 0 ? (arr[idx].vaciado || {}) : {};
+    const nextVac = fn({ eventos: [], mermas: [], horas: [], ...curVac });
+    const row = { id: lm.id, proyecto: lm.proyecto || "", rancho: lm.rancho || "", vaciado: nextVac, actualizado: ahora().iso };
+    if (idx >= 0) { const c = [...arr]; c[idx] = { ...arr[idx], ...row }; return c; }
+    return [row, ...arr];
+  });
 
   // ── HORAS (para poder pesar por hora y mandar cada hora a SAP, como logística) ──
   // Cada hora es un bloque: se abre, se registran bins DENTRO de ella (evento con horaId), se
   // cierra y luego se manda a SAP. El kg de una hora = suma de sus eventos. Solo UNA hora abierta
   // a la vez (se pesa la hora en curso, se cierra y se abre la siguiente).
   const abrirHoraCD = (m) => {
-    updVac(m.id, (v) => ({ ...v, horas: [...(v.horas || []), { id: nuevoId("HCD_"), etiqueta: `Hora ${(v.horas || []).length + 1}`, estado: "abierta", fecha: hoyISO(), ts: ahora().iso }] }));
+    updVac(m, (v) => ({ ...v, horas: [...(v.horas || []), { id: nuevoId("HCD_"), etiqueta: `Hora ${(v.horas || []).length + 1}`, estado: "abierta", fecha: hoyISO(), ts: ahora().iso }] }));
     registrarEvento?.({ evento: "campo_directo_hora_abierta", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Abrió una hora en el folio ${m.folio}` });
   };
   // Se pesa el BRUTO real de báscula y se restan los bins (cada uno pesa `taraBin`, ej. 43 kg):
@@ -272,13 +309,13 @@ export default function EmpaqueCampoDirecto() {
     const tara = parseFloat(m.binParams?.taraBin) || taraBin;
     const kg = Math.max(0, br - b * tara);
     const ev = { id: nuevoId("VD_"), horaId, bruto: br, bins: b, tara, kg, fecha: hoyISO(), hora: ahoraHM() };
-    updVac(m.id, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
+    updVac(m, (v) => ({ ...v, eventos: [...(v.eventos || []), ev] }));
     registrarEvento?.({ evento: "campo_directo_vaciado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Vació ${b} bins · bruto ${fmt(br)} − peso bins ${fmt(b * tara)} = ${fmt(kg)} kg (folio ${m.folio})` });
   };
-  const delVaciado = (m, evId) => updVac(m.id, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
-  const cerrarHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
+  const delVaciado = (m, evId) => updVac(m, (v) => ({ ...v, eventos: (v.eventos || []).filter((e) => e.id !== evId) }));
+  const cerrarHoraCD = (m, horaId) => updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "cerrada" } : h) }));
   // Reabrir para corregir: vuelve a "abierta" y BORRA la aprobación (hay que re-aprobar antes de SAP).
-  const reabrirHoraCD = (m, horaId) => updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "abierta", aprobacion: undefined } : h) }));
+  const reabrirHoraCD = (m, horaId) => updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((h) => h.id === horaId ? { ...h, estado: "abierta", aprobacion: undefined } : h) }));
   // kg neto de una hora = suma de sus eventos (registros con ese horaId).
   const kgHoraDe = (m, horaId) => (m.vaciado?.eventos || []).filter((e) => e.horaId === horaId).reduce((a, e) => a + (parseFloat(e.kg) || 0), 0);
   const cancelarHoraCD = async (m, horaId) => {
@@ -289,16 +326,16 @@ export default function EmpaqueCampoDirecto() {
     const regs = (v.eventos || []).filter((e) => e.horaId === horaId);
     const ok = await dlg.confirm({ title: "Cancelar hora", message: regs.length ? `Esta hora tiene ${regs.length} registro(s). Si la cancelas, se PIERDEN. ¿Cancelarla?` : "¿Cancelar esta hora vacía?", confirmText: "Sí, cancelar hora", danger: regs.length > 0 });
     if (!ok) return;
-    updVac(m.id, (v2) => ({ ...v2, horas: (v2.horas || []).filter((x) => x.id !== horaId), eventos: (v2.eventos || []).filter((e) => e.horaId !== horaId) }));
+    updVac(m, (v2) => ({ ...v2, horas: (v2.horas || []).filter((x) => x.id !== horaId), eventos: (v2.eventos || []).filter((e) => e.horaId !== horaId) }));
   };
 
   const registrarMermaCD = (m, kg, motivo) => {
     const k = parseFloat(kg) || 0;
     if (k <= 0) return;
-    updVac(m.id, (v) => ({ ...v, mermas: [...(v.mermas || []), { id: nuevoId("MR_"), kg: k, motivo: (motivo || "").trim(), fecha: hoyISO(), hora: ahoraHM() }] }));
+    updVac(m, (v) => ({ ...v, mermas: [...(v.mermas || []), { id: nuevoId("MR_"), kg: k, motivo: (motivo || "").trim(), fecha: hoyISO(), hora: ahoraHM() }] }));
     registrarEvento?.({ evento: "campo_directo_merma", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Merma ${fmt(k)} kg del folio ${m.folio}${motivo ? ` (${motivo})` : ""}` });
   };
-  const delMermaCD = (m, id) => updVac(m.id, (v) => ({ ...v, mermas: (v.mermas || []).filter((x) => x.id !== id) }));
+  const delMermaCD = (m, id) => updVac(m, (v) => ({ ...v, mermas: (v.mermas || []).filter((x) => x.id !== id) }));
 
   const terminarCD = async (m) => {
     const piso = kgEnPisoDe(m);
@@ -311,13 +348,13 @@ export default function EmpaqueCampoDirecto() {
       confirmText: "Sí, terminar",
     });
     if (!ok) return;
-    updVac(m.id, (v) => ({ ...v, terminado: { por: usuario?.nombre || "Empaque", porId: usuario?.id || "", ts: ahora().iso, pisoAlCerrar: piso } }));
+    updVac(m, (v) => ({ ...v, terminado: { por: usuario?.nombre || "Empaque", porId: usuario?.id || "", ts: ahora().iso, pisoAlCerrar: piso } }));
     registrarEvento?.({ evento: "campo_directo_terminado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: m.folio, ref: m.id, detalle: `Terminó el folio ${m.folio} (quedaban ${fmt(piso)} kg en piso)` });
   };
   const reabrirCD = async (m) => {
     const ok = await dlg.confirm({ title: "Reabrir folio", message: "El folio volverá a contar como en piso para seguir vaciando. ¿Reabrir?", confirmText: "Sí, reabrir" });
     if (!ok) return;
-    updVac(m.id, (v) => { const c = { ...v }; delete c.terminado; return c; });
+    updVac(m, (v) => { const c = { ...v }; delete c.terminado; return c; });
     registrarEvento?.({ evento: "campo_directo_reabierto", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `Reabrió el folio ${m.folio}` });
   };
 
@@ -354,7 +391,7 @@ export default function EmpaqueCampoDirecto() {
     });
     if (!ok) return;
     const aprobacion = { por: actorNombre, porId: usuario?.id ?? null, tipo: usuario?.tipo_nombre ?? null, ts: ahora().iso };
-    updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, aprobacion } : x) }));
+    updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, aprobacion } : x) }));
     registrarEvento?.({ evento: "campo_directo_hora_aprobada", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: cálculo aprobado (${cub} cub) por ${actorNombre} — habilita envío a SAP`, meta: { horaId: h.id, cubetas: cub, porId: aprobacion.porId } });
   };
 
@@ -363,7 +400,7 @@ export default function EmpaqueCampoDirecto() {
   // hay respuesta, queda PENDIENTE (G4) y solo se ofrece "Verificar en SAP" (nunca reenvío a ciegas).
   const confirmarEnvioHoraModal = async () => {
     if (!horaSapModal) return;
-    const m = movimientosCampo.find((x) => x.id === horaSapModal.mId);
+    const m = loteMovByKey(horaSapModal.mId);   // lote vivo
     const h = (m?.vaciado?.horas || []).find((x) => x.id === horaSapModal.hId);
     if (!m || !h) { setHoraSapModal(null); return; }
     const ord = ordenDe(m);
@@ -378,14 +415,14 @@ export default function EmpaqueCampoDirecto() {
     setEnviandoHora(h.id); setSapErrHora(null);
     try {
       const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cub, movimientoId: m.id, claveEnvio: `${m.id}_${h.id}`, aprobadoPor: h.aprobacion?.por, aprobadoPorId: h.aprobacion?.porId != null ? String(h.aprobacion.porId) : undefined });
-      updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id
+      updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id
         ? { ...x, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: ahora().iso } }
         : x) }));
       registrarEvento?.({ evento: "campo_directo_recibo_hora_sap", modulo: "M9-CD", actor: actorNombre, destino: m.folio, ref: m.id, detalle: `${h.etiqueta}: ${cub} cubetas (${fmt(neto)} kg ÷ ${kgc}) → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`, meta: { horaId: h.id, cubetas: cub, netoKg: neto, docNum: res.docNum } });
       setHoraSapModal(null);
     } catch (e) {
       if (e?.sinRespuesta) {   // G4: no sabemos si quedó en SAP → PENDIENTE, no reenviar a ciegas
-        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: { clave: `${m.id}_${h.id}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: kgc, netoKg: neto, ts: ahora().iso } } : x) }));
+        updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: { clave: `${m.id}_${h.id}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: kgc, netoKg: neto, ts: ahora().iso } } : x) }));
         setHoraSapModal(null);
       } else setSapErrHora({ horaId: h.id, msg: String(e?.message || e) });
     } finally { setEnviandoHora(""); }
@@ -399,10 +436,10 @@ export default function EmpaqueCampoDirecto() {
     try {
       const r = await verificarReciboSAP({ clave: pend.clave, absoluteEntry: pend.absoluteEntry, cantidad: pend.cubetas });
       if (r.estado === "encontrado" || r.estado === "enviado") {
-        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, estado: "enviada", sapEnvio: { docEntry: r.docEntry, docNum: r.docNum, cubetas: pend.cubetas, kgPorCubeta: pend.kgPorCubeta, netoKg: pend.netoKg, absoluteEntry: pend.absoluteEntry, ts: ahora().iso, verificado: true }, sapPendiente: undefined } : x) }));
+        updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, estado: "enviada", sapEnvio: { docEntry: r.docEntry, docNum: r.docNum, cubetas: pend.cubetas, kgPorCubeta: pend.kgPorCubeta, netoKg: pend.netoKg, absoluteEntry: pend.absoluteEntry, ts: ahora().iso, verificado: true }, sapPendiente: undefined } : x) }));
         setVerifMsgCD({ horaId: h.id, ok: true, texto: `Sí se creó en SAP (#${r.docNum}). Ya quedó registrado; NO hay que reenviarlo.` });
       } else if (r.estado === "no_encontrado") {
-        updVac(m.id, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: undefined } : x) }));
+        updVac(m, (v) => ({ ...v, horas: (v.horas || []).map((x) => x.id === h.id ? { ...x, sapPendiente: undefined } : x) }));
         setVerifMsgCD({ horaId: h.id, ok: false, texto: "SAP NO tiene ese recibo: el envío no se completó. Ya puedes volver a mandarlo." });
       } else {
         setVerifMsgCD({ horaId: h.id, ok: false, texto: r.mensaje || "Hay varios recibos parecidos en SAP; revísalo allá antes de decidir." });
@@ -546,9 +583,12 @@ export default function EmpaqueCampoDirecto() {
           <h1 className="text-base font-semibold text-gray-900 flex items-center gap-2"><Sprout size={18} className="text-emerald-600" /> Empaque campo directo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Carros que llegan directo de campo (sin pasar por logística). Se pesan y se vacían aquí.</p>
         </div>
-        <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
-          <Plus size={16} /> Nuevo folio
-        </button>
+        <div className="flex items-center gap-2">
+          {lista.length > 0 && <button onClick={limpiarTodo} className="text-[11px] text-gray-400 hover:text-red-600 underline">Limpiar todo (prueba)</button>}
+          <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
+            <Plus size={16} /> Nuevo folio
+          </button>
+        </div>
       </div>
 
       {/* Resumen */}
@@ -557,7 +597,7 @@ export default function EmpaqueCampoDirecto() {
           { lab: "Folios", val: lista.length, color: "text-gray-900" },
           { lab: "Bins mandados", val: fmt(totBins), color: "text-emerald-700" },
           { lab: "Vaciado (kg)", val: fmt(totVaciado), color: "text-green-700" },
-          { lab: "En piso (kg)", val: fmt(totPiso), color: "text-amber-700", sub: `de ${fmt(totNeto)} kg teóricos` },
+          { lab: "En piso (kg)", val: fmt(totPiso), color: "text-amber-700", sub: `de ${fmt(totRecibido)} kg teóricos` },
         ].map((s) => (
           <div key={s.lab} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
             <div className="text-[11px] text-gray-500">{s.lab}</div>
@@ -608,35 +648,37 @@ export default function EmpaqueCampoDirecto() {
         )}
       </div>
 
-      {/* Lista de folios */}
-      {lista.length === 0 ? (
+      {/* Lista por LOTE (junta los folios de cada temporada+lote; se vacía a nivel lote) */}
+      {lotes.length === 0 ? (
         <div className="bg-white border border-dashed border-gray-300 rounded-xl py-10 text-center text-sm text-gray-400">
           No hay folios de campo directo todavía. Da clic en <b className="text-gray-600">Nuevo folio</b> para capturar uno.
         </div>
       ) : (
         <div className="space-y-2">
-          {lista.map((m) => {
-            const abierto = expandido === m.id;
-            const rec = kgRecibidosDe(m);
-            const vac = kgVaciadosDe(m);
-            const piso = kgEnPisoDe(m);
-            const term = estaTerminado(m);
+          {lotes.map((lt) => {
+            const lm = loteMov(lt);
+            const abierto = expandido === lt.key;
+            const rec = kgRecibidosDe(lm);
+            const vac = kgVaciadosDe(lm);
+            const piso = kgEnPisoDe(lm);
+            const term = estaTerminado(lm);
             const pct = rec > 0 ? Math.min(100, Math.round((vac / rec) * 100)) : 0;
-            const npb = netoPorBinDe(m);
+            const npb = netoPorBinDe(lm);
             const binsPiso = npb > 0 ? Math.round(piso / npb) : 0;
+            const ord = ordenDe(lm);
             return (
-              <div key={m.id} className={`bg-white border rounded-xl overflow-hidden ${term ? "border-gray-200" : abierto ? "border-emerald-300 ring-1 ring-emerald-100" : "border-gray-200"}`}>
+              <div key={lt.key} className={`bg-white border rounded-xl overflow-hidden ${term ? "border-gray-200" : abierto ? "border-emerald-300 ring-1 ring-emerald-100" : "border-gray-200"}`}>
                 <div className="flex items-center gap-3 px-3 py-2.5 flex-wrap">
-                  <div className="flex items-center gap-2 min-w-[110px]">
-                    <span className="text-[10px] font-bold text-white bg-emerald-600 rounded px-1.5 py-0.5">FOLIO</span>
-                    <span className="font-bold text-gray-900">{m.folio}</span>
+                  <div className="flex items-center gap-2 min-w-[120px]">
+                    <span className="text-[10px] font-bold text-white bg-emerald-600 rounded px-1.5 py-0.5">LOTE</span>
+                    <span className="font-bold text-gray-900">{lt.rancho || "—"}</span>
                   </div>
-                  <div className="text-xs text-gray-600 flex items-center gap-1"><Sprout size={13} className="text-emerald-500" /> {m.rancho || "—"}<span className="text-gray-300">·</span><span className="text-gray-400">{temporadaDe(m.rancho) || (proyectos || []).find((p) => p.code === m.proyecto)?.nombre || "—"}</span></div>
-                  {m.departamento && <span className="text-[11px] bg-gray-100 text-gray-600 rounded px-1.5 py-0.5">Tabla: {m.departamento}</span>}
+                  <span className="text-xs text-gray-400">{temporadaDe(lt.rancho) || (proyectos || []).find((p) => p.code === lt.proyecto)?.nombre || "—"}</span>
+                  {ord?.absoluteEntry != null && <span className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5">Orden #{ord.docNum ?? ord.absoluteEntry}</span>}
+                  <span className="text-[11px] text-gray-600"><b className="text-gray-800">{fmt(lt.binsRec)}</b> bins · {lt.folios.length} folio{lt.folios.length !== 1 ? "s" : ""}</span>
                   <div className="flex-1" />
-                  {/* Progreso Vaciado / En piso */}
                   {term ? (
-                    <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 inline-flex items-center gap-1"><Check size={12} /> Terminado{kgSobranteCierre(m) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(m))} kg` : ""}</span>
+                    <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 inline-flex items-center gap-1"><Check size={12} /> Terminado{kgSobranteCierre(lm) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(lm))} kg` : ""}</span>
                   ) : (
                     <div className="flex items-center gap-2 min-w-[180px]">
                       <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${pct}%` }} /></div>
@@ -644,56 +686,61 @@ export default function EmpaqueCampoDirecto() {
                       <span className="text-xs whitespace-nowrap"><span className="text-amber-700 font-bold">{fmt(piso)}</span> <span className="text-gray-400">kg piso{binsPiso > 0 ? ` · ~${binsPiso} bins` : ""}</span></span>
                     </div>
                   )}
-                  <button onClick={() => setExpandido(abierto ? null : m.id)} className={`text-xs font-semibold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${abierto ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Vaciar</button>
-                  {/* OC de flete: crear si no existe; si ya está, muestra Sol/Ped (+ estado de factura) */}
-                  {!m.ocSAP ? (
-                    <button onClick={() => abrirOC(m)} title="Crear orden de compra de flete en SAP" className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-indigo-300 text-indigo-700 hover:bg-indigo-50 inline-flex items-center gap-1"><FileText size={14} /> OC</button>
-                  ) : (
-                    <span title="Documentos creados en SAP" className="text-[10px] px-2 py-1 border border-green-200 rounded-lg bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={12} /> Sol #{m.ocSAP.solicitud?.docNum ?? "?"} · Ped #{m.ocSAP.pedido?.docNum ?? "?"}{(estadosOC[m.id]?.factura ?? m.ocSAP?.factura)?.existe ? " · Facturada" : ""}</span>
-                  )}
-                  <button onClick={() => abrirEditar(m)} className="text-gray-400 hover:text-emerald-700 p-1" title="Editar"><Pencil size={15} /></button>
-                  {tieneSAPcd(m) ? (
-                    <span title="No se puede borrar: ya tiene envíos a SAP (recibo u OC)" className="text-gray-200 p-1 cursor-not-allowed"><Trash2 size={15} /></span>
-                  ) : (
-                    <button onClick={() => borrar(m)} className="text-gray-300 hover:text-red-600 p-1" title="Borrar"><Trash2 size={15} /></button>
-                  )}
+                  <button onClick={() => setExpandido(abierto ? null : lt.key)} className={`text-xs font-semibold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${abierto ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Vaciar</button>
                 </div>
                 {abierto && (
                   <div className="border-t border-gray-100">
                     <VaciadoPanel
-                      m={m} netoPorBin={npb} fmt={fmt} orden={ordenDe(m)}
-                      onAbrirHora={() => abrirHoraCD(m)}
-                      onRegistrar={(horaId, bruto, bins) => registrarVaciado(m, horaId, bruto, bins)}
-                      taraBin={parseFloat(m.binParams?.taraBin) || taraBin}
-                      onDelEvento={(evId) => delVaciado(m, evId)}
-                      onCerrarHora={(horaId) => cerrarHoraCD(m, horaId)}
-                      onReabrirHora={(horaId) => reabrirHoraCD(m, horaId)}
-                      onCancelarHora={(horaId) => cancelarHoraCD(m, horaId)}
-                      onMerma={(kg, mot) => registrarMermaCD(m, kg, mot)}
-                      onDelMerma={(id) => delMermaCD(m, id)}
-                      onTerminar={() => terminarCD(m)}
-                      onReabrir={() => reabrirCD(m)}
+                      m={lm} fmt={fmt} orden={ord}
+                      onAbrirHora={() => abrirHoraCD(lm)}
+                      onRegistrar={(horaId, bruto, bins) => registrarVaciado(lm, horaId, bruto, bins)}
+                      taraBin={taraBin}
+                      onDelEvento={(evId) => delVaciado(lm, evId)}
+                      onCerrarHora={(horaId) => cerrarHoraCD(lm, horaId)}
+                      onReabrirHora={(horaId) => reabrirHoraCD(lm, horaId)}
+                      onCancelarHora={(horaId) => cancelarHoraCD(lm, horaId)}
+                      onMerma={(kg, mot) => registrarMermaCD(lm, kg, mot)}
+                      onDelMerma={(id) => delMermaCD(lm, id)}
+                      onTerminar={() => terminarCD(lm)}
+                      onReabrir={() => reabrirCD(lm)}
                       sap={{
                         puedeAprobar, puedeEnviarSap,
-                        esHist: esHistoricoSAP(m, goLiveSAP), goLiveSAP,
-                        onAprobar: (h) => aprobarHoraCD(m, h),
-                        onEnviar: (h) => abrirEnvioHora(m, h),
-                        onVerificar: (h) => verificarHoraCD(m, h),
+                        esHist: esHistoricoSAP({ fecha: lt.folios[0]?.fecha }, goLiveSAP), goLiveSAP,
+                        onAprobar: (h) => aprobarHoraCD(lm, h),
+                        onEnviar: (h) => abrirEnvioHora(lm, h),
+                        onVerificar: (h) => verificarHoraCD(lm, h),
                         enviandoClave: enviandoHora, verificandoClave: verificandoCD,
                         verifMsg: verifMsgCD, error: sapErrHora,
                       }}
                     />
-                    <div className="px-3 py-3 bg-gray-50/60 text-xs grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4 border-t border-gray-100">
-                      <Dato lab="Cultivo" val={m.cultivo} />
-                      <Dato lab="Transporte" val={m.transporte || "—"} />
-                      <Dato lab="Chofer" val={m.chofer || "—"} />
-                      <Dato lab="Fecha" val={m.fecha || "—"} />
-                      <Dato lab="Hora salida" val={m.horaSalida || "—"} />
-                      <Dato lab="Hora llegada" val={m.horaLlegada || "—"} />
-                      <Dato lab="Bruto teórico" val={`${fmt((parseFloat(m.bins) || 0) * (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin))} kg`} />
-                      <Dato lab="Neto teórico" val={`${fmt(netoDe(m))} kg`} />
-                      {m.observaciones && <div className="col-span-2 sm:col-span-4"><span className="text-gray-400">Observaciones:</span> {m.observaciones}</div>}
-                      <div className="col-span-2 sm:col-span-4 mt-1 text-[11px] text-gray-400 italic">El envío a SAP (recibo + OC) de este folio se habilita en las siguientes fases.</div>
+                    {/* Folios (entradas de bins) de este lote */}
+                    <div className="px-3 py-3 bg-gray-50/60 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-semibold text-gray-500 uppercase">Folios de este lote ({lt.folios.length})</span>
+                        <button onClick={() => { setEditId(null); setForm({ ...formVacio(), rancho: lt.rancho, proyecto: lt.proyecto, departamento: lt.folios[0]?.departamento || "" }); }} className="text-[11px] text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1"><Plus size={12} /> Agregar bins a este lote</button>
+                      </div>
+                      <div className="space-y-1">
+                        {lt.folios.map((f) => (
+                          <div key={f.id} className="flex items-center gap-2 text-xs bg-white border border-gray-100 rounded px-2 py-1.5 flex-wrap">
+                            <span className="font-semibold text-gray-800">{f.folio || "(sin folio)"}</span>
+                            <span className="text-emerald-700"><b>{fmt(f.bins)}</b> bins</span>
+                            {f.transporte && <span className="text-gray-400 truncate">· {f.transporte}</span>}
+                            {f.departamento && <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Tabla: {f.departamento}</span>}
+                            <div className="flex-1" />
+                            {!f.ocSAP ? (
+                              <button onClick={() => abrirOC(f)} title="Crear OC de flete de este folio" className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 text-indigo-700 hover:bg-indigo-50 inline-flex items-center gap-1"><FileText size={12} /> OC</button>
+                            ) : (
+                              <span title="OC en SAP" className="text-[10px] px-1.5 py-0.5 border border-green-200 rounded bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={11} /> Sol #{f.ocSAP.solicitud?.docNum ?? "?"} · Ped #{f.ocSAP.pedido?.docNum ?? "?"}{(estadosOC[f.id]?.factura ?? f.ocSAP?.factura)?.existe ? " · Fact." : ""}</span>
+                            )}
+                            <button onClick={() => abrirEditar(f)} title="Editar / completar datos" className="text-gray-400 hover:text-emerald-700 p-0.5"><Pencil size={14} /></button>
+                            {tieneSAPcd(f) ? (
+                              <span title="No se puede borrar: tiene OC, o su lote ya mandó a SAP" className="text-gray-200 p-0.5 cursor-not-allowed"><Trash2 size={14} /></span>
+                            ) : (
+                              <button onClick={() => borrar(f)} title="Borrar folio" className="text-gray-300 hover:text-red-600 p-0.5"><Trash2 size={14} /></button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -783,7 +830,7 @@ export default function EmpaqueCampoDirecto() {
 
       {/* Modal de envío a SAP (rico, como logística) */}
       {horaSapModal && (() => {
-        const m = movimientosCampo.find((x) => x.id === horaSapModal.mId);
+        const m = loteMovByKey(horaSapModal.mId);
         const h = (m?.vaciado?.horas || []).find((x) => x.id === horaSapModal.hId);
         if (!m || !h) return null;
         const ord = ordenDe(m);
@@ -948,11 +995,6 @@ function Campo({ lab, children }) {
   );
 }
 
-function Dato({ lab, val }) {
-  return (
-    <div><span className="text-gray-400">{lab}:</span> <span className="text-gray-800 font-medium">{val}</span></div>
-  );
-}
 
 // ── Panel de VACIADO por HORAS de un folio ──
 // Como logística: se ABRE una hora, se registran bins DENTRO de ella, se CIERRA y luego se manda
