@@ -721,7 +721,7 @@ export default function EmpaqueCampoDirecto() {
                       onReabrir={() => reabrirCD(lm)}
                       sap={{
                         puedeAprobar, puedeEnviarSap,
-                        esHist: esHistoricoSAP({ fecha: lt.folios[0]?.fecha }, goLiveSAP), goLiveSAP,
+                        esHist: esHistoricoSAP({ fecha: lt.folios.map((f) => f.fecha).filter(Boolean).sort().pop() || hoyISO() }, goLiveSAP), goLiveSAP,
                         onAprobar: (h) => aprobarHoraCD(lm, h),
                         onEnviar: (h) => abrirEnvioHora(lm, h),
                         onVerificar: (h) => verificarHoraCD(lm, h),
