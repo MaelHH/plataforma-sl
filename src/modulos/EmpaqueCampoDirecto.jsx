@@ -434,6 +434,13 @@ export default function EmpaqueCampoDirecto() {
     if (!h.aprobacion) { setSapErrHora({ horaId: h.id, msg: "Falta APROBAR el cálculo antes de mandar a SAP." }); return; }
     if (!ord?.absoluteEntry) { setSapErrHora({ horaId: h.id, msg: "Este folio no tiene orden de fabricación en SAP." }); return; }
     if (!(cub > 0)) { setSapErrHora({ horaId: h.id, msg: "La cantidad calculada es 0." }); return; }
+    // ÚLTIMO AVISO antes del POST. A SAP no se le puede deshacer desde aquí; se pregunta SIEMPRE.
+    const seguro = await dlg.confirm({
+      title: `¿Mandar ${h.etiqueta} a SAP?`,
+      message: `Se van a mandar ${cub.toLocaleString()} cubetas (${fmt(neto)} kg ÷ ${kgc}) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry}, del lote ${m.rancho || "—"}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer. Aprobado por ${h.aprobacion?.por || "—"}.`,
+      confirmText: `Sí, mandar ${cub.toLocaleString()} cubetas`, danger: true,
+    });
+    if (!seguro) return;
     setEnviandoHora(h.id); setSapErrHora(null);
     try {
       const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cub, movimientoId: m.id, claveEnvio: `${m.id}_${h.id}`, aprobadoPor: h.aprobacion?.por, aprobadoPorId: h.aprobacion?.porId != null ? String(h.aprobacion.porId) : undefined });
