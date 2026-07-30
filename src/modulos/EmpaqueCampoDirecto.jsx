@@ -6,7 +6,7 @@ import { useDialog } from "../components/Dialog";
 import SearchSelect from "../components/SearchSelect";
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import { guardarFolioOC } from "../utils/folioOC";
-import { generarPDFVaciadoHora, generarExcelVaciadoHora } from "./reportes/vaciadoPorHora";
+import { generarPDFVaciadoLotes, generarExcelVaciadoLotes } from "./reportes/vaciadoPorHora";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { hoyISO } from "../utils/fecha";
 
@@ -251,31 +251,45 @@ export default function EmpaqueCampoDirecto() {
   const totPiso = lotes.reduce((a, lt) => a + kgEnPisoDe(loteMov(lt)), 0);
   const totRecibido = lotes.reduce((a, lt) => a + lt.binsRec * netoPorBin, 0);
 
-  // ── Reporte (jefes): una tabla por LOTE. Conteo = neto vaciado ÷ 260 (así lo cuentan ellas). ──
-  const foliosReporteCD = useMemo(() => {
-    const porHoraDe = (arr) => {
-      const acc = {};
-      arr.forEach((e) => { const h = String(e.hora || "").split(":")[0] || "—"; acc[h] = (acc[h] || 0) + (parseFloat(e.kg) || 0); });
-      return acc;
-    };
-    return lotes.map((lt) => {
+  // ── Reporte (jefes): UNA SOLA TABLA con columnas por LOTE (como "temporada alta"). Conteo = neto
+  // vaciado ÷ 260 (así lo cuentan ellas). Agrega el vaciado del día por hora y por lote. ──
+  const argsReporte = useMemo(() => {
+    const porHoraAcc = {};        // hora -> { kg, lotes: {loteName: kg} }
+    const mermaPorHora = {};      // hora -> kg total
+    const mermaHoraLote = {};     // hora -> {loteName: kg}
+    const binsRecibidosPorLote = {};
+    const enPisoPorLote = {};
+    const lotesConActividad = new Set();
+    let totKgVacDia = 0;
+    lotes.forEach((lt) => {
       const lm = loteMov(lt);
-      const evsDia = (lm.vaciado.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
-      const merDia = (lm.vaciado.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte);
-      const vacPorHora = porHoraDe(evsDia);   // neto vaciado por hora
-      const merPorHora = porHoraDe(merDia);
-      const totVac = Object.values(vacPorHora).reduce((a, b) => a + b, 0);
-      const totMer = Object.values(merPorHora).reduce((a, b) => a + b, 0);
-      return {
-        folio: lt.rancho || "—", lote: lt.rancho || "—", remision: temporadaDe(lt.rancho) || "",
-        binsRecibidos: lt.binsRec, recibido: kgRecibidosDe(lm), enPiso: kgEnPisoDe(lm),
-        vacPorHora, merPorHora, totVac, totMer,
-      };
-    }).filter((f) => f.totVac > 0 || Object.keys(f.merPorHora).length > 0);
+      const lote = lt.rancho || "—";
+      binsRecibidosPorLote[lote] = (binsRecibidosPorLote[lote] || 0) + lt.binsRec;
+      enPisoPorLote[lote] = (enPisoPorLote[lote] || 0) + kgEnPisoDe(lm);
+      (lm.vaciado.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte).forEach((e) => {
+        const h = String(e.hora || "").split(":")[0] || "—";
+        const kg = parseFloat(e.kg) || 0;
+        if (!porHoraAcc[h]) porHoraAcc[h] = { kg: 0, lotes: {} };
+        porHoraAcc[h].kg += kg;
+        porHoraAcc[h].lotes[lote] = (porHoraAcc[h].lotes[lote] || 0) + kg;
+        totKgVacDia += kg;
+        if (kg > 0) lotesConActividad.add(lote);
+      });
+      (lm.vaciado.mermas || []).filter((e) => (e.fecha || hoyISO()) === diaReporte).forEach((e) => {
+        const h = String(e.hora || "").split(":")[0] || "—";
+        const kg = parseFloat(e.kg) || 0;
+        mermaPorHora[h] = (mermaPorHora[h] || 0) + kg;
+        if (!mermaHoraLote[h]) mermaHoraLote[h] = {};
+        mermaHoraLote[h][lote] = (mermaHoraLote[h][lote] || 0) + kg;
+        if (kg > 0) lotesConActividad.add(lote);
+      });
+    });
+    const porHora = Object.entries(porHoraAcc).sort((a, b) => Number(a[0]) - Number(b[0]));
+    const lotesHora = [...lotesConActividad].sort((a, b) => a.localeCompare(b));
+    return { dia: diaReporte, kgPorBin, porHora, lotesHora, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote, totKgVacDia };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, vaciadoCampoLotes, diaReporte]);
-  const totKgVacDiaCD = foliosReporteCD.reduce((a, f) => a + f.totVac, 0);
-  const argsReporte = { dia: diaReporte, kgPorBin, foliosReporte: foliosReporteCD, totKgVacDia: totKgVacDiaCD };
+  const hayVaciadoDia = argsReporte.porHora.length > 0;
 
   const netoPorBinDe = (m) => Math.max(0, (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin) - (parseFloat(m.binParams?.taraBin) || taraBin));
 
@@ -610,17 +624,17 @@ export default function EmpaqueCampoDirecto() {
       {/* Reporte del día (PDF/Excel) — tabla por folio, igual que logística */}
       <div className="mb-4 flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-xl px-3 py-2.5">
         <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de vaciado por hora</span>
-        <span className="text-[11px] text-gray-400">· una tabla por folio · bins = {fmt(kgPorBin)} kg</span>
+        <span className="text-[11px] text-gray-400">· una sola tabla, columnas por lote · bins = {fmt(kgPorBin)} kg</span>
         <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
           <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
         </label>
         <div className="flex-1" />
-        {foliosReporteCD.length === 0 ? (
+        {!hayVaciadoDia ? (
           <span className="text-[11px] text-gray-400 italic">Sin vaciados el día seleccionado</span>
         ) : (
           <>
-            <button onClick={() => generarExcelVaciadoHora(argsReporte)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
-            <button onClick={() => generarPDFVaciadoHora(argsReporte)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+            <button onClick={() => generarExcelVaciadoLotes(argsReporte)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+            <button onClick={() => generarPDFVaciadoLotes(argsReporte)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
           </>
         )}
       </div>
