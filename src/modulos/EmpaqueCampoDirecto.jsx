@@ -150,16 +150,16 @@ export default function EmpaqueCampoDirecto() {
     const folio = (form.folio || "").trim();
     const rancho = (form.rancho || "").trim();
     const tabla = (form.departamento || "").trim();
-    // OBLIGATORIOS al crear rápido: lote (para anidar a la temporada), tabla y bins. El resto
-    // (folio, transporte, chofer, flete, horas…) se llena DESPUÉS con calma para completar la OC.
+    // OBLIGATORIOS al crear rápido: folio (la remisión, para saber de dónde viene cada carga), lote
+    // (para anidar a la temporada), tabla y bins. El resto (transporte, chofer, flete, horas…) se
+    // llena DESPUÉS con calma para completar la OC.
+    if (!folio) { dlg.alerta({ title: "Falta el folio", message: "Captura el número de folio del ticket (la remisión) para saber de qué carga es." }); return; }
     if (!rancho) { dlg.alerta({ title: "Falta el lote", message: "El lote es obligatorio: con él se anida a su temporada y orden de fabricación." }); return; }
     if (!tabla) { dlg.alerta({ title: "Falta la tabla", message: "Captura la tabla (departamento) de donde salió el carro." }); return; }
     if (bins <= 0) { dlg.alerta({ title: "Faltan los bins", message: "Captura cuántos bins llegaron." }); return; }
-    // Folio duplicado (solo si lo capturaron; el folio es opcional y se puede llenar después).
-    if (folio) {
-      const dup = lista.find((m) => (m.folio || "").trim() === folio && m.id !== editId);
-      if (dup) { dlg.alerta({ title: "Folio repetido", message: `Ya existe un folio ${folio} en campo directo.` }); return; }
-    }
+    // Folio duplicado dentro de campo directo.
+    const dup = lista.find((m) => (m.folio || "").trim() === folio && m.id !== editId);
+    if (dup) { dlg.alerta({ title: "Folio repetido", message: `Ya existe un folio ${folio} en campo directo.` }); return; }
 
     const t = ahora();
     const base = {
@@ -774,11 +774,11 @@ export default function EmpaqueCampoDirecto() {
               <Campo lab="Tabla (departamento) *">
                 <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom disabled={lockCamposEdit} placeholder="Tabla…" className={inpLock} />
               </Campo>
+              <Campo lab="Folio * (remisión)">
+                <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} disabled={lockCamposEdit} placeholder="002038" className={inpLock} />
+              </Campo>
               <Campo lab="Bins mandados *">
                 <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
-              </Campo>
-              <Campo lab="Folio (opcional · se llena después)">
-                <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} disabled={lockCamposEdit} placeholder="002038" className={inpLock} />
               </Campo>
               <Campo lab="Cultivo (fijo)">
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
