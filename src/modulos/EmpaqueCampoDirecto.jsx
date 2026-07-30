@@ -44,7 +44,8 @@ const formVacio = () => ({
   folio: "", cultivo: CULTIVO_FIJO, fecha: hoyISO(),
   transporte: "", chofer: "", bins: "",
   rancho: "", proyecto: "", departamento: "",
-  horaSalida: "", horaLlegada: "", observaciones: "",
+  horaSalida: "", horaLlegada: ahoraHM(),   // se recibió AHORA (editable) → queda la hora de llegada
+  observaciones: "",
   flete: "",   // precio del flete (OPCIONAL; se puede llenar después para la OC)
 });
 
