@@ -146,11 +146,18 @@ export default function EmpaqueCampoDirecto() {
 
   const guardar = () => {
     const folio = (form.folio || "").trim();
-    if (!folio) { dlg.alerta({ title: "Falta el folio", message: "Captura el número de folio del ticket." }); return; }
-    if (bins <= 0) { dlg.alerta({ title: "Faltan los bins", message: "Captura cuántos bins se mandaron desde campo." }); return; }
-    // Folio duplicado (dentro de campo directo).
-    const dup = lista.find((m) => (m.folio || "").trim() === folio && m.id !== editId);
-    if (dup) { dlg.alerta({ title: "Folio repetido", message: `Ya existe un folio ${folio} en campo directo.` }); return; }
+    const rancho = (form.rancho || "").trim();
+    const tabla = (form.departamento || "").trim();
+    // OBLIGATORIOS al crear rápido: lote (para anidar a la temporada), tabla y bins. El resto
+    // (folio, transporte, chofer, flete, horas…) se llena DESPUÉS con calma para completar la OC.
+    if (!rancho) { dlg.alerta({ title: "Falta el lote", message: "El lote es obligatorio: con él se anida a su temporada y orden de fabricación." }); return; }
+    if (!tabla) { dlg.alerta({ title: "Falta la tabla", message: "Captura la tabla (departamento) de donde salió el carro." }); return; }
+    if (bins <= 0) { dlg.alerta({ title: "Faltan los bins", message: "Captura cuántos bins llegaron." }); return; }
+    // Folio duplicado (solo si lo capturaron; el folio es opcional y se puede llenar después).
+    if (folio) {
+      const dup = lista.find((m) => (m.folio || "").trim() === folio && m.id !== editId);
+      if (dup) { dlg.alerta({ title: "Folio repetido", message: `Ya existe un folio ${folio} en campo directo.` }); return; }
+    }
 
     const t = ahora();
     const base = {
@@ -179,12 +186,12 @@ export default function EmpaqueCampoDirecto() {
         }
         return { ...m, ...base, actualizado: t.iso, vaciado: { ...(m.vaciado || {}), kgRecibidos: base.netoTeorico } };
       }));
-      registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: actorNombre, destino: folio, ref: editId, detalle: `Editó folio campo directo ${folio}` });
+      registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: actorNombre, destino: folio || rancho, ref: editId, detalle: `Editó folio campo directo ${folio || rancho}` });
     } else {
       const id = nuevoId("MOVCD_");
       const mov = { ...base, id, creado: t.iso, vaciado: { kgRecibidos: base.netoTeorico } };
       setMovimientosCampo((prev) => [mov, ...prev]);
-      registrarEvento?.({ evento: "campo_directo_creado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio, ref: id, detalle: `Creó folio campo directo ${folio} · ${bins} bins · ${fmt(base.netoTeorico)} kg neto teórico` });
+      registrarEvento?.({ evento: "campo_directo_creado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio || rancho, ref: id, detalle: `Creó folio ${folio || "(s/folio)"} · lote ${rancho} · ${bins} bins` });
     }
     cerrarForm();
   };
@@ -713,27 +720,27 @@ export default function EmpaqueCampoDirecto() {
                     : <span>Este folio ya <b>vació a SAP</b>: solo se puede cambiar el <b>Flete $</b> (por si el precio cambia antes de hacer la OC). Lo demás queda bloqueado para no desincronizar con SAP.</span>}
                 </div>
               )}
-              <Campo lab="Folio *">
+              <Campo lab="Lote * (escribe o elige)">
+                <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom disabled={lockCamposEdit} placeholder="Ramos…" className={inpLock} />
+                <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
+              </Campo>
+              <Campo lab="Tabla (departamento) *">
+                <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom disabled={lockCamposEdit} placeholder="Tabla…" className={inpLock} />
+              </Campo>
+              <Campo lab="Bins mandados *">
+                <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
+              </Campo>
+              <Campo lab="Folio (opcional · se llena después)">
                 <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} disabled={lockCamposEdit} placeholder="002038" className={inpLock} />
               </Campo>
               <Campo lab="Cultivo (fijo)">
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
-              </Campo>
-              <Campo lab="Lote (escribe o elige)">
-                <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom disabled={lockCamposEdit} placeholder="Ramos…" className={inpLock} />
-                <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
-              </Campo>
-              <Campo lab="Tabla (departamento)">
-                <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom disabled={lockCamposEdit} placeholder="Tabla…" className={inpLock} />
               </Campo>
               <Campo lab="Transporte">
                 <SearchSelect value={form.transporte} onChange={(v) => upd({ transporte: v })} options={transporteOpts} allowCustom disabled={lockCamposEdit} placeholder="Camión blanco Z-JN3 607" className={inpLock} />
               </Campo>
               <Campo lab="Chofer">
                 <SearchSelect value={form.chofer} onChange={(v) => upd({ chofer: v })} options={choferOpts} allowCustom disabled={lockCamposEdit} placeholder="Rubén Cota" className={inpLock} />
-              </Campo>
-              <Campo lab="Bins mandados *">
-                <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
               </Campo>
               <Campo lab="Fecha de llegada">
                 <input type="date" value={form.fecha} onChange={(e) => upd({ fecha: e.target.value })} disabled={lockCamposEdit} className={inpLock} />
