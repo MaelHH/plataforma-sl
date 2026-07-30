@@ -203,14 +203,6 @@ export default function EmpaqueCampoDirecto() {
   // (cambiar los bins desincronizaría el recibido del lote contra lo ya enviado).
   const loteConEnvio = (proyecto, rancho) => ((vaciadoCampoLotes || []).find((v) => v.id === loteKeyDe(proyecto, rancho))?.vaciado?.horas || []).some((h) => h.sapEnvio || h.sapPendiente);
   const tieneSAPcd = (m) => !!m.ocSAP || loteConEnvio(m.proyecto, m.rancho);
-  // Empezar limpio: borra TODOS los folios y vaciados de campo directo (para arrancar el nuevo modelo).
-  const limpiarTodo = async () => {
-    const ok = await dlg.confirm({ title: "Limpiar campo directo", message: `¿Borrar TODOS los folios (${lista.length}) y sus vaciados de campo directo? Esto es para empezar de cero; no se puede deshacer.`, confirmText: "Sí, borrar todo", danger: true });
-    if (!ok) return;
-    setMovimientosCampo([]);
-    setVaciadoCampoLotes([]);
-    registrarEvento?.({ evento: "campo_directo_limpiado", modulo: "M9-CD", actor: actorNombre, detalle: "Limpió todos los folios y vaciados de campo directo (empezar limpio)" });
-  };
   const borrar = async (m) => {
     if (tieneSAPcd(m)) {
       await dlg.alerta({ title: "No se puede borrar", message: `Este folio tiene OC en SAP o su lote ya mandó vaciado a SAP. Borrarlo desincronizaría con SAP, así que no se puede eliminar.` });
@@ -610,12 +602,9 @@ export default function EmpaqueCampoDirecto() {
           <h1 className="text-base font-semibold text-gray-900 flex items-center gap-2"><Sprout size={18} className="text-emerald-600" /> Empaque campo directo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Carros que llegan directo de campo (sin pasar por logística). Se pesan y se vacían aquí.</p>
         </div>
-        <div className="flex items-center gap-2">
-          {lista.length > 0 && <button onClick={limpiarTodo} className="text-[11px] text-gray-400 hover:text-red-600 underline">Limpiar todo (prueba)</button>}
-          <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
-            <Plus size={16} /> Nuevo folio
-          </button>
-        </div>
+        <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
+          <Plus size={16} /> Nuevo folio
+        </button>
       </div>
 
       {/* Resumen */}
