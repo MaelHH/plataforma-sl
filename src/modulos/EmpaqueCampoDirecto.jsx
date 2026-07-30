@@ -230,8 +230,11 @@ export default function EmpaqueCampoDirecto() {
   // vive en `vaciadoCampoLotes`; kgRecibidos = neto teórico del lote (bins de sus folios × 217).
   const loteMov = (lt) => {
     const netoTeorico = lt.binsRec * netoPorBin;
+    // fecha del lote = la MÁS RECIENTE de sus folios (vacía → hoy). La usa la línea de corte SAP:
+    // sin fecha, esHistoricoSAP lo trataba como histórico y bloqueaba el envío.
+    const fecha = lt.folios.map((f) => f.fecha).filter(Boolean).sort().pop() || hoyISO();
     return {
-      id: lt.key, folio: lt.rancho || "(lote)", rancho: lt.rancho, proyecto: lt.proyecto,
+      id: lt.key, folio: lt.rancho || "(lote)", rancho: lt.rancho, proyecto: lt.proyecto, fecha,
       bins: lt.binsRec, binParams: { brutoPorBin, taraBin, cubetasPorBin }, netoTeorico,
       vaciado: { eventos: [], mermas: [], horas: [], ...loteVacDe(lt.key), kgRecibidos: netoTeorico },
     };
@@ -721,7 +724,7 @@ export default function EmpaqueCampoDirecto() {
                       onReabrir={() => reabrirCD(lm)}
                       sap={{
                         puedeAprobar, puedeEnviarSap,
-                        esHist: esHistoricoSAP({ fecha: lt.folios.map((f) => f.fecha).filter(Boolean).sort().pop() || hoyISO() }, goLiveSAP), goLiveSAP,
+                        esHist: esHistoricoSAP(lm, goLiveSAP), goLiveSAP,
                         onAprobar: (h) => aprobarHoraCD(lm, h),
                         onEnviar: (h) => abrirEnvioHora(lm, h),
                         onVerificar: (h) => verificarHoraCD(lm, h),
