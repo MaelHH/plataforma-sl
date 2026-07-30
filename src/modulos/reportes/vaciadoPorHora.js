@@ -267,7 +267,7 @@ export async function generarExcelVaciadoHora({ dia, kgPorBin, foliosReporte = [
 
 // ═══════════════ Variante LOTES (una sola tabla, columnas por lote) — EMPAQUE CAMPO DIRECTO ═══════════════
 // Prepara TODO lo que necesitan ambas salidas a partir de los datos del módulo.
-function _prepararLotes({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote }) {
+function _prepararLotes({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRecibidosPorLote, binsRecHoraLote, mermaPorHora, enPisoPorLote, mermaHoraLote }) {
   const kgb = parseFloat(kgPorBin) || 260;
   const reales = lotesHora.length ? lotesHora : [];
   const lotes = [...reales];
@@ -309,6 +309,7 @@ function _prepararLotes({ dia, porHora, lotesHora, kgPorBin, totKgVacDia, binsRe
     });
     return {
       h, franja: franja(h), esBreak: BREAK_HOURS.includes(h),
+      binRec: lotes.map((l) => (esPh(l) ? null : ((binsRecHoraLote?.[String(h)]?.[l]) || null))),   // bins que LLEGARON esa hora
       binsProc: lotes.map((l) => { const kg = kgLoteHora(v, l); return kg ? bins(kg, kgb) : null; }),
       kg: lotes.map((l) => { const kg = kgLoteHora(v, l); return kg || null; }),
       enPiso, pctMerma,
@@ -345,7 +346,7 @@ export function generarPDFVaciadoLotes(args) {
 
   const filasHTML = D.filas.map((f) => `<tr>
     <td class="hora${f.esBreak ? " break" : ""}">${f.franja}</td>
-    ${D.lotes.map(() => `<td></td>`).join("")}
+    ${f.binRec.map((b) => `<td class="num">${b == null ? "" : fmt(b)}</td>`).join("")}
     ${f.binsProc.map((b) => `<td class="num">${b == null ? "" : fmt(b)}</td>`).join("")}
     ${f.kg.map((k) => `<td class="num">${k == null ? "" : fmt(k)}</td>`).join("")}
     ${f.enPiso.map((p) => `<td class="num piso">${p == null ? "" : fmt(p)}</td>`).join("")}
@@ -492,7 +493,7 @@ export async function generarExcelVaciadoLotes(args) {
   let r = 3;
   D.filas.forEach((f) => {
     set(r, 1, f.franja, { bg: f.esBreak ? COL.naranja : undefined, bold: true, align: { horizontal: "left", vertical: "middle" } });
-    D.lotes.forEach((_, i) => set(r, cRecIni + i, "", {}));          // bins recibidos por hora: en blanco
+    f.binRec.forEach((b, i) => set(r, cRecIni + i, b == null ? "" : b, { align: der, num: true }));   // bins que llegaron esa hora
     f.binsProc.forEach((b, i) => set(r, cProcIni + i, b == null ? "" : b, { align: der, num: true }));
     f.kg.forEach((k, i) => set(r, cKgIni + i, k == null ? "" : k, { align: der, num: true }));
     f.enPiso.forEach((p, i) => set(r, cPisoIni + i, p == null ? "" : p, { bg: p == null ? undefined : "fde9d9", align: der, num: true }));

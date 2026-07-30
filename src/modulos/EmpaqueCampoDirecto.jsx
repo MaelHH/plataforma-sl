@@ -257,14 +257,26 @@ export default function EmpaqueCampoDirecto() {
     const porHoraAcc = {};        // hora -> { kg, lotes: {loteName: kg} }
     const mermaPorHora = {};      // hora -> kg total
     const mermaHoraLote = {};     // hora -> {loteName: kg}
-    const binsRecibidosPorLote = {};
+    const binsRecibidosPorLote = {};   // total del día por lote
+    const binsRecHoraLote = {};        // hora -> {loteName: bins que llegaron}
     const enPisoPorLote = {};
     const lotesConActividad = new Set();
     let totKgVacDia = 0;
     lotes.forEach((lt) => {
       const lm = loteMov(lt);
       const lote = lt.rancho || "—";
-      binsRecibidosPorLote[lote] = (binsRecibidosPorLote[lote] || 0) + lt.binsRec;
+      // BINS RECIBIDOS: bins de los folios que LLEGARON ese día, por hora de llegada (y total del día).
+      (lt.folios || []).filter((f) => (f.fecha || hoyISO()) === diaReporte).forEach((f) => {
+        const b = parseFloat(f.bins) || 0;
+        if (b <= 0) return;
+        binsRecibidosPorLote[lote] = (binsRecibidosPorLote[lote] || 0) + b;
+        lotesConActividad.add(lote);
+        const hh = String(f.horaLlegada || "").split(":")[0];
+        if (hh !== "" && !Number.isNaN(Number(hh))) {
+          if (!binsRecHoraLote[hh]) binsRecHoraLote[hh] = {};
+          binsRecHoraLote[hh][lote] = (binsRecHoraLote[hh][lote] || 0) + b;
+        }
+      });
       enPisoPorLote[lote] = (enPisoPorLote[lote] || 0) + kgEnPisoDe(lm);
       (lm.vaciado.eventos || []).filter((e) => (e.fecha || hoyISO()) === diaReporte).forEach((e) => {
         const h = String(e.hora || "").split(":")[0] || "—";
@@ -286,10 +298,10 @@ export default function EmpaqueCampoDirecto() {
     });
     const porHora = Object.entries(porHoraAcc).sort((a, b) => Number(a[0]) - Number(b[0]));
     const lotesHora = [...lotesConActividad].sort((a, b) => a.localeCompare(b));
-    return { dia: diaReporte, kgPorBin, porHora, lotesHora, binsRecibidosPorLote, mermaPorHora, enPisoPorLote, mermaHoraLote, totKgVacDia };
+    return { dia: diaReporte, kgPorBin, porHora, lotesHora, binsRecibidosPorLote, binsRecHoraLote, mermaPorHora, enPisoPorLote, mermaHoraLote, totKgVacDia };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, vaciadoCampoLotes, diaReporte]);
-  const hayVaciadoDia = argsReporte.porHora.length > 0;
+  const hayVaciadoDia = argsReporte.lotesHora.length > 0;
 
   const netoPorBinDe = (m) => Math.max(0, (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin) - (parseFloat(m.binParams?.taraBin) || taraBin));
 
