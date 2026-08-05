@@ -834,6 +834,14 @@ export default function Modulo9() {
   };
   const quitarRevisado = (f) => setMovimientos((prev) => prev.map((x) => (x.id === f.id
     ? { ...x, vaciado: { ...baseVac(x), revisado: undefined } } : x)));
+  // Comentario del aviso: qué afectó ese descuadre (para llevar el control exacto de lo que pasó).
+  const guardarComentarioAviso = (f, texto) => {
+    const t = (texto || "").trim();
+    setMovimientos((prev) => prev.map((x) => (x.id === f.id
+      ? { ...x, vaciado: { ...baseVac(x), avisoComentario: t } } : x)));
+    registrarEvento?.({ evento: "aviso_comentado", modulo: "M9", actor: usuarioActual?.full_name || usuarioActual?.email || "—", destino: f.folio, ref: f.id,
+      detalle: `Comentario del aviso (${f.tipo === "falta" ? "llegó de menos" : "salió de más"}): ${t || "(vacío)"}` });
+  };
 
   // ── TERMINAR el vaciado de un folio (cierre a mano) ──
   // Casi nunca cierra en 0.00: quedan kg de diferencia de báscula que nadie va a vaciar y el folio
@@ -1075,7 +1083,8 @@ export default function Modulo9() {
       // Se arrastra QUIÉN trajo la carga: los descuadres sueltos no dicen nada, pero repetidos con
       // el mismo chofer/línea/tabla sí — que es justo para lo que sirve el historial de avisos.
       const ref = { id: m.id, folio: m.folio || m.remision || m.id, rec, vac, mer,
-        fecha: m.fecha || "", chofer: m.chofer || "", linea: m.linea || "", tabla: m.departamento || "" };
+        fecha: m.fecha || "", chofer: m.chofer || "", linea: m.linea || "", tabla: m.departamento || "",
+        comentario: m.vaciado?.avisoComentario || "" };   // nota de qué afectó ese descuadre
       // ¿Ya lo revisó alguien? Se guarda el tipo y el TAMAÑO de la diferencia al momento de
       // revisarla: si después el número cambia (siguen capturando), el folio VUELVE a salir.
       const rev = m.vaciado?.revisado;
@@ -1123,6 +1132,7 @@ export default function Modulo9() {
       "Diferencia (kg)": Math.round(a.dif), "% del recibido": a.rec > 0 ? Number(((a.dif / a.rec) * 100).toFixed(2)) : "",
       Estado: a.estado === "revisado" ? "Revisado" : "Pendiente",
       "Revisado por": a.rev?.por || "", "Fecha revisión": (a.rev?.ts || "").slice(0, 10),
+      "Qué pasó / comentario": a.comentario || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Folio: "(sin avisos)" }]);
     const wb = XLSX.utils.book_new();
@@ -2179,6 +2189,14 @@ export default function Modulo9() {
                     {a.linea ? <> · {a.linea}</> : null}
                     {a.chofer ? <> · <b className="text-gray-700">{a.chofer}</b></> : null}
                     {a.tabla ? <> · tabla {a.tabla}</> : null}
+                  </div>
+                  {/* Comentario: qué afectó ese descuadre (control exacto de lo que pasó). Se guarda al salir del campo. */}
+                  <div className="mt-1.5">
+                    <label className="text-[10px] text-gray-500 flex items-center gap-1 mb-0.5"><MessageCircle size={11} /> ¿Qué pasó / qué lo afectó?</label>
+                    <textarea key={`c_${a.id}`} defaultValue={a.comentario} rows={2}
+                      onBlur={(e) => { if (e.target.value.trim() !== (a.comentario || "").trim()) guardarComentarioAviso(a, e.target.value); }}
+                      placeholder="Escribe aquí la explicación del descuadre (se guarda al salir del campo)…"
+                      className="w-full text-[11px] px-2 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-amber-400 resize-y" />
                   </div>
                   <div className="flex items-center justify-between gap-2 flex-wrap mt-1.5">
                     {a.estado === "revisado" ? (
