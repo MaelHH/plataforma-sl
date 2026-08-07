@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Building2, Plus, Pencil, Ban, CircleCheck, X, Loader2 } from "lucide-react";
 import { getEmpresas, crearEmpresa, actualizarEmpresa, cambiarActivoEmpresa } from "../store/api";
+import { useDialog } from "./Dialog";
 
 // Administración de empresas (multi-empresa) — SOLO admin (el menú se gatea con
 // can("empresas.administrar"); el backend valida con requiere_admin, así que un no-admin
@@ -23,6 +24,7 @@ export default function Empresas({ onClose }) {
   const [error, setError] = useState("");
   const [form, setForm] = useState(null);       // null = cerrado | { modo, id, nombre, sap_company_db, cultivo_default }
   const [guardando, setGuardando] = useState(false);
+  const dlg = useDialog();
 
   const cargar = async () => {
     try { setEmpresas(await getEmpresas()); }
@@ -58,6 +60,16 @@ export default function Empresas({ onClose }) {
 
   const toggleActivo = async (e) => {
     setError("");
+    // Confirmación solo al DESACTIVAR (la acción "destructiva"); reactivar es directo.
+    if (e.es_activo) {
+      const ok = await dlg.confirm({
+        title: "Desactivar empresa",
+        message: `¿Seguro que quieres desactivar “${e.nombre}”? No se borra: deja de estar disponible y puedes reactivarla cuando quieras.`,
+        confirmText: "Desactivar",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try { await cambiarActivoEmpresa(e.id, !e.es_activo); await cargar(); }
     catch (err) { setError(msgError(err)); }
   };
