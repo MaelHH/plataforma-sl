@@ -40,8 +40,8 @@ export default function Empresas({ onClose }) {
     return () => { vivo = false; };
   }, []);
 
-  const abrirNuevo = () => { setError(""); setForm({ modo: "nuevo", id: null, nombre: "", sap_company_db: "", cultivo_default: "" }); };
-  const abrirEditar = (e) => { setError(""); setForm({ modo: "editar", id: e.id, nombre: e.nombre, sap_company_db: e.sap_company_db || "", cultivo_default: e.cultivo_default || "" }); };
+  const abrirNuevo = () => { setError(""); setForm({ modo: "nuevo", id: null, nombre: "", sap_company_db: "" }); };
+  const abrirEditar = (e) => { setError(""); setForm({ modo: "editar", id: e.id, nombre: e.nombre, sap_company_db: e.sap_company_db || "" }); };
 
   const guardar = async () => {
     const f = form;
@@ -49,7 +49,7 @@ export default function Empresas({ onClose }) {
     if (!f.nombre.trim()) return setError("El nombre de la empresa es obligatorio.");
     setGuardando(true);
     try {
-      const body = { nombre: f.nombre.trim(), sap_company_db: f.sap_company_db.trim(), cultivo_default: f.cultivo_default.trim() };
+      const body = { nombre: f.nombre.trim(), sap_company_db: f.sap_company_db.trim() };
       if (f.modo === "nuevo") await crearEmpresa(body);
       else await actualizarEmpresa(f.id, body);
       setForm(null);
@@ -107,21 +107,19 @@ export default function Empresas({ onClose }) {
                 <tr className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wide">
                   <th className="text-left px-4 py-2.5 font-medium">Empresa</th>
                   <th className="text-left px-4 py-2.5 font-medium">Company SAP</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Cultivo</th>
                   <th className="text-center px-4 py-2.5 font-medium">Estado</th>
                   <th className="text-right px-4 py-2.5 font-medium">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {cargando ? (
-                  <tr><td colSpan={5} className="text-center text-gray-400 py-8"><Loader2 className="inline animate-spin mr-1" size={16} /> Cargando…</td></tr>
+                  <tr><td colSpan={4} className="text-center text-gray-400 py-8"><Loader2 className="inline animate-spin mr-1" size={16} /> Cargando…</td></tr>
                 ) : empresas.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center text-gray-400 italic py-8">Sin empresas. Agrega la primera con “Nueva empresa”.</td></tr>
+                  <tr><td colSpan={4} className="text-center text-gray-400 italic py-8">Sin empresas. Agrega la primera con “Nueva empresa”.</td></tr>
                 ) : empresas.map((e) => (
                   <tr key={e.id} className={`border-t border-gray-100 ${e.es_activo ? "" : "opacity-55"}`}>
                     <td className="px-4 py-2.5 font-medium text-gray-800">{e.nombre}</td>
                     <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{e.sap_company_db || <span className="text-gray-300">— sin definir —</span>}</td>
-                    <td className="px-4 py-2.5 text-gray-600">{e.cultivo_default || "—"}</td>
                     <td className="px-4 py-2.5 text-center">
                       {e.es_activo
                         ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">activa</span>
@@ -167,10 +165,7 @@ export default function Empresas({ onClose }) {
                 <input className={INP} value={form.sap_company_db} onChange={(ev) => setForm((f) => ({ ...f, sap_company_db: ev.target.value }))} placeholder="Ej. SBO_CACO_PROD" />
                 <div className="text-[11px] text-gray-400 mt-1">El nombre técnico de la company en SAP. No se crea nada en SAP; solo se guarda a cuál conectarse.</div>
               </div>
-              <div>
-                <label className="text-xs text-gray-500 block mb-1">Cultivo por defecto</label>
-                <input className={INP} value={form.cultivo_default} onChange={(ev) => setForm((f) => ({ ...f, cultivo_default: ev.target.value }))} placeholder="ejote, pepino…" />
-              </div>
+              <div className="text-[11px] text-gray-400">Los cultivos que maneja cada persona se asignan por usuario (botón “Cultivos y proyectos”), no por empresa.</div>
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
