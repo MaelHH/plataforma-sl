@@ -106,6 +106,12 @@ export const crearUsuario = (body) => req("POST", "/api/usuarios", body);
 export const actualizarUsuario = (id, body) => req("PUT", `/api/usuarios/${encodeURIComponent(id)}`, body);
 export const cambiarActivoUsuario = (id, esActivo) => req("PATCH", `/api/usuarios/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
 
+// ── Gestión de empresas (multi-empresa · solo admin) ──
+export const getEmpresas = () => req("GET", "/api/empresas");
+export const crearEmpresa = (body) => req("POST", "/api/empresas", body);
+export const actualizarEmpresa = (id, body) => req("PUT", `/api/empresas/${encodeURIComponent(id)}`, body);
+export const cambiarActivoEmpresa = (id, esActivo) => req("PATCH", `/api/empresas/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
+
 // ── Roles y permisos (RBAC) ──
 export const crearTipoUsuario = (body) => req("POST", "/api/tipos-usuario", body);
 export const actualizarTipoUsuario = (id, body) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}`, body);

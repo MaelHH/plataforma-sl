@@ -4,10 +4,11 @@ import { DatosProvider, useDatos } from "./store/datos";
 import {
   Users, LogOut, LayoutDashboard, Boxes, Sprout, PackageOpen, ClipboardList, Truck,
   LayoutGrid, Camera, PackageCheck, DollarSign, Radar, FlaskConical, Container, FileText,
-  AlertTriangle, MapPin, Menu, X, Megaphone,
+  AlertTriangle, MapPin, Menu, X, Megaphone, Building2,
 } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
+import Empresas from "./components/Empresas";
 import { DialogProvider, useDialog } from "./components/Dialog";
 import { AuthProvider, useAuth } from "./store/auth";
 import { getToken, setToken, me } from "./store/api";
@@ -82,6 +83,7 @@ class ErrorBoundary extends Component {
 function AppAutenticada({ onLogout }) {
   const [moduloActivo, setModuloActivo] = useState(0);
   const [verUsuarios, setVerUsuarios] = useState(false);
+  const [verEmpresas, setVerEmpresas] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);   // drawer del menú en móvil
   const { can, cargando: cargandoAuth } = useAuth();
   const dlg = useDialog();
@@ -140,6 +142,7 @@ function AppAutenticada({ onLogout }) {
             <div className="flex items-center gap-1"><MapPin size={12} /> Los Mochis, Sinaloa</div>
             <div className="flex items-center gap-3 pt-0.5">
               {can("usuarios.administrar") && <button onClick={() => { setVerUsuarios(true); setMenuAbierto(false); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Users size={13} /> Usuarios</button>}
+              {can("empresas.administrar") && <button onClick={() => { setVerEmpresas(true); setMenuAbierto(false); }} className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600"><Building2 size={13} /> Empresas</button>}
               <button onClick={confirmarSalir} className="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600"><LogOut size={13} /> Cerrar sesión</button>
             </div>
           </div>
@@ -196,6 +199,7 @@ function AppAutenticada({ onLogout }) {
         </div>
       </div>
       {verUsuarios && <Usuarios onClose={() => setVerUsuarios(false)} />}
+      {verEmpresas && <Empresas onClose={() => setVerEmpresas(false)} />}
     </DatosProvider>
   );
 }
