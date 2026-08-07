@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Sprout, FolderTree, AlertTriangle } from "lucide-react";
-import { getCultivosSAP, getProyectosSAPlist, getAsignacionesUsuario, putAsignacionesUsuario } from "../store/api";
+import { getCultivosSAP, getCatalogoProyectosSAP, getAsignacionesUsuario, putAsignacionesUsuario } from "../store/api";
 
 // Asignar a un usuario QUÉ cultivos y QUÉ proyectos puede vaciar/trabajar (plan §2.1).
 // Cultivos y proyectos se LEEN de SAP (GET, endpoints que ya existen); las asignaciones se
@@ -58,8 +58,16 @@ export default function AsignacionesUsuario({ usuario, onClose }) {
     getCultivosSAP()
       .then((d) => { if (vivo) setCultivos((d.value || []).map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }))); })
       .catch(() => { if (vivo) setAvisoSAP("No se pudieron leer los cultivos de SAP."); });
-    getProyectosSAPlist()
-      .then((d) => { if (vivo) setProyectos((d.value || []).map((p) => ({ value: p.Code, label: p.Name || p.Code }))); })
+    // Catálogo: cada proyecto trae sus ranchos, y cada rancho su cultivo → así se filtra por cultivo.
+    getCatalogoProyectosSAP()
+      .then((d) => {
+        if (!vivo) return;
+        setProyectos((d.proyectos || []).map((p) => ({
+          value: p.code,
+          label: p.nombre || p.code,
+          cultivos: [...new Set((p.ranchos || []).map((r) => r.cultivo).filter(Boolean))],
+        })));
+      })
       .catch(() => { if (vivo) setAvisoSAP((s) => s || "No se pudieron leer los proyectos de SAP."); });
     // Asignaciones actuales del usuario.
     getAsignacionesUsuario(usuario.id)
@@ -92,6 +100,11 @@ export default function AsignacionesUsuario({ usuario, onClose }) {
     finally { setGuardando(false); }
   };
 
+  // Proyectos filtrados por los cultivos elegidos (si no hay cultivo elegido, se muestran todos).
+  const proyectosFiltrados = selCult.size
+    ? proyectos.filter((p) => p.cultivos.some((c) => selCult.has(c)))
+    : proyectos;
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
@@ -122,8 +135,8 @@ export default function AsignacionesUsuario({ usuario, onClose }) {
               <div className="grid md:grid-cols-2 gap-4">
                 <ListaSeleccion titulo="Cultivos (pedidos / OC)" Icon={Sprout} items={cultivos} seleccion={selCult}
                   onToggle={toggle(setSelCult)} vacio="Sin cultivos de SAP." />
-                <ListaSeleccion titulo="Proyectos que vacía" Icon={FolderTree} items={proyectos} seleccion={selProy}
-                  onToggle={toggle(setSelProy)} vacio="Sin proyectos de SAP." disabled={sinEmpresa} />
+                <ListaSeleccion titulo={selCult.size ? "Proyectos del cultivo elegido" : "Proyectos que vacía"} Icon={FolderTree} items={proyectosFiltrados} seleccion={selProy}
+                  onToggle={toggle(setSelProy)} vacio={selCult.size ? "Ningún proyecto con ese cultivo." : "Sin proyectos de SAP."} disabled={sinEmpresa} />
               </div>
               <label className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
                 <input type="checkbox" checked={cruce} onChange={(e) => setCruce(e.target.checked)} />
