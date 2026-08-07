@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Users, UserPlus, Pencil, Ban, CircleCheck, Eye, EyeOff, X, Loader2, ShieldCheck } from "lucide-react";
-import { getUsuarios, getTiposUsuario, crearUsuario, actualizarUsuario, cambiarActivoUsuario } from "../store/api";
+import { getUsuarios, getTiposUsuario, crearUsuario, actualizarUsuario, cambiarActivoUsuario, getEmpresas } from "../store/api";
 import RolesPermisos from "./RolesPermisos";
 
 function msgError(e) {
@@ -34,6 +34,7 @@ function PasswordInput({ value, onChange, placeholder }) {
 export default function Usuarios({ onClose }) {
   const [usuarios, setUsuarios] = useState([]);
   const [tipos, setTipos] = useState([]);
+  const [empresas, setEmpresas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [form, setForm] = useState(null);       // null = cerrado | { modo, id, ...campos }
@@ -55,13 +56,15 @@ export default function Usuarios({ onClose }) {
       .then(([us, ts]) => { if (vivo) { setUsuarios(us); setTipos(ts); } })
       .catch((e) => { if (vivo) setError(msgError(e)); })
       .finally(() => { if (vivo) setCargando(false); });
+    // Empresas para el desplegable (carga aparte: si falla, no rompe la lista de usuarios).
+    getEmpresas().then((es) => { if (vivo) setEmpresas(es); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
 
   // Refresca los roles (pueden haber cambiado en la pestaña "Roles y permisos").
   const refrescarTipos = () => getTiposUsuario().then(setTipos).catch(() => {});
-  const abrirNuevo = () => { setError(""); refrescarTipos(); setForm({ modo: "nuevo", id: null, email: "", full_name: "", telefono: "", tipo_usuario_id: tipoDefault(), password: "", confirm: "" }); };
-  const abrirEditar = (u) => { setError(""); refrescarTipos(); setForm({ modo: "editar", id: u.id, email: u.email, full_name: u.full_name || "", telefono: u.telefono || "", tipo_usuario_id: u.tipo_usuario_id || tipoDefault(), password: "", confirm: "" }); };
+  const abrirNuevo = () => { setError(""); refrescarTipos(); setForm({ modo: "nuevo", id: null, email: "", full_name: "", telefono: "", tipo_usuario_id: tipoDefault(), id_empresa: "", password: "", confirm: "" }); };
+  const abrirEditar = (u) => { setError(""); refrescarTipos(); setForm({ modo: "editar", id: u.id, email: u.email, full_name: u.full_name || "", telefono: u.telefono || "", tipo_usuario_id: u.tipo_usuario_id || tipoDefault(), id_empresa: u.id_empresa || "", password: "", confirm: "" }); };
 
   const guardar = async () => {
     const f = form;
@@ -75,10 +78,11 @@ export default function Usuarios({ onClose }) {
     }
     setGuardando(true);
     try {
+      const idEmpresa = f.id_empresa ? Number(f.id_empresa) : null;
       if (f.modo === "nuevo") {
-        await crearUsuario({ email: f.email.trim().toLowerCase(), password: f.password, full_name: f.full_name.trim(), telefono: f.telefono.trim(), tipo_usuario_id: f.tipo_usuario_id });
+        await crearUsuario({ email: f.email.trim().toLowerCase(), password: f.password, full_name: f.full_name.trim(), telefono: f.telefono.trim(), tipo_usuario_id: f.tipo_usuario_id, id_empresa: idEmpresa });
       } else {
-        const body = { full_name: f.full_name.trim(), telefono: f.telefono.trim(), tipo_usuario_id: f.tipo_usuario_id };
+        const body = { full_name: f.full_name.trim(), telefono: f.telefono.trim(), tipo_usuario_id: f.tipo_usuario_id, id_empresa: idEmpresa };
         if (f.password) body.password = f.password;
         await actualizarUsuario(f.id, body);
       }
@@ -211,6 +215,13 @@ export default function Usuarios({ onClose }) {
                 <label className="text-xs text-gray-500 block mb-1">Rol <span className="text-red-500">*</span></label>
                 <select className={INP} value={form.tipo_usuario_id} onChange={(e) => setForm((f) => ({ ...f, tipo_usuario_id: Number(e.target.value) }))}>
                   {tipos.map((t) => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Empresa</label>
+                <select className={INP} value={form.id_empresa} onChange={(e) => setForm((f) => ({ ...f, id_empresa: e.target.value }))}>
+                  <option value="">— Sin empresa —</option>
+                  {empresas.filter((em) => em.es_activo).map((em) => <option key={em.id} value={em.id}>{em.nombre}</option>)}
                 </select>
               </div>
               <div>
