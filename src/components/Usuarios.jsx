@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, Pencil, Ban, CircleCheck, Eye, EyeOff, X, Loader2, ShieldCheck } from "lucide-react";
+import { Users, UserPlus, Pencil, Ban, CircleCheck, Eye, EyeOff, X, Loader2, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { getUsuarios, getTiposUsuario, crearUsuario, actualizarUsuario, cambiarActivoUsuario, getEmpresas } from "../store/api";
 import RolesPermisos from "./RolesPermisos";
+import AsignacionesUsuario from "./AsignacionesUsuario";
 
 function msgError(e) {
   const s = String(e?.message || e);
@@ -40,6 +41,7 @@ export default function Usuarios({ onClose }) {
   const [form, setForm] = useState(null);       // null = cerrado | { modo, id, ...campos }
   const [guardando, setGuardando] = useState(false);
   const [vista, setVista] = useState("usuarios");  // "usuarios" | "roles"
+  const [asignando, setAsignando] = useState(null);  // usuario cuyo modal de cultivos/proyectos está abierto
 
   const tipoDefault = () => (tipos.find((t) => t.nombre === "usuario") || tipos[0])?.id ?? "";
 
@@ -166,6 +168,7 @@ export default function Usuarios({ onClose }) {
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setAsignando(u)} title="Cultivos y proyectos" className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg"><SlidersHorizontal size={16} /></button>
                         <button onClick={() => abrirEditar(u)} title="Editar" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Pencil size={16} /></button>
                         <button onClick={() => toggleActivo(u)} title={u.es_activo ? "Desactivar" : "Activar"}
                           className={`p-1.5 rounded-lg ${u.es_activo ? "text-gray-400 hover:text-red-600 hover:bg-red-50" : "text-gray-400 hover:text-green-600 hover:bg-green-50"}`}>
@@ -246,6 +249,8 @@ export default function Usuarios({ onClose }) {
           </div>
         </div>
       )}
+
+      {asignando && <AsignacionesUsuario usuario={asignando} onClose={() => setAsignando(null)} />}
     </div>
   );
 }

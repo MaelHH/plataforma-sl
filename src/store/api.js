@@ -112,6 +112,10 @@ export const crearEmpresa = (body) => req("POST", "/api/empresas", body);
 export const actualizarEmpresa = (id, body) => req("PUT", `/api/empresas/${encodeURIComponent(id)}`, body);
 export const cambiarActivoEmpresa = (id, esActivo) => req("PATCH", `/api/empresas/${encodeURIComponent(id)}/activo`, { es_activo: esActivo });
 
+// ── Asignaciones por usuario (cultivos + proyectos + cruce) ──
+export const getAsignacionesUsuario = (id) => req("GET", `/api/usuarios/${encodeURIComponent(id)}/asignaciones`);
+export const putAsignacionesUsuario = (id, body) => req("PUT", `/api/usuarios/${encodeURIComponent(id)}/asignaciones`, body);
+
 // ── Roles y permisos (RBAC) ──
 export const crearTipoUsuario = (body) => req("POST", "/api/tipos-usuario", body);
 export const actualizarTipoUsuario = (id, body) => req("PUT", `/api/tipos-usuario/${encodeURIComponent(id)}`, body);
