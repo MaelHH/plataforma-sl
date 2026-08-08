@@ -380,7 +380,7 @@ export default function Modulo9() {
   //  - MANDAR a SAP → `empaque.vaciado.enviar_sap` (la capturista puede, pero solo tras aprobar).
   //  - CAPTURAR el vaciado → `empaque.vaciado.editar`.
   // La aprobación se guarda en BD con el nombre del usuario que aprobó. Ver [[sap-reglas-garantia]].
-  const { usuario: usuarioActual, can } = useAuth();
+  const { usuario: usuarioActual, can, alcance } = useAuth();
   const puedeAprobar = can("empaque.vaciado.aprobar");
   const puedeEnviarSap = can("empaque.vaciado.enviar_sap");
   const puedeEditarVaciado = can("empaque.vaciado.editar");
@@ -927,14 +927,21 @@ export default function Modulo9() {
     cerrarMuestreo(); cerrarInspeccion();
   };
 
+  // Alcance por usuario (§2.1): si tiene proyectos asignados, solo ve/opera esos folios; sin
+  // asignaciones (admin, etc.) ve TODO. Fail-safe: un folio sin proyecto no se oculta. Todas las
+  // listas de abajo (recibidos, pendientes, vaciado, KPIs, pivote, inventario) cuelgan de esto.
+  const proyectosAsignados = new Set(alcance?.proyectos || []);
+  const acotado = proyectosAsignados.size > 0;
+  const movsScope = acotado ? movimientos.filter((m) => !m.proyecto || proyectosAsignados.has(m.proyecto)) : movimientos;
+
   // "Cliente Directo": recibido pero NO entra a empaque (se va con el cliente) → su propia pestaña.
   const esClienteDirecto = (m) => m.recepcion?.estado === "recibido" && m.recepcion?.clienteDirecto;
-  const clienteDirectoList = movimientos.filter(esClienteDirecto);
+  const clienteDirectoList = movsScope.filter(esClienteDirecto);
   // VACIABLE ("Vaciado a Empaque"): un folio se puede vaciar en cuanto tiene BRUTO de báscula
   // (ya llegó y se pesó), AUNQUE no se le haya dado recepción formal ni se tenga el peso del
   // trailer/destare. El peso neto se afina después (Recibidos) y NO limita el vaciado. También
   // entran los ya recibidos. Se excluyen rechazados y cliente directo.
-  const recibidos = movimientos.filter((m) => !m.recepcion?.clienteDirecto && m.recepcion?.estado !== "rechazado"
+  const recibidos = movsScope.filter((m) => !m.recepcion?.clienteDirecto && m.recepcion?.estado !== "rechazado"
     && ((parseFloat(m.pesoBascula) || 0) > 0 || m.recepcion?.estado === "recibido"));
   // El kg es lo que manda (los bins son guía a grosso modo): "completo" = sin kg en piso.
   // Un folio se archiva SOLO cuando una persona le da "Terminado". Antes se archivaba solo al
@@ -947,7 +954,7 @@ export default function Modulo9() {
   const vaciadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgVaciadosDe(m) > 0);  // entraron a empaque
   const mermadosHist = recibidos.filter((m) => vaciadoCompleto(m) && kgMermadosDe(m) > 0);  // NO entraron (merma)
   // Filtro de Destino (dropdown): aplica a la lista VISIBLE de la pestaña activa.
-  const destinosMov = [...new Set(movimientos.map((m) => m.destino).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const destinosMov = [...new Set(movsScope.map((m) => m.destino).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   // Búsqueda libre en las tablas de vaciado: folio, remisión, lote/rancho, producto, destino, línea, chofer.
   const buscaVac = (m) => {
     const t = q.trim().toLowerCase();
@@ -959,12 +966,12 @@ export default function Modulo9() {
   const filasVac = (tabRec === "histVaciado" ? vaciadosHist : tabRec === "histMermado" ? mermadosHist : enPisoLista)
     .filter((m) => !fDestino || m.destino === fDestino)
     .filter(buscaVac);
-  const rechazados = movimientos.filter((m) => m.recepcion?.estado === "rechazado");
+  const rechazados = movsScope.filter((m) => m.recepcion?.estado === "rechazado");
   const atendido = (m) => m.recepcion?.estado === "recibido" || m.recepcion?.estado === "rechazado";
   // "Recibidos" = REGISTRO de todo lo que llegó y NO se rechazó (pendientes de entrada + ya
   // recibidos), para llevar el historial de cada flete: al dar recepción NO desaparecen. Se ordena
   // con los que faltan dar entrada primero, luego los recibidos por fecha (más reciente arriba).
-  const pendientes = movimientos
+  const pendientes = movsScope
     .filter((m) => m.recepcion?.estado !== "rechazado" && !m.recepcion?.clienteDirecto)
     .sort((a, b) => {
       const pa = a.recepcion?.estado === "recibido" ? 1 : 0;
@@ -974,7 +981,7 @@ export default function Modulo9() {
     });
   // "Historial por Recibir" = recibidos + rechazados. Aquí viven los YA recibidos con su botón
   // "Mandar a SAP" (envío TOTAL de una), para cuando NO se hace el vaciado por hora.
-  const historialArr = movimientos.filter(atendido);
+  const historialArr = movsScope.filter(atendido);
   const conNovedad = recibidos.filter((m) => m.recepcion?.condicion === "con_novedad");
   const qLow = q.trim().toLowerCase();
   const lista = (tabRec === "pendientes" ? pendientes : historialArr).filter((m) => {
@@ -1278,7 +1285,7 @@ export default function Modulo9() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
-        {stat("Total fletes", movimientos.length, "text-gray-900", "bg-gray-400")}
+        {stat("Total fletes", movsScope.length, "text-gray-900", "bg-gray-400")}
         {stat("Recibidos", pendientes.length, "text-orange-600", "bg-orange-500", "pendientes")}
         {stat("Recibidos", recibidos.length, "text-green-700", "bg-green-500", "historial")}
         {stat("Rechazados", rechazados.length, "text-red-600", "bg-red-500", "historial")}
@@ -1990,7 +1997,7 @@ export default function Modulo9() {
         <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
           <span className="text-sm font-semibold text-gray-900">{tabRec === "pendientes" ? "Recibidos — registro de fletes que llegaron" : "Vaciado completo — mandar el folio entero a SAP de una vez (y rechazados)"} ({lista.length})</span>
         </div>
-        {movimientos.length > 0 && (
+        {movsScope.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-gray-100">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar folio, remisión, rancho, chofer, destino…"
               className="flex-1 min-w-0 sm:min-w-[220px] text-xs px-2.5 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400" />
@@ -2009,7 +2016,7 @@ export default function Modulo9() {
           </div>
         )}
         {lista.length === 0 ? (
-          <div className="text-xs text-gray-400 text-center py-8 italic">{movimientos.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
+          <div className="text-xs text-gray-400 text-center py-8 italic">{movsScope.length === 0 ? "Aún no hay fletes. Aparecerán en cuanto se registren en Movimientos." : "Ningún flete coincide con la búsqueda."}</div>
         ) : (
           <div className="p-3 space-y-3 bg-gray-50/70">
                 {lista.map((m) => {
