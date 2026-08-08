@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { RefreshCw, FileText, ArrowLeft, Receipt } from "lucide-react";
 import SearchSelect from "./SearchSelect";
 import { getFletesSAP, getState, putState } from "../store/api";
+import { useAuth } from "../store/auth";
 import { exportarFletesExcel } from "../utils/exportFletes";
 
 const INP = "w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white";
@@ -18,6 +19,11 @@ const fmtMoney = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { minimum
 // M8 con tipo="fruta" y M13 con tipo="material" — independientes. `onBack` regresa al módulo.
 export default function ControlFletesPagina({ tipo, proyectos = [], onBack }) {
   const [project, setProject] = useState("");
+  // Alcance por usuario (§2.1): el selector de proyecto solo ofrece los proyectos asignados.
+  const { alcance } = useAuth();
+  const proyectosAsignados = new Set(alcance?.proyectos || []);
+  const acotado = proyectosAsignados.size > 0;
+  const proyectosVisibles = acotado ? proyectos.filter((p) => proyectosAsignados.has(p.code)) : proyectos;
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -69,7 +75,7 @@ export default function ControlFletesPagina({ tipo, proyectos = [], onBack }) {
         <div className="w-full sm:w-auto sm:min-w-[260px]">
           <label className={LBL}>Proyecto</label>
           <SearchSelect className={INP} value={project} onChange={setProject} placeholder="— Elige proyecto —"
-            options={proyectos.map((p) => ({ value: p.code, label: p.nombre }))} />
+            options={proyectosVisibles.map((p) => ({ value: p.code, label: p.nombre }))} />
         </div>
         <button onClick={cargar} disabled={cargando}
           className="text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center gap-1.5">
