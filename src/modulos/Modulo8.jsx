@@ -498,6 +498,9 @@ export default function Modulo8() {
   const acotado = proyectosAsignados.size > 0;
   // Temporadas visibles en el form de crear: acotadas a los proyectos asignados (si aplica).
   const proyectosVisibles = acotado ? proyectos.filter((p) => proyectosAsignados.has(p.code)) : proyectos;
+  // Cultivos visibles en la OC: acotados a los cultivos asignados (si el usuario tiene alguno).
+  const cultivosAsignados = new Set(alcance?.cultivos || []);
+  const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
@@ -1273,7 +1276,8 @@ export default function Modulo8() {
                   <label className={LBL}>Cultivo {r?.cultivo ? <span className="text-gray-400 font-normal">· del proyecto: {r.cultivo}</span> : null}</label>
                   <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo (norma de reparto) —"
                     options={(() => {
-                      const opts = cultivos.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }));
+                      const base = acotadoCultivo ? cultivos.filter((c) => cultivosAsignados.has(c.FactorCode)) : cultivos;
+                      const opts = base.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }));
                       if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo });
                       return opts;
                     })()} />
