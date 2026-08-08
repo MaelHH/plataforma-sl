@@ -53,7 +53,12 @@ const INP = "w-full text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-w
 
 export default function EmpaqueCampoDirecto() {
   const { movimientosCampo, setMovimientosCampo, vaciadoCampoLotes, setVaciadoCampoLotes, proyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
-  const { usuario, can } = useAuth() || {};
+  const { usuario, can, alcance } = useAuth() || {};
+  // Alcance por usuario (§2.1): acota folios y opciones a los proyectos/cultivos asignados.
+  const proyectosAsignados = useMemo(() => new Set(alcance?.proyectos || []), [alcance]);
+  const acotado = proyectosAsignados.size > 0;
+  const cultivosAsignados = useMemo(() => new Set(alcance?.cultivos || []), [alcance]);
+  const acotadoCultivo = cultivosAsignados.size > 0;
   const dlg = useDialog();
   // Candados RBAC del envío a SAP (igual que logística): aprobar (encargada) y enviar a SAP.
   const puedeAprobar = can ? can("empaque.vaciado.aprobar") : false;
@@ -62,7 +67,10 @@ export default function EmpaqueCampoDirecto() {
   const goLiveSAP = configEmpaque?.goLiveSAP || "";
   const actorNombre = usuario?.full_name || usuario?.nombre || usuario?.email || "Empaque";
 
-  const lista = useMemo(() => (Array.isArray(movimientosCampo) ? movimientosCampo : []), [movimientosCampo]);
+  const lista = useMemo(() => {
+    const base = Array.isArray(movimientosCampo) ? movimientosCampo : [];
+    return acotado ? base.filter((m) => !m.proyecto || proyectosAsignados.has(m.proyecto)) : base;
+  }, [movimientosCampo, acotado, proyectosAsignados]);
 
   // Parámetros del bin (editables en configEmpaque.campoDirecto).
   const cd = { ...CAMPO_DIRECTO_DEFAULT, ...(configEmpaque?.campoDirecto || {}) };
@@ -85,7 +93,9 @@ export default function EmpaqueCampoDirecto() {
     }));
     return idx;
   }, [proyectos]);
-  const loteOpts = useMemo(() => Object.keys(loteIndex).sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex]);
+  const loteOpts = useMemo(() => Object.keys(loteIndex)
+    .filter((l) => !acotado || proyectosAsignados.has(loteIndex[l].proyecto))
+    .sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex, acotado, proyectosAsignados]);
   const temporadaDe = (rancho) => loteIndex[rancho]?.temporada || "";
   // Orden de fabricación (SAP) del folio: se resuelve igual que en logística (ordenSAPde),
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
@@ -952,7 +962,7 @@ export default function EmpaqueCampoDirecto() {
                 <div>
                   <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Cultivo {r?.cultivo ? <span className="text-gray-400 font-normal">· del proyecto: {r.cultivo}</span> : null}</label>
                   <SearchSelect className={INP} value={ocCultivo} onChange={setOcCultivo} searchThreshold={0} placeholder="— Cultivo (norma de reparto) —"
-                    options={(() => { const opts = cultivosOC.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` })); if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo }); return opts; })()} />
+                    options={(() => { const base = acotadoCultivo ? cultivosOC.filter((c) => cultivosAsignados.has(c.FactorCode)) : cultivosOC; const opts = base.map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` })); if (ocCultivo && !opts.some((o) => o.value === ocCultivo)) opts.unshift({ value: ocCultivo, label: ocCultivo }); return opts; })()} />
                 </div>
                 <div>
                   <label className="text-[11px] font-medium text-gray-600 mb-0.5 block">Departamento (tabla) {m.departamento ? <span className="text-gray-400 font-normal">· tabla del folio: {m.departamento}</span> : (r?.departamento ? <span className="text-gray-400 font-normal">· del proyecto: {r.departamento}</span> : null)}</label>

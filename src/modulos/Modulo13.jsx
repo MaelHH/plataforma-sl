@@ -8,6 +8,7 @@ import { guardarFolioOC } from "../utils/folioOC";
 import { useDialog } from "../components/Dialog";
 import ControlFletesPagina from "../components/ControlFletesPagina";
 import InfoTip from "../components/InfoTip";
+import { useAuth } from "../store/auth";
 
 // FactorCode de la norma "N/A" (cuando cultivo/lote no aplican; SAP no acepta vacío).
 const esNA = (s) => /^n\s*\/?\s*a$/i.test(String(s || "").trim());
@@ -23,6 +24,9 @@ import { hoyISO } from "../utils/fecha";
 export default function Modulo13() {
   const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores, proyectos } = useDatos();
   const dlg = useDialog();
+  const { alcance } = useAuth();   // proyectos asignados (§2.1): acota los selectores de proyecto
+  const proyectosAsignados = new Set(alcance?.proyectos || []);
+  const acotado = proyectosAsignados.size > 0;
   const [verFletes, setVerFletes] = useState(false);   // página Control de fletes · MATERIAL (SAP)
 
   const [modal, setModal] = useState(false);
@@ -619,7 +623,7 @@ export default function Modulo13() {
                     <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v }))} searchThreshold={0}
                       placeholder={proyectosSAP.length ? "— Elige proyecto —" : "Cargando proyectos de SAP…"}
                       options={(() => {
-                        const opts = proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
+                        const opts = (acotado ? proyectosSAP.filter((p) => proyectosAsignados.has(p.Code)) : proyectosSAP).map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
                         if (form.proyecto && !opts.some((o) => o.value === form.proyecto)) opts.unshift({ value: form.proyecto, label: form.proyecto });
                         return opts;
                       })()} />
@@ -887,7 +891,7 @@ export default function Modulo13() {
                   <label className={LBL}>Proyecto <span className="text-gray-400 font-normal">· del movimiento</span></label>
                   <SearchSelect className={INP} value={ocProyecto} onChange={setOcProyecto} searchThreshold={0} placeholder="— Elige proyecto —"
                     options={(() => {
-                      const opts = proyectosSAP.map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
+                      const opts = (acotado ? proyectosSAP.filter((p) => proyectosAsignados.has(p.Code)) : proyectosSAP).map((p) => ({ value: p.Code, label: `${p.Code}${p.Name ? " · " + p.Name : ""}` }));
                       if (ocProyecto && !opts.some((o) => o.value === ocProyecto)) opts.unshift({ value: ocProyecto, label: ocProyecto });
                       return opts;
                     })()} />
