@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, X, AlertTriangle, MapPin, Sprout, Boxes, Inbox, Package } from "lucide-react";
 import InfoTip from "../components/InfoTip";
 import { useDatos, nuevoId } from "../store/datos";
+import { useAuth } from "../store/auth";
 import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import { guardarFolioOC } from "../utils/folioOC";
 import SearchSelect from "../components/SearchSelect";
@@ -28,6 +29,7 @@ function diasPlazo(salidaISO, reciboISO) {
 
 export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
+  const { alcance } = useAuth();   // proyectos/cultivos asignados al usuario (§2.1)
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
@@ -490,7 +492,12 @@ export default function Modulo8() {
 
   // Filtrado de la lista de movimientos
   const qLow = q.trim().toLowerCase();
+  // Alcance por usuario (§2.1): si tiene proyectos asignados, solo ve ESOS; sin asignaciones
+  // (admin/gerente u otros) ve TODO. Fail-safe: un movimiento SIN proyecto no se oculta.
+  const proyectosAsignados = new Set(alcance?.proyectos || []);
+  const acotado = proyectosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
+    if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;
     if (qLow) {
