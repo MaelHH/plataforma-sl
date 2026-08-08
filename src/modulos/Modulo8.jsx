@@ -496,6 +496,8 @@ export default function Modulo8() {
   // (admin/gerente u otros) ve TODO. Fail-safe: un movimiento SIN proyecto no se oculta.
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
+  // Temporadas visibles en el form de crear: acotadas a los proyectos asignados (si aplica).
+  const proyectosVisibles = acotado ? proyectos.filter((p) => proyectosAsignados.has(p.code)) : proyectos;
   const movsFiltrados = movimientos.filter((m) => {
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
@@ -749,7 +751,14 @@ export default function Modulo8() {
                   <div>
                     <label className={LBL}>Temporada</label>
                     <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v, rancho: "", departamento: "", responsableCosecha: "" }))} placeholder="— Temporada —"
-                      options={proyectos.map((p) => ({ value: p.code, label: p.nombre }))} />
+                      options={(() => {
+                        const opts = proyectosVisibles.map((p) => ({ value: p.code, label: p.nombre }));
+                        if (form.proyecto && !opts.some((o) => o.value === form.proyecto)) {
+                          const cur = proyectos.find((p) => p.code === form.proyecto);
+                          opts.unshift({ value: form.proyecto, label: cur?.nombre || form.proyecto });
+                        }
+                        return opts;
+                      })()} />
                   </div>
                   <div><label className={LBL}>Rancho</label>
                     <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel}
