@@ -14,6 +14,7 @@ const AuthCtx = createContext(null);
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null);
   const [permisos, setPermisos] = useState([]);
+  const [alcance, setAlcance] = useState(null);   // { cultivos, proyectos, cruce_empresas } del usuario (§2.1)
   const [cargando, setCargando] = useState(true);
 
   // Refresca desde /me. El setState ocurre DESPUÉS del await (no síncrono en el efecto).
@@ -23,12 +24,14 @@ export function AuthProvider({ children }) {
       const u = await me();
       setUsuario(u);
       setPermisos(Array.isArray(u?.permisos) ? u.permisos : []);
+      setAlcance(u?.asignaciones || null);
     } catch {
       // Backend inalcanzable (un 401 real ya te manda al login vía `sl-unauthorized`). En modo
       // local/offline no bloqueamos la UI por falta de red: concedemos todo localmente. El backend
       // igual valida lo crítico cuando vuelva la conexión.
       setUsuario(null);
       setPermisos(["*"]);
+      setAlcance(null);
     } finally {
       setCargando(false);
     }
@@ -39,8 +42,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let vivo = true;
     me()
-      .then((u) => { if (!vivo) return; setUsuario(u); setPermisos(Array.isArray(u?.permisos) ? u.permisos : []); })
-      .catch(() => { if (!vivo) return; setUsuario(null); setPermisos(["*"]); })
+      .then((u) => { if (!vivo) return; setUsuario(u); setPermisos(Array.isArray(u?.permisos) ? u.permisos : []); setAlcance(u?.asignaciones || null); })
+      .catch(() => { if (!vivo) return; setUsuario(null); setPermisos(["*"]); setAlcance(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
   }, []);
@@ -51,7 +54,7 @@ export function AuthProvider({ children }) {
   );
 
   return (
-    <AuthCtx.Provider value={{ usuario, permisos, cargando, recargar: () => cargar(true), can }}>
+    <AuthCtx.Provider value={{ usuario, permisos, alcance, cargando, recargar: () => cargar(true), can }}>
       {children}
     </AuthCtx.Provider>
   );
