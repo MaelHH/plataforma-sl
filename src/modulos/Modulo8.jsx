@@ -65,12 +65,13 @@ export default function Modulo8() {
       if (!proj) { if (onlyExisting) continue; proj = { code: sp.code, nombre: sp.nombre, empresa: miEmpresa ?? 1, ranchos: [] }; next.push(proj); }
       for (const sr of (sp.ranchos || [])) {
         const sap = { item: sr.item, ordenes: sr.ordenes, plannedQty: sr.plannedQty, completedQty: sr.completedQty };
-        // match por sapKey (Lote original) para permitir renombrar sin duplicar;
-        // compat con datos viejos (tienen `sap` y nombre igual, sin sapKey aún).
-        const ex = proj.ranchos.find((r) => r.sapKey === sr.nombre)
-          || proj.ranchos.find((r) => !r.sapKey && r.sap && r.nombre === sr.nombre);
-        if (!ex) proj.ranchos.push({ nombre: sr.nombre, departamento: sr.departamento || "", cultivo: sr.cultivo || "", responsables: [], sap, sapKey: sr.nombre });
-        else { ex.sapKey = sr.nombre; ex.departamento = ex.departamento || sr.departamento || ""; ex.cultivo = sr.cultivo || ex.cultivo || ""; ex.sap = sap; } // nombre/responsables editados se conservan
+        // Identidad del rancho = (lote + cultivo): un mismo lote con 2 cultivos son 2 ranchos.
+        // sapKey = Lote original (permite renombrar sin duplicar); el cultivo desambigua.
+        const cul = sr.cultivo || "";
+        const ex = proj.ranchos.find((r) => r.sapKey === sr.nombre && (r.cultivo || "") === cul)
+          || proj.ranchos.find((r) => !r.sapKey && r.sap && r.nombre === sr.nombre && (r.cultivo || "") === cul);
+        if (!ex) proj.ranchos.push({ nombre: sr.nombre, departamento: sr.departamento || "", cultivo: cul, responsables: [], sap, sapKey: sr.nombre });
+        else { ex.sapKey = sr.nombre; ex.departamento = ex.departamento || sr.departamento || ""; ex.cultivo = cul || ex.cultivo || ""; ex.sap = sap; } // nombre/responsables editados se conservan
       }
     }
     return next;
@@ -1116,6 +1117,7 @@ export default function Modulo8() {
                         <div key={ri} className="border border-gray-100 rounded-md p-2">
                           <div className="flex items-center gap-2 mb-1">
                             <input value={r.nombre} onChange={(e) => updRanchoFld(p.code, ri, "nombre", e.target.value)} className={INP_TBL + " font-medium"} placeholder="Rancho" />
+                            {r.cultivo && <span title="Cultivo de este lote (de SAP)" className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-[11px]"><Sprout size={11} /> {r.cultivo}</span>}
                             <button onClick={() => delRancho(p.code, ri)} className="text-gray-300 hover:text-red-500 text-xs inline-flex items-center" title="Eliminar rancho"><Trash2 size={14} /></button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
