@@ -29,7 +29,7 @@ function diasPlazo(salidaISO, reciboISO) {
 
 export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
-  const { alcance, usuario } = useAuth();   // proyectos/cultivos + empresa del usuario (§2.1)
+  const { alcance, usuario, can } = useAuth();   // proyectos/cultivos + empresa + permisos (§2.1)
   // Aislamiento por EMPRESA: cada quien ve solo el catálogo/datos de SU empresa. Un proyecto sin
   // etiqueta `empresa` se considera de la empresa ANCLA = 1 (SL Agrícola, la primera/original).
   const miEmpresa = usuario?.id_empresa ?? null;
@@ -81,6 +81,7 @@ export default function Modulo8() {
   // - Admin/sin alcance: todas las de su empresa (el ruteo del Paso G ya limita a su company).
   // mergeProyectos las etiqueta con la empresa del usuario, así quedan en su catálogo.
   const actualizarDeSAP = async () => {
+    if (!puedeActualizarSAP) { setSapError("Necesitas temporadas asignadas para actualizar de SAP. Pídele a un administrador que te asigne."); return; }
     setSapCargando(true); setSapError(""); setSapInfo("");
     try {
       const data = await getCatalogoProyectosSAP("");
@@ -523,6 +524,9 @@ export default function Modulo8() {
   // (admin/gerente u otros) ve TODO. Fail-safe: un movimiento SIN proyecto no se oculta.
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
+  // Solo se puede "Actualizar de SAP" si tienes temporadas asignadas; un admin/gerente (que
+  // administra el catálogo) sí puede aunque no tenga asignaciones.
+  const puedeActualizarSAP = acotado || (can ? can("usuarios.administrar") : false);
   // Aislamiento por EMPRESA (primario): solo el catálogo de MI empresa (sin etiqueta → ancla 1).
   const proyectosDeMiEmpresa = acotaEmpresa ? proyectos.filter((p) => (p.empresa ?? 1) === miEmpresa) : proyectos;
   // Temporadas visibles en el form de crear: mi empresa + acotadas a los proyectos asignados (si aplica).
@@ -1111,11 +1115,13 @@ export default function Modulo8() {
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                   <div className="text-xs font-bold text-gray-700 inline-flex items-center gap-1"><Sprout size={16} /> Temporadas · con sus ranchos y responsables de cosecha</div>
-                  <button onClick={actualizarDeSAP} disabled={sapCargando} title={acotado ? "Carga tus temporadas permitidas desde SAP, con sus ranchos y lotes" : "Carga/actualiza las temporadas de tu empresa desde SAP"}
-                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">
+                  <button onClick={actualizarDeSAP} disabled={sapCargando || !puedeActualizarSAP}
+                    title={!puedeActualizarSAP ? "Necesitas temporadas asignadas para actualizar de SAP" : acotado ? "Carga tus temporadas permitidas desde SAP, con sus ranchos y lotes" : "Carga/actualiza las temporadas de tu empresa desde SAP"}
+                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
                   </button>
                 </div>
+                {!puedeActualizarSAP && <div className="text-[11px] text-amber-600 mb-1">Necesitas <b>temporadas asignadas</b> para actualizar de SAP. Pídele a un administrador que te asigne.</div>}
                 {sapError && <div className="text-[11px] text-red-600 mb-1">No se pudo traer de SAP: {sapError}</div>}
                 {sapInfo && <div className="text-[11px] text-green-700 mb-2">{sapInfo}. Lo que edites a mano se conserva al volver a traer.</div>}
                 {proyectosDeMiEmpresa.length > 1 && (
