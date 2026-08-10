@@ -54,12 +54,14 @@ export default function AsignacionesUsuario({ usuario, onClose }) {
 
   useEffect(() => {
     let vivo = true;
-    // Catálogos de SAP (independientes: si SAP no responde, avisa pero no bloquea).
-    getCultivosSAP()
+    // Catálogos de SAP DE LA EMPRESA del usuario editado (id_empresa → company de esa empresa):
+    // así a un usuario de CACO se le ofrecen los cultivos/proyectos de CACO, no los de quien edita.
+    // (independientes: si SAP no responde, avisa pero no bloquea).
+    getCultivosSAP(usuario.id_empresa)
       .then((d) => { if (vivo) setCultivos((d.value || []).map((c) => ({ value: c.FactorCode, label: `${c.FactorCode}${c.FactorDescription ? " · " + c.FactorDescription : ""}` }))); })
       .catch(() => { if (vivo) setAvisoSAP("No se pudieron leer los cultivos de SAP."); });
     // Catálogo: cada proyecto trae sus ranchos, y cada rancho su cultivo → así se filtra por cultivo.
-    getCatalogoProyectosSAP()
+    getCatalogoProyectosSAP("", usuario.id_empresa)
       .then((d) => {
         if (!vivo) return;
         setProyectos((d.proyectos || []).map((p) => ({
@@ -80,7 +82,7 @@ export default function AsignacionesUsuario({ usuario, onClose }) {
       .catch((e) => { if (vivo) setError(msgError(e)); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [usuario.id]);
+  }, [usuario.id, usuario.id_empresa]);
 
   const toggle = (setter) => (v) => setter((s) => { const n = new Set(s); if (n.has(v)) n.delete(v); else n.add(v); return n; });
 

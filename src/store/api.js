@@ -155,7 +155,7 @@ const qs = (params = {}) => {
 };
 export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
 // Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
-export const getCatalogoProyectosSAP = (project) => req("GET", `/api/sap/catalogo${qs({ project })}`);
+export const getCatalogoProyectosSAP = (project, idEmpresa) => req("GET", `/api/sap/catalogo${qs({ project, id_empresa: idEmpresa })}`);
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
 // body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
 export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body, TIMEOUT_SAP_WRITE);
@@ -191,7 +191,7 @@ export const borrarFotoTrailer = (id) => req("DELETE", `/api/fotos-trailer/${enc
 // Borra TODAS las fotos de un trailer (al eliminar el trailer, para no dejar basura en la nube).
 export const borrarFotosDeTrailer = (trailerId) => req("DELETE", `/api/fotos-trailer/de-trailer/${encodeURIComponent(trailerId)}`);
 export const getTaxCodesSAP = () => req("GET", "/api/sap/tax-codes");
-export const getCultivosSAP = () => req("GET", "/api/sap/cultivos");
+export const getCultivosSAP = (idEmpresa) => req("GET", `/api/sap/cultivos${qs({ id_empresa: idEmpresa })}`);
 export const getDepartamentosSAP = () => req("GET", "/api/sap/departamentos");
 export const getLotesSAP = () => req("GET", "/api/sap/lotes");
 export const getProyectosSAPlist = () => req("GET", "/api/sap/proyectos-sap");
