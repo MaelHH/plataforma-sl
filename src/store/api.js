@@ -155,7 +155,8 @@ const qs = (params = {}) => {
 };
 export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
 // Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
-export const getCatalogoProyectosSAP = (project, idEmpresa) => req("GET", `/api/sap/catalogo${qs({ project, id_empresa: idEmpresa })}`);
+// Timeout holgado (45s): el catálogo trae TODAS las temporadas liberadas de la empresa (varios cultivos).
+export const getCatalogoProyectosSAP = (project, idEmpresa) => req("GET", `/api/sap/catalogo${qs({ project, id_empresa: idEmpresa })}`, undefined, 45000);
 // Diagnóstico SOLO LECTURA: cómo se reparten las órdenes de fabricación de una empresa (item/estatus/proyecto).
 export const getDiagOrdenesSAP = (idEmpresa) => req("GET", `/api/sap/ordenes-diag${qs({ id_empresa: idEmpresa })}`);
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
