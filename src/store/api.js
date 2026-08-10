@@ -156,6 +156,8 @@ const qs = (params = {}) => {
 export const getProyectosSAP = () => req("GET", "/api/sap/proyectos");
 // Catálogo anidado: Proyecto → Ranchos(=SAP Lote) con departamento + cantidades + refs SAP.
 export const getCatalogoProyectosSAP = (project, idEmpresa) => req("GET", `/api/sap/catalogo${qs({ project, id_empresa: idEmpresa })}`);
+// Diagnóstico SOLO LECTURA: cómo se reparten las órdenes de fabricación de una empresa (item/estatus/proyecto).
+export const getDiagOrdenesSAP = (idEmpresa) => req("GET", `/api/sap/ordenes-diag${qs({ id_empresa: idEmpresa })}`);
 // ESCRITURA: Recibo de producción → suma `cantidad` (cubetas) a la Cantidad completada de la orden.
 // body: { absoluteEntry, cantidad, warehouse?, fecha? }. Único POST a SAP.
 export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produccion", body, TIMEOUT_SAP_WRITE);

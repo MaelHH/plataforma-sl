@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Building2, Plus, Pencil, Ban, CircleCheck, X, Loader2 } from "lucide-react";
-import { getEmpresas, crearEmpresa, actualizarEmpresa, cambiarActivoEmpresa } from "../store/api";
+import { Building2, Plus, Pencil, Ban, CircleCheck, X, Loader2, Search } from "lucide-react";
+import { getEmpresas, crearEmpresa, actualizarEmpresa, cambiarActivoEmpresa, getDiagOrdenesSAP } from "../store/api";
 import { useDialog } from "./Dialog";
 
 // Administración de empresas (multi-empresa) — SOLO admin (el menú se gatea con
@@ -24,7 +24,17 @@ export default function Empresas({ onClose }) {
   const [error, setError] = useState("");
   const [form, setForm] = useState(null);       // null = cerrado | { modo, id, nombre, sap_company_db, cultivo_default }
   const [guardando, setGuardando] = useState(false);
+  const [diag, setDiag] = useState(null);       // null = cerrado | { empresa, cargando, data, error }
   const dlg = useDialog();
+
+  // Diagnóstico SOLO LECTURA: ver cómo están armadas las órdenes de fabricación de esa empresa
+  // (qué item usa cada cultivo, si están liberadas o cerradas). Sirve para decidir el filtro del
+  // catálogo multi-empresa. No escribe nada en SAP.
+  const abrirDiag = async (e) => {
+    setDiag({ empresa: e, cargando: true, data: null, error: "" });
+    try { const data = await getDiagOrdenesSAP(e.id); setDiag({ empresa: e, cargando: false, data, error: "" }); }
+    catch (err) { setDiag({ empresa: e, cargando: false, data: null, error: msgError(err) }); }
+  };
 
   const cargar = async () => {
     try { setEmpresas(await getEmpresas()); }
@@ -127,6 +137,7 @@ export default function Empresas({ onClose }) {
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => abrirDiag(e)} title="Diagnóstico de órdenes SAP (solo lectura)" className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Search size={16} /></button>
                         <button onClick={() => abrirEditar(e)} title="Editar" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Pencil size={16} /></button>
                         <button onClick={() => toggleActivo(e)} title={e.es_activo ? "Desactivar" : "Activar"}
                           className={`p-1.5 rounded-lg ${e.es_activo ? "text-gray-400 hover:text-red-600 hover:bg-red-50" : "text-gray-400 hover:text-green-600 hover:bg-green-50"}`}>
@@ -173,6 +184,102 @@ export default function Empresas({ onClose }) {
               <button onClick={guardar} disabled={guardando} className="text-sm px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
                 {guardando ? "Guardando…" : form.modo === "nuevo" ? "Crear empresa" : "Guardar cambios"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Diagnóstico de órdenes SAP (solo lectura) */}
+      {diag && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
+              <div>
+                <div className="text-base font-semibold text-gray-900 inline-flex items-center gap-2"><Search size={16} /> Órdenes de SAP · {diag.empresa.nombre}</div>
+                <div className="text-[11px] text-gray-400 font-mono">{diag.empresa.sap_company_db || "— sin company —"} · solo lectura</div>
+              </div>
+              <button onClick={() => setDiag(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {diag.cargando ? (
+                <div className="text-center text-gray-400 py-8"><Loader2 className="inline animate-spin mr-1" size={16} /> Consultando SAP…</div>
+              ) : diag.error ? (
+                <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{diag.error}</div>
+              ) : !diag.data || diag.data.total === 0 ? (
+                <div className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  No se encontraron órdenes de fabricación en esta company (o SAP no respondió). Revisa que el <b>ruteo por empresa</b> esté activo y que la company tenga órdenes.
+                </div>
+              ) : (
+                <>
+                  <div className="text-[11px] text-gray-500">
+                    {diag.data.total} órdenes (las más recientes). El catálogo de temporadas solo usa las <b>liberadas</b>.
+                  </div>
+                  {/* Por estatus */}
+                  <div>
+                    <div className="text-xs font-bold text-gray-700 mb-1">Por estatus</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(diag.data.por_estatus || {}).map(([st, n]) => (
+                        <span key={st} className={`text-[11px] px-2 py-0.5 rounded-full border ${st === "boposReleased" ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                          {st === "boposReleased" ? "Liberadas" : st === "boposClosed" ? "Cerradas" : st === "boposPlanned" ? "Planificadas" : st === "boposCancelled" ? "Canceladas" : st}: <b>{n}</b>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Por item */}
+                  <div>
+                    <div className="text-xs font-bold text-gray-700 mb-1">Por item (producto) — <span className="font-normal text-gray-400">cada cultivo suele tener el suyo</span></div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead><tr className="bg-gray-50 text-gray-400 uppercase tracking-wide">
+                          <th className="text-left px-3 py-1.5 font-medium">Item</th>
+                          <th className="text-center px-3 py-1.5 font-medium">Liberadas</th>
+                          <th className="text-center px-3 py-1.5 font-medium">Total</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Cultivo</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Proyecto (ej.)</th>
+                        </tr></thead>
+                        <tbody>
+                          {(diag.data.por_item || []).map((it) => (
+                            <tr key={it.item} className="border-t border-gray-100">
+                              <td className="px-3 py-1.5 font-mono text-gray-700">{it.item}</td>
+                              <td className="px-3 py-1.5 text-center font-semibold text-green-700">{it.liberadas}</td>
+                              <td className="px-3 py-1.5 text-center text-gray-500">{it.total}</td>
+                              <td className="px-3 py-1.5 text-gray-600">{it.cultivoEjemplo || "—"}</td>
+                              <td className="px-3 py-1.5 text-gray-600">{it.proyectoEjemplo}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  {/* Por proyecto */}
+                  <div>
+                    <div className="text-xs font-bold text-gray-700 mb-1">Por proyecto (temporada)</div>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead><tr className="bg-gray-50 text-gray-400 uppercase tracking-wide">
+                          <th className="text-left px-3 py-1.5 font-medium">Proyecto</th>
+                          <th className="text-center px-3 py-1.5 font-medium">Liberadas</th>
+                          <th className="text-center px-3 py-1.5 font-medium">Total</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Item (ej.)</th>
+                        </tr></thead>
+                        <tbody>
+                          {(diag.data.por_proyecto || []).map((pr) => (
+                            <tr key={pr.proyecto} className="border-t border-gray-100">
+                              <td className="px-3 py-1.5 text-gray-700">{pr.proyecto}</td>
+                              <td className="px-3 py-1.5 text-center font-semibold text-green-700">{pr.liberadas}</td>
+                              <td className="px-3 py-1.5 text-center text-gray-500">{pr.total}</td>
+                              <td className="px-3 py-1.5 font-mono text-gray-600">{pr.itemEjemplo}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={() => setDiag(null)} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cerrar</button>
             </div>
           </div>
         </div>
