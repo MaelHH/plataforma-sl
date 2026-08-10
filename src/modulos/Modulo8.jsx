@@ -29,7 +29,12 @@ function diasPlazo(salidaISO, reciboISO) {
 
 export default function Modulo8() {
   const { movimientos, setMovimientos, cargaCampo, setCargaCampo, ubicaciones, setUbicaciones, lineas, setLineas, zonas, setZonas, consignados, setConsignados, proyectos, setProyectos, proveedores, setProveedores } = useDatos();
-  const { alcance } = useAuth();   // proyectos/cultivos asignados al usuario (§2.1)
+  const { alcance, usuario } = useAuth();   // proyectos/cultivos + empresa del usuario (§2.1)
+  // Aislamiento por EMPRESA: cada quien ve solo el catálogo/datos de SU empresa. Un proyecto sin
+  // etiqueta `empresa` se considera de la empresa ANCLA = 1 (SL Agrícola, la primera/original).
+  const miEmpresa = usuario?.id_empresa ?? null;
+  const acotaEmpresa = miEmpresa != null;
+  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? 1; };
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
@@ -54,8 +59,10 @@ export default function Modulo8() {
     const base = Array.isArray(prev) ? prev : [];
     const next = base.map((p) => ({ ...p, ranchos: (p.ranchos || []).map((r) => ({ ...r })) }));
     for (const sp of sapList) {
-      let proj = next.find((p) => p.code === sp.code);
-      if (!proj) { if (onlyExisting) continue; proj = { code: sp.code, nombre: sp.nombre, ranchos: [] }; next.push(proj); }
+      // Empate acotado a MI empresa (empresa+code): un sync de otra empresa con el MISMO code
+      // crea su propia entrada en vez de mezclarse con la de otra empresa.
+      let proj = next.find((p) => p.code === sp.code && (p.empresa ?? 1) === (miEmpresa ?? 1));
+      if (!proj) { if (onlyExisting) continue; proj = { code: sp.code, nombre: sp.nombre, empresa: miEmpresa ?? 1, ranchos: [] }; next.push(proj); }
       for (const sr of (sp.ranchos || [])) {
         const sap = { item: sr.item, ordenes: sr.ordenes, plannedQty: sr.plannedQty, completedQty: sr.completedQty };
         // match por sapKey (Lote original) para permitir renombrar sin duplicar;
@@ -285,7 +292,7 @@ export default function Modulo8() {
 
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
   const upTemp = (fn) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).map(fn));
-  const addTemporada = () => setProyectos((prev) => [...(Array.isArray(prev) ? prev : []), { code: nuevoId("TMP_"), nombre: "Nueva temporada", ranchos: [] }]);
+  const addTemporada = () => setProyectos((prev) => [...(Array.isArray(prev) ? prev : []), { code: nuevoId("TMP_"), nombre: "Nueva temporada", empresa: miEmpresa ?? 1, ranchos: [] }]);
   const updTemporada = (code, val) => upTemp((p) => p.code === code ? { ...p, nombre: val } : p);
   const delTemporada = (code) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).filter((p) => p.code !== code));
   const addRancho = (code) => upTemp((p) => p.code === code ? { ...p, ranchos: [...(p.ranchos || []), { nombre: "Nuevo rancho", departamento: "", responsables: [] }] } : p);
@@ -496,12 +503,15 @@ export default function Modulo8() {
   // (admin/gerente u otros) ve TODO. Fail-safe: un movimiento SIN proyecto no se oculta.
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
-  // Temporadas visibles en el form de crear: acotadas a los proyectos asignados (si aplica).
-  const proyectosVisibles = acotado ? proyectos.filter((p) => proyectosAsignados.has(p.code)) : proyectos;
+  // Aislamiento por EMPRESA (primario): solo el catálogo de MI empresa (sin etiqueta → ancla 1).
+  const proyectosDeMiEmpresa = acotaEmpresa ? proyectos.filter((p) => (p.empresa ?? 1) === miEmpresa) : proyectos;
+  // Temporadas visibles en el form de crear: mi empresa + acotadas a los proyectos asignados (si aplica).
+  const proyectosVisibles = acotado ? proyectosDeMiEmpresa.filter((p) => proyectosAsignados.has(p.code)) : proyectosDeMiEmpresa;
   // Cultivos visibles en la OC: acotados a los cultivos asignados (si el usuario tiene alguno).
   const cultivosAsignados = new Set(alcance?.cultivos || []);
   const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
+    if (acotaEmpresa && m.proyecto && empresaDeProy(m.proyecto) !== miEmpresa) return false;
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;
@@ -1079,16 +1089,16 @@ export default function Modulo8() {
                 </div>
                 {sapError && <div className="text-[11px] text-red-600 mb-1">No se pudo traer de SAP: {sapError}</div>}
                 {sapInfo && <div className="text-[11px] text-green-700 mb-2">{sapInfo}. Lo que edites a mano se conserva al volver a traer.</div>}
-                {proyectos.length > 1 && (
+                {proyectosDeMiEmpresa.length > 1 && (
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[11px] text-gray-500">Ver:</span>
                     <select value={sapFiltro} onChange={(e) => setSapFiltro(e.target.value)} className={INP + " w-auto"}>
                       <option value="">Todas las temporadas</option>
-                      {proyectos.map((p) => <option key={p.code} value={p.code}>{p.nombre}</option>)}
+                      {proyectosDeMiEmpresa.map((p) => <option key={p.code} value={p.code}>{p.nombre}</option>)}
                     </select>
                   </div>
                 )}
-                {proyectos.filter((p) => !sapFiltro || p.code === sapFiltro).map((p) => (
+                {proyectosDeMiEmpresa.filter((p) => !sapFiltro || p.code === sapFiltro).map((p) => (
                   <div key={p.code} className="border border-gray-200 rounded-lg p-3 mb-2">
                     <div className="flex items-center gap-2 mb-2">
                       <input value={p.nombre} onChange={(e) => updTemporada(p.code, e.target.value)} className={INP_TBL + " font-semibold"} placeholder="Nombre de la temporada" />
@@ -1124,14 +1134,14 @@ export default function Modulo8() {
                     </div>
                   </div>
                 ))}
-                {proyectos.length === 0 && <div className="text-[11px] text-gray-400 italic mb-2">Aún no hay temporadas. Agrega una a mano o da clic en "Traer de SAP".</div>}
+                {proyectosDeMiEmpresa.length === 0 && <div className="text-[11px] text-gray-400 italic mb-2">Aún no hay temporadas de tu empresa. Agrega una a mano o da clic en "Actualizar de SAP".</div>}
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-gray-500 inline-flex items-center gap-1"><Plus size={14} /> Agregar temporada de SAP:</span>
                   <div className="w-64">
                     <SearchSelect className={INP} value={sapPick}
                       onChange={(v) => agregarTemporadaDeSAP(v)}
-                      placeholder={sapDisp.some((c) => !proyectos.some((p) => p.code === c)) ? "Buscar temporada en SAP…" : "(no hay nuevas en SAP)"}
-                      options={sapDisp.filter((c) => !proyectos.some((p) => p.code === c)).map((c) => ({ value: c, label: c }))} />
+                      placeholder={sapDisp.some((c) => !proyectosDeMiEmpresa.some((p) => p.code === c)) ? "Buscar temporada en SAP…" : "(no hay nuevas en SAP)"}
+                      options={sapDisp.filter((c) => !proyectosDeMiEmpresa.some((p) => p.code === c)).map((c) => ({ value: c, label: c }))} />
                   </div>
                   <button onClick={addTemporada} className="text-xs text-gray-500 hover:text-blue-600 px-2 py-1" title="Crear una temporada vacía a mano (sin SAP)">o crear vacía</button>
                 </div>
