@@ -323,7 +323,7 @@ export default function Modulo8() {
 
   const formVacio = {
     folio: "", fecha: hoyISO(), viaje: "",
-    proyecto: "", rancho: "", departamento: "", lote: "", horaInicio: "", horaTermino: "", responsableCosecha: "",
+    proyecto: "", cultivo: "", rancho: "", departamento: "", lote: "", horaInicio: "", horaTermino: "", responsableCosecha: "",
     consignado: "", origen: "", distribuidor: "", destino: "",
     cargaItems: [{ prod: "", parrillas: "", bultos: "" }],
     // transporte
@@ -366,7 +366,19 @@ export default function Modulo8() {
 
   const lineaSel = lineas.find((l) => l.linea === form.linea);
   const proyectoSel = proyectos.find((p) => p.code === form.proyecto); // proyecto elegido → sus ranchos
-  const ranchoSelForm = proyectoSel?.ranchos.find((r) => r.nombre === form.rancho); // rancho elegido → responsables
+  // Cultivos de la temporada (acotados a los asignados del usuario). El selector de cultivo solo
+  // aparece si hay 2+; con 1 se elige solo. Cada lote pertenece a un cultivo → se filtran por él.
+  const cultivosAsignadosSet = new Set(alcance?.cultivos || []);
+  const cultivosTemporada = [...new Set((proyectoSel?.ranchos || []).map((r) => r.cultivo).filter(Boolean))]
+    .filter((c) => cultivosAsignadosSet.size === 0 || cultivosAsignadosSet.has(c))
+    .sort((a, b) => a.localeCompare(b));
+  const multiCultivo = cultivosTemporada.length >= 2;
+  const cultivoUnico = cultivosTemporada.length === 1 ? cultivosTemporada[0] : "";
+  // Cultivo EFECTIVO del movimiento: el elegido (si hay 2+) o el único (auto, sin selector). Es el
+  // que se guarda y con el que se filtran los lotes → el recibo va a la orden de ESE cultivo.
+  const cultivoEfectivo = form.cultivo || cultivoUnico;
+  // Rancho elegido → responsables; se identifica por (lote + cultivo efectivo).
+  const ranchoSelForm = proyectoSel?.ranchos.find((r) => r.nombre === form.rancho && (!cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo));
 
   // Visualización del movimiento: la TEMPORADA va en el campo "Rancho", y el RANCHO elegido va en "Lote".
   // (Movimientos viejos sin `proyecto` siguen mostrando su rancho/lote original.)
@@ -440,9 +452,9 @@ export default function Modulo8() {
     if (lineasActualizadas !== lineas) setLineas(lineasActualizadas);
 
     if (editId) {
-      setMovimientos((prev) => prev.map((mm) => (mm.id === editId ? { ...form, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
+      setMovimientos((prev) => prev.map((mm) => (mm.id === editId ? { ...form, cultivo: cultivoEfectivo, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
     } else {
-      const mov = { ...form, id: nuevoId("MOV_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
+      const mov = { ...form, cultivo: cultivoEfectivo, id: nuevoId("MOV_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
       setMovimientos((prev) => [mov, ...prev]);
     }
     setEditId(null);
@@ -768,10 +780,10 @@ export default function Modulo8() {
                       options={zonas.map((z) => ({ value: z, label: z }))} />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                <div className={`grid grid-cols-1 ${multiCultivo ? "sm:grid-cols-4" : "sm:grid-cols-3"} gap-2 mt-2`}>
                   <div>
                     <label className={LBL}>Temporada</label>
-                    <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v, rancho: "", departamento: "", responsableCosecha: "" }))} placeholder="— Temporada —"
+                    <SearchSelect className={INP} value={form.proyecto} onChange={(v) => setForm((f) => ({ ...f, proyecto: v, cultivo: "", rancho: "", departamento: "", responsableCosecha: "" }))} placeholder="— Temporada —"
                       options={(() => {
                         const opts = proyectosVisibles.map((p) => ({ value: p.code, label: p.nombre }));
                         if (form.proyecto && !opts.some((o) => o.value === form.proyecto)) {
@@ -781,10 +793,19 @@ export default function Modulo8() {
                         return opts;
                       })()} />
                   </div>
+                  {multiCultivo && (
+                    <div>
+                      <label className={LBL}>Cultivo</label>
+                      <SearchSelect className={INP} value={form.cultivo} disabled={!proyectoSel}
+                        onChange={(v) => setForm((f) => ({ ...f, cultivo: v, rancho: "", departamento: "", responsableCosecha: "" }))}
+                        placeholder="— Cultivo —" options={cultivosTemporada.map((c) => ({ value: c, label: c }))} />
+                    </div>
+                  )}
                   <div><label className={LBL}>Rancho</label>
-                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel}
-                      onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
-                      placeholder={proyectoSel ? "— Rancho —" : "Elige temporada"} options={(proyectoSel?.ranchos || []).map((r) => ({ value: r.nombre, label: r.nombre }))} />
+                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || (multiCultivo && !form.cultivo)}
+                      onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo)); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
+                      placeholder={!proyectoSel ? "Elige temporada" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
+                      options={(proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => ({ value: r.nombre, label: r.nombre }))} />
                   </div>
                   <div><label className={LBL}>Responsable cosecha</label>
                     <SearchSelect className={INP} value={form.responsableCosecha} onChange={(v) => setForm((f) => ({ ...f, responsableCosecha: v }))} disabled={!ranchoSelForm}
