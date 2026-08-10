@@ -20,10 +20,13 @@ const fmtMoney = (n) => "$" + (Number(n) || 0).toLocaleString("en-US", { minimum
 export default function ControlFletesPagina({ tipo, proyectos = [], onBack }) {
   const [project, setProject] = useState("");
   // Alcance por usuario (§2.1): el selector de proyecto solo ofrece los proyectos asignados.
-  const { alcance } = useAuth();
+  const { alcance, usuario } = useAuth();
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
-  const proyectosVisibles = acotado ? proyectos.filter((p) => proyectosAsignados.has(p.code)) : proyectos;
+  // Aislamiento por EMPRESA (primario): el selector solo ofrece proyectos de MI empresa (sin → ancla 1).
+  const miEmpresa = usuario?.id_empresa ?? null;
+  const proyectosDeMiEmpresa = miEmpresa != null ? proyectos.filter((p) => (p.empresa ?? 1) === miEmpresa) : proyectos;
+  const proyectosVisibles = acotado ? proyectosDeMiEmpresa.filter((p) => proyectosAsignados.has(p.code)) : proyectosDeMiEmpresa;
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");

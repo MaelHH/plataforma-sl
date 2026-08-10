@@ -932,7 +932,16 @@ export default function Modulo9() {
   // listas de abajo (recibidos, pendientes, vaciado, KPIs, pivote, inventario) cuelgan de esto.
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
-  const movsScope = acotado ? movimientos.filter((m) => !m.proyecto || proyectosAsignados.has(m.proyecto)) : movimientos;
+  // Aislamiento por EMPRESA (primario): solo folios de MI empresa (vía la empresa de su proyecto;
+  // sin etiqueta → ancla 1 = SL Agrícola). Admin sin empresa (id_empresa null) ve TODO.
+  const miEmpresa = usuarioActual?.id_empresa ?? null;
+  const acotaEmpresa = miEmpresa != null;
+  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? 1; };
+  const movsScope = movimientos.filter((m) => {
+    if (acotaEmpresa && (m.empresa ?? empresaDeProy(m.proyecto)) !== miEmpresa) return false;
+    if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
+    return true;
+  });
 
   // "Cliente Directo": recibido pero NO entra a empaque (se va con el cliente) → su propia pestaña.
   const esClienteDirecto = (m) => m.recepcion?.estado === "recibido" && m.recepcion?.clienteDirecto;

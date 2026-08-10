@@ -59,6 +59,9 @@ export default function EmpaqueCampoDirecto() {
   const acotado = proyectosAsignados.size > 0;
   const cultivosAsignados = useMemo(() => new Set(alcance?.cultivos || []), [alcance]);
   const acotadoCultivo = cultivosAsignados.size > 0;
+  // Aislamiento por EMPRESA (primario): solo lo de MI empresa (proyecto sin etiqueta → ancla 1 = SL).
+  const miEmpresa = usuario?.id_empresa ?? null;
+  const acotaEmpresa = miEmpresa != null;
   const dlg = useDialog();
   // Candados RBAC del envío a SAP (igual que logística): aprobar (encargada) y enviar a SAP.
   const puedeAprobar = can ? can("empaque.vaciado.aprobar") : false;
@@ -69,8 +72,13 @@ export default function EmpaqueCampoDirecto() {
 
   const lista = useMemo(() => {
     const base = Array.isArray(movimientosCampo) ? movimientosCampo : [];
-    return acotado ? base.filter((m) => !m.proyecto || proyectosAsignados.has(m.proyecto)) : base;
-  }, [movimientosCampo, acotado, proyectosAsignados]);
+    const empOf = (code) => ((proyectos || []).find((x) => x.code === code)?.empresa ?? 1);
+    return base.filter((m) => {
+      if (acotaEmpresa && (m.empresa ?? empOf(m.proyecto)) !== miEmpresa) return false;
+      if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
+      return true;
+    });
+  }, [movimientosCampo, acotado, proyectosAsignados, acotaEmpresa, miEmpresa, proyectos]);
 
   // Parámetros del bin (editables en configEmpaque.campoDirecto).
   const cd = { ...CAMPO_DIRECTO_DEFAULT, ...(configEmpaque?.campoDirecto || {}) };
@@ -89,13 +97,13 @@ export default function EmpaqueCampoDirecto() {
   const loteIndex = useMemo(() => {
     const idx = {};
     (proyectos || []).forEach((p) => (p.ranchos || []).forEach((r) => {
-      if (r?.nombre && !idx[r.nombre]) idx[r.nombre] = { proyecto: p.code, temporada: p.nombre, departamento: r.departamento || "", cultivo: r.cultivo || "" };
+      if (r?.nombre && !idx[r.nombre]) idx[r.nombre] = { proyecto: p.code, empresa: p.empresa ?? 1, temporada: p.nombre, departamento: r.departamento || "", cultivo: r.cultivo || "" };
     }));
     return idx;
   }, [proyectos]);
   const loteOpts = useMemo(() => Object.keys(loteIndex)
-    .filter((l) => !acotado || proyectosAsignados.has(loteIndex[l].proyecto))
-    .sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex, acotado, proyectosAsignados]);
+    .filter((l) => (!acotaEmpresa || loteIndex[l].empresa === miEmpresa) && (!acotado || proyectosAsignados.has(loteIndex[l].proyecto)))
+    .sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex, acotado, proyectosAsignados, acotaEmpresa, miEmpresa]);
   const temporadaDe = (rancho) => loteIndex[rancho]?.temporada || "";
   // Orden de fabricación (SAP) del folio: se resuelve igual que en logística (ordenSAPde),
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
@@ -202,7 +210,7 @@ export default function EmpaqueCampoDirecto() {
       registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: actorNombre, destino: folio || rancho, ref: editId, detalle: `Editó folio campo directo ${folio || rancho}` });
     } else {
       const id = nuevoId("MOVCD_");
-      const mov = { ...base, id, creado: t.iso, vaciado: { kgRecibidos: base.netoTeorico } };
+      const mov = { ...base, id, empresa: miEmpresa ?? 1, creado: t.iso, vaciado: { kgRecibidos: base.netoTeorico } };
       setMovimientosCampo((prev) => [mov, ...prev]);
       registrarEvento?.({ evento: "campo_directo_creado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio || rancho, ref: id, detalle: `Creó folio ${folio || "(s/folio)"} · lote ${rancho} · ${bins} bins` });
     }

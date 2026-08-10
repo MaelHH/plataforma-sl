@@ -434,7 +434,7 @@ export default function Modulo8() {
     if (editId) {
       setMovimientos((prev) => prev.map((mm) => (mm.id === editId ? { ...form, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
     } else {
-      const mov = { ...form, id: nuevoId("MOV_"), creado: new Date().toLocaleString("es-MX") };
+      const mov = { ...form, id: nuevoId("MOV_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
       setMovimientos((prev) => [mov, ...prev]);
     }
     setEditId(null);
@@ -511,7 +511,7 @@ export default function Modulo8() {
   const cultivosAsignados = new Set(alcance?.cultivos || []);
   const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
-    if (acotaEmpresa && m.proyecto && empresaDeProy(m.proyecto) !== miEmpresa) return false;
+    if (acotaEmpresa && (m.empresa ?? empresaDeProy(m.proyecto)) !== miEmpresa) return false;
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;

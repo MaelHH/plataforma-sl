@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Truck, Bell, Check, Receipt, DollarSign, TrendingUp, AlertTriangle, ChevronLeft, ChevronRight, PackageOpen, FileSpreadsheet, ArrowRight } from "lucide-react";
 import { useDatos, CAT_VACIO, DC, etiquetaSemana, moverSemana } from "../store/datos";
 import { hoyISO, lunesActual } from "../utils/fecha";
+import { useAuth } from "../store/auth";
 import {
   esRecibidoEmpaque, kgRecibidosDe, kgVaciadosDe, kgMermadosDe, kgEnPisoDe, cubetasEnviadasSAP, kgEnviadosSAP, kgPendienteSAP, tienePendienteSAP, estaTerminado, kgSobranteCierre, netoPesada,
 } from "./helpers/empaque";
@@ -31,6 +32,9 @@ const SEMAFORO_BG = {
 
 export default function Dashboard() {
   const { trailers, requerimientoGen, cargasEmbarques, monitoreo, catalogo, movimientos } = useDatos();
+  // Aislamiento por EMPRESA: los KPIs de empaque solo cuentan folios de MI empresa (sin etiqueta → ancla 1).
+  const { usuario } = useAuth();
+  const miEmpresa = usuario?.id_empresa ?? null;
   const [semana, setSemana] = useState(lunesActual());
   const [vistaCosto, setVistaCosto] = useState("linea");
   const [empDestino, setEmpDestino] = useState("");   // filtro por empaque destino (sección Empaque)
@@ -154,7 +158,7 @@ export default function Dashboard() {
 
   // ── EMPAQUE · Vaciado a producción (lee `movimientos` con los MISMOS helpers del módulo → cuadra) ──
   const hoyEmp = hoyISO();
-  const recibidosEmp = (movimientos || []).filter(esRecibidoEmpaque);
+  const recibidosEmp = (movimientos || []).filter((m) => (miEmpresa == null || (m.empresa ?? 1) === miEmpresa) && esRecibidoEmpaque(m));
   const empLoteDe = (m) => m.lote || m.rancho || m.consignado || "—";
   const empDestinoDe = (m) => m.consignado || m.distribuidor || m.destino || "—";
   const empDestinos = [...new Set(recibidosEmp.map(empDestinoDe).filter((d) => d && d !== "—"))].sort();

@@ -24,9 +24,13 @@ import { hoyISO } from "../utils/fecha";
 export default function Modulo13() {
   const { movMateriales, setMovMateriales, lineas, setLineas, materiales, setMateriales, ubicaciones, proveedores, setProveedores, proyectos } = useDatos();
   const dlg = useDialog();
-  const { alcance } = useAuth();   // proyectos asignados (§2.1): acota los selectores de proyecto
+  const { alcance, usuario } = useAuth();   // proyectos + empresa (§2.1): acota selectores y lista
   const proyectosAsignados = new Set(alcance?.proyectos || []);
   const acotado = proyectosAsignados.size > 0;
+  // Aislamiento por EMPRESA (primario): la lista solo muestra registros de MI empresa. Los materiales
+  // no van por el catálogo de temporadas, así que se filtra por `m.empresa` estampada (sin → ancla 1 = SL).
+  const miEmpresa = usuario?.id_empresa ?? null;
+  const acotaEmpresa = miEmpresa != null;
   const [verFletes, setVerFletes] = useState(false);   // página Control de fletes · MATERIAL (SAP)
 
   const [modal, setModal] = useState(false);
@@ -142,7 +146,7 @@ export default function Modulo13() {
     if (editId) {
       setMovMateriales((prev) => prev.map((mm) => (mm.id === editId ? { ...payload, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
     } else {
-      const mov = { ...payload, id: nuevoId("MMT_"), creado: new Date().toLocaleString("es-MX") };
+      const mov = { ...payload, id: nuevoId("MMT_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
       setMovMateriales((prev) => [mov, ...prev]);
     }
     setEditId(null);
@@ -323,6 +327,7 @@ export default function Modulo13() {
   // Filtro de la lista: búsqueda de texto + filtros por Destino / Línea / Material
   const qLow = q.trim().toLowerCase();
   const movsFiltrados = movMateriales.filter((m) => {
+    if (acotaEmpresa && (m.empresa ?? 1) !== miEmpresa) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fLinea && m.linea !== fLinea) return false;
     if (fMaterial && !(m.materialItems || []).some((it) => matDe(it.materialId)?.descripcion === fMaterial)) return false;
