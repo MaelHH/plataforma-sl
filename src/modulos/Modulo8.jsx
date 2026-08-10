@@ -370,7 +370,9 @@ export default function Modulo8() {
   // Cultivos de la temporada (acotados a los asignados del usuario). El selector de cultivo solo
   // aparece si hay 2+; con 1 se elige solo. Cada lote pertenece a un cultivo → se filtran por él.
   const cultivosAsignadosSet = new Set(alcance?.cultivos || []);
-  const cultivosTemporada = [...new Set((proyectoSel?.ranchos || []).map((r) => r.cultivo).filter(Boolean))]
+  // Cultivos que trae la temporada (de sus lotes); los "" (lotes sin cultivo en SAP) no cuentan aquí.
+  const cultivosTemporadaTodos = [...new Set((proyectoSel?.ranchos || []).map((r) => r.cultivo).filter(Boolean))];
+  const cultivosTemporada = cultivosTemporadaTodos
     .filter((c) => cultivosAsignadosSet.size === 0 || cultivosAsignadosSet.has(c))
     .sort((a, b) => a.localeCompare(b));
   const multiCultivo = cultivosTemporada.length >= 2;
@@ -378,6 +380,9 @@ export default function Modulo8() {
   // Cultivo EFECTIVO del movimiento: el elegido (si hay 2+) o el único (auto, sin selector). Es el
   // que se guarda y con el que se filtran los lotes → el recibo va a la orden de ESE cultivo.
   const cultivoEfectivo = form.cultivo || cultivoUnico;
+  // La temporada tiene cultivos pero NINGUNO es de los tuyos → no puedes crear aquí (evita mandar
+  // el recibo a la orden de un cultivo que no te toca, y no muestra lotes ajenos).
+  const sinCultivoValido = cultivosTemporadaTodos.length > 0 && cultivosTemporada.length === 0;
   // Rancho elegido → responsables; se identifica por (lote + cultivo efectivo).
   const ranchoSelForm = proyectoSel?.ranchos.find((r) => r.nombre === form.rancho && (!cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo));
 
@@ -806,10 +811,11 @@ export default function Modulo8() {
                     </div>
                   )}
                   <div><label className={LBL}>Rancho</label>
-                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || (multiCultivo && !form.cultivo)}
+                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
                       onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo)); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
-                      placeholder={!proyectoSel ? "Elige temporada" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
-                      options={(proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => ({ value: r.nombre, label: r.nombre }))} />
+                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
+                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => ({ value: r.nombre, label: r.nombre }))} />
+                    {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
                   </div>
                   <div><label className={LBL}>Responsable cosecha</label>
                     <SearchSelect className={INP} value={form.responsableCosecha} onChange={(v) => setForm((f) => ({ ...f, responsableCosecha: v }))} disabled={!ranchoSelForm}

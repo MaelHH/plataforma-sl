@@ -141,10 +141,14 @@ export default function Modulo9() {
   // Resuelve la orden de fabricación (SAP) del movimiento desde el catálogo de Temporadas.
   const ordenSAPde = (m) => {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
-    // Rancho por (lote + cultivo) elegido en el movimiento → la orden del cultivo correcto (no una
-    // arbitraria). Fallback a solo lote para movimientos viejos sin cultivo.
-    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho && (!m.cultivo || (x.cultivo || "") === m.cultivo))
-      || proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    // Rancho por (lote + cultivo) elegido en el movimiento → la orden del cultivo correcto.
+    // Si el movimiento TIENE cultivo, el match debe ser EXACTO (lote+cultivo): si no aparece,
+    // devuelve null ("sin orden") en vez de caer a otro cultivo del mismo lote (falla cerrado, no
+    // manda el recibo a una orden ajena). El fallback a solo-lote es SOLO para movimientos viejos
+    // sin cultivo.
+    const r = m.cultivo
+      ? proj?.ranchos?.find((x) => x.nombre === m.rancho && (x.cultivo || "") === m.cultivo)
+      : proj?.ranchos?.find((x) => x.nombre === m.rancho);
     const o0 = r?.sap?.ordenes?.[0];
     if (o0 == null) return null;
     // Compat: `ordenes` puede ser [number] (formato viejo) o [{absoluteEntry, docNum}].
