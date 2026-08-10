@@ -75,13 +75,20 @@ export default function Modulo8() {
     }
     return next;
   };
-  // Refresca SOLO las temporadas que YA están en el catálogo (actualiza cantidades; no agrega nuevas).
+  // Carga las temporadas de SAP (con sus ranchos/lotes), acotadas a lo PERMITIDO del usuario:
+  // - Usuario acotado (§2.1): agrega + refresca SOLO sus proyectos asignados.
+  // - Admin/sin alcance: todas las de su empresa (el ruteo del Paso G ya limita a su company).
+  // mergeProyectos las etiqueta con la empresa del usuario, así quedan en su catálogo.
   const actualizarDeSAP = async () => {
     setSapCargando(true); setSapError(""); setSapInfo("");
     try {
       const data = await getCatalogoProyectosSAP("");
-      setProyectos((prev) => mergeProyectos(prev, data.proyectos || [], true));
-      setSapInfo("Cantidades actualizadas desde SAP");
+      let lista = data.proyectos || [];
+      if (acotado) lista = lista.filter((p) => proyectosAsignados.has(p.code)); // solo lo permitido
+      setProyectos((prev) => mergeProyectos(prev, lista, false));
+      setSapInfo(acotado
+        ? `Se cargaron tus temporadas permitidas (${lista.length}) desde SAP, con sus ranchos.`
+        : `Temporadas actualizadas desde SAP (${lista.length}).`);
     } catch (e) {
       setSapError(String(e?.message || e));
     } finally {
@@ -1082,7 +1089,7 @@ export default function Modulo8() {
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                   <div className="text-xs font-bold text-gray-700 inline-flex items-center gap-1"><Sprout size={16} /> Temporadas · con sus ranchos y responsables de cosecha</div>
-                  <button onClick={actualizarDeSAP} disabled={sapCargando} title="Actualiza cantidades de las temporadas que ya tienes (no agrega nuevas)"
+                  <button onClick={actualizarDeSAP} disabled={sapCargando} title={acotado ? "Carga tus temporadas permitidas desde SAP, con sus ranchos y lotes" : "Carga/actualiza las temporadas de tu empresa desde SAP"}
                     className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50">
                     {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
                   </button>
