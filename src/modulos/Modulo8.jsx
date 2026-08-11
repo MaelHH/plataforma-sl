@@ -96,10 +96,11 @@ export default function Modulo8() {
       if (acotado) lista = lista.filter((p) => proyectosAsignados.has(p.code)); // solo lo permitido
       setProyectos((prev) => {
         let next = mergeProyectos(prev, lista, false);   // agrega/actualiza + re-etiqueta lo mío
-        // Si tengo empresa, limpio las temporadas SIN etiqueta (legado de pruebas pre-multiempresa):
-        // las mías ya quedaron etiquetadas por mergeProyectos; las que siguen sin etiqueta NO son de
-        // mi empresa. Las de OTRAS empresas (ya etiquetadas) se conservan. → quedan solo las tuyas.
-        if (miEmpresa != null) next = next.filter((p) => p.empresa != null);
+        // NO borrar las temporadas SIN etiqueta: por la semántica null=mío serían "tuyas" y pueden
+        // tener responsables → borrarlas = pérdida de datos (auditoría 🟠-F1). En su lugar se
+        // RE-ETIQUETAN a tu empresa → quedan explícitamente tuyas y persisten aisladas, sin perder
+        // nada. Las de OTRA empresa (ya etiquetadas) se conservan tal cual.
+        if (miEmpresa != null) next = next.map((p) => (p.empresa == null ? { ...p, empresa: miEmpresa } : p));
         return next;
       });
       setSapInfo(acotado
