@@ -538,19 +538,36 @@ export function DatosProvider({ children }) {
             if (val == null && cfg.seed != null) { await api.putState(k, cfg.seed); val = cfg.seed; }
             if (val == null) val = {};
           }
-          return val;
+          return { ok: true, val };
         };
         // EN PARALELO: antes se cargaban las ~28 secciones una por una (await en serie). En
         // producción el backend está en el server local (el VPS lo alcanza por Tailscale), así que
         // 28 idas y vueltas en fila tardaban 3-5 s y la pantalla se veía VACÍA mientras cargaba.
         // Pidiéndolas todas a la vez, la carga tarda lo de la más lenta, no la suma de todas.
+        // FALLA-SUAVE POR CLAVE (Promise.all con .catch por item, no all-or-nothing): antes, si UNA
+        // sola sección fallaba (un endpoint 500/timeout), TODA la carga tronaba → la sesión entera
+        // se quedaba en modo local y NUNCA volvía a sincronizar a la BD. Ahora las demás sí cargan;
+        // la que falla conserva su valor local y NO se marca como "de backend" (se reintenta luego).
         const claves = Object.keys(CONFIG);
-        const vals = await Promise.all(claves.map((k) => cargarClave(k)));
+        const resultados = await Promise.all(
+          claves.map((k) => cargarClave(k).catch((e) => { console.warn("No se pudo cargar la sección", k, e); return { ok: false }; })),
+        );
         if (cancel) return;
         const cargado = {};
-        claves.forEach((k, i) => { cargado[k] = vals[i]; setters[k]?.(vals[i]); });
-        prevRef.current = cargado;
-        setFuente("backend");
+        const fallidas = [];
+        claves.forEach((k, i) => {
+          const r = resultados[i];
+          if (r?.ok) { cargado[k] = r.val; setters[k]?.(r.val); }
+          // Clave que NO cargó: se queda con su valor local actual y se guarda en prevRef IGUAL a él,
+          // para que el guardado NO la empuje (no sobrescribe la BD con datos locales que no vimos).
+          else { cargado[k] = valores[k]; fallidas.push(k); }
+        });
+        // Solo pasamos a "backend" si al menos UNA clave cargó; si TODAS fallan, seguimos en local
+        // (respaldo en localStorage) como hasta hoy.
+        if (fallidas.length < claves.length) {
+          prevRef.current = cargado;
+          setFuente("backend");
+        }
       } catch (e) {
         console.warn("No se pudo cargar del backend; se usa modo local:", e);
       } finally {
