@@ -6,7 +6,7 @@
 //
 // El front NO es seguridad (se brinca con la consola): el backend valida lo crítico
 // (SAP, usuarios, borrados). Aquí solo mostramos/ocultamos para guiar al usuario.
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { me } from "./api";
 
 const AuthCtx = createContext(null);
@@ -16,6 +16,10 @@ export function AuthProvider({ children }) {
   const [permisos, setPermisos] = useState([]);
   const [alcance, setAlcance] = useState(null);   // { cultivos, proyectos, cruce_empresas } del usuario (§2.1)
   const [cargando, setCargando] = useState(true);
+  // ¿alguna vez cargó /me con éxito en esta sesión? Si sí, un fallo POSTERIOR (parpadeo de red al
+  // "recargar") NO debe borrar la sesión ni escalar a "*": eso apagaría el aislamiento por empresa
+  // y volvería al usuario "ve todo" a media sesión. Ver auditoría multi-empresa (🟠 auth) y [[sap-reglas-garantia]].
+  const huboSesion = useRef(false);
 
   // Refresca desde /me. El setState ocurre DESPUÉS del await (no síncrono en el efecto).
   const cargar = useCallback(async (marcarCargando = true) => {
@@ -25,13 +29,18 @@ export function AuthProvider({ children }) {
       setUsuario(u);
       setPermisos(Array.isArray(u?.permisos) ? u.permisos : []);
       setAlcance(u?.asignaciones || null);
+      huboSesion.current = true;
     } catch {
-      // Backend inalcanzable (un 401 real ya te manda al login vía `sl-unauthorized`). En modo
-      // local/offline no bloqueamos la UI por falta de red: concedemos todo localmente. El backend
-      // igual valida lo crítico cuando vuelva la conexión.
-      setUsuario(null);
-      setPermisos(["*"]);
-      setAlcance(null);
+      // Backend inalcanzable (un 401 real ya te manda al login vía `sl-unauthorized`).
+      // - Si YA hubo sesión buena → la CONSERVAMOS tal cual (no escalar a "*", no perder empresa);
+      //   el backend revalida lo crítico cuando vuelva la conexión.
+      // - Si NUNCA hubo sesión (primer arranque offline) → modo local: concedemos todo localmente
+      //   para no bloquear la captura sin red (comportamiento offline-first deliberado).
+      if (!huboSesion.current) {
+        setUsuario(null);
+        setPermisos(["*"]);
+        setAlcance(null);
+      }
     } finally {
       setCargando(false);
     }
@@ -42,8 +51,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let vivo = true;
     me()
-      .then((u) => { if (!vivo) return; setUsuario(u); setPermisos(Array.isArray(u?.permisos) ? u.permisos : []); setAlcance(u?.asignaciones || null); })
-      .catch(() => { if (!vivo) return; setUsuario(null); setPermisos(["*"]); setAlcance(null); })
+      .then((u) => { if (!vivo) return; setUsuario(u); setPermisos(Array.isArray(u?.permisos) ? u.permisos : []); setAlcance(u?.asignaciones || null); huboSesion.current = true; })
+      .catch(() => { if (!vivo || huboSesion.current) return; setUsuario(null); setPermisos(["*"]); setAlcance(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
   }, []);
