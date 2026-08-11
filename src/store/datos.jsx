@@ -428,11 +428,15 @@ export const KG_POR_BIN_DEFAULT = 260;
 // clave falla, conserva su valor anterior para que NO se marque como guardada y se reintente en el
 // próximo ciclo); `fallidas` es la lista de claves que no se pudieron guardar, para AVISAR al usuario
 // (antes un fallo se ignoraba con console.warn y el usuario creía que todo estaba guardado).
-async function sincronizarBackend(snap, prevRef) {
+async function sincronizarBackend(snap, prevRef, saltar) {
   const prev = prevRef.current || {};
   const sincronizado = { ...snap };
   const fallidas = [];
   for (const k of Object.keys(CONFIG)) {
+    // Clave que NO cargó del backend (falló su GET inicial): NO la tocamos. No conocemos su valor
+    // real en la BD, así que empujar el default/lo local la sobrescribiría a ciegas. Se queda
+    // congelada hasta que un recargar (F5) la vuelva a leer. Ver carga inicial. (auditoría 🟡-B).
+    if (saltar?.has(k)) continue;
     const cfg = CONFIG[k];
     const nuevo = snap[k];
     const anterior = prev[k];
@@ -521,6 +525,9 @@ export function DatosProvider({ children }) {
   const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
   const prevRef = useRef(null);
   const debRef = useRef(null);
+  // Claves cuyo GET inicial falló: se SALTAN del guardado (no conocemos su valor real en la BD, así
+  // que no las pisamos a ciegas). Se descongelan solo con un recargar (F5) que las vuelva a leer.
+  const noCargadasRef = useRef(new Set());
 
   // Carga inicial: intenta el backend; si no responde, se queda en modo local.
   useEffect(() => {
@@ -561,12 +568,14 @@ export function DatosProvider({ children }) {
         if (cancel) return;
         const cargado = {};
         const fallidas = [];
+        noCargadasRef.current = new Set();
         claves.forEach((k, i) => {
           const r = resultados[i];
           if (r?.ok) { cargado[k] = r.val; setters[k]?.(r.val); }
-          // Clave que NO cargó: se queda con su valor local actual y se guarda en prevRef IGUAL a él,
-          // para que el guardado NO la empuje (no sobrescribe la BD con datos locales que no vimos).
-          else { cargado[k] = valores[k]; fallidas.push(k); }
+          // Clave que NO cargó: conserva su valor local y se MARCA como no-cargada para SALTARLA del
+          // guardado (sincronizarBackend la ignora). Así no pisa la BD con un default que nunca vimos,
+          // aunque el usuario edite esa sección. Se descongela con un recargar (F5) que la relea.
+          else { cargado[k] = valores[k]; fallidas.push(k); noCargadasRef.current.add(k); }
         });
         // Solo pasamos a "backend" si al menos UNA clave cargó; si TODAS fallan, seguimos en local
         // (respaldo en localStorage) como hasta hoy.
@@ -600,7 +609,7 @@ export function DatosProvider({ children }) {
       // y "guardando" aparece justo cuando arranca el PUT, no durante el debounce.
       debRef.current = setTimeout(() => {
         setEstadoSync("guardando");
-        sincronizarBackend(snap, prevRef)
+        sincronizarBackend(snap, prevRef, noCargadasRef.current)
           .then(({ sincronizado, fallidas }) => { prevRef.current = sincronizado; setEstadoSync(fallidas.length ? "error" : "guardado"); })
           .catch((e) => { console.warn("Sincronización falló:", e); setEstadoSync("error"); });
       }, 800);
