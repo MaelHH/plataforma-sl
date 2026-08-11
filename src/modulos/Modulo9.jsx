@@ -182,6 +182,9 @@ export default function Modulo9() {
     try {
       // movimientoId → idempotencia server-side: si esto se reintenta, SAP no recibe doble recibo.
       const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id });
+      // Async (flag SAP_ESCRITURA_ASINCRONA ON): el backend ENCOLÓ → responde "pendiente" (aún sin doc).
+      // Se reusa el flujo G4 "pendiente de confirmar": queda ⏳ y se resuelve con "verificar en SAP".
+      if (res?.pendiente) { marcarPendiente(m, { tipo: "total" }, { clave: m.id, absoluteEntry: ord.absoluteEntry, cubetas, kgPorCubeta: kgc, netoKg: neto }); setSapMov(null); return; }
       setMovimientos((prev) => prev.map((x) => x.id === m.id
         ? { ...x, recepcion: { ...x.recepcion, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } } }
         : x));
@@ -511,6 +514,8 @@ export default function Modulo9() {
       // claveEnvio ÚNICA por hora → idempotencia server-side (no doble conteo aunque se reintente).
       // aprobadoPor/Id → se guarda en el recibo (auditoría: quién aprobó esta hora que fue a SAP).
       const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad: cubetas, movimientoId: m.id, claveEnvio: `${m.id}_${hora.id}`, aprobadoPor: hora.aprobacion?.por, aprobadoPorId: hora.aprobacion?.porId != null ? String(hora.aprobacion.porId) : undefined });
+      // Async (flag ON): encolado → "pendiente"; se reusa el flujo G4 (⏳ + "verificar en SAP").
+      if (res?.pendiente) { marcarPendiente(m, { tipo: "hora", id: hora.id }, { clave: `${m.id}_${hora.id}`, absoluteEntry: ord.absoluteEntry, cubetas, kgPorCubeta: kgc, netoKg: neto }); setHoraSap(null); return; }
       setHoras(m.id, (hs) => hs.map((h) => (h.id === hora.id
         ? { ...h, estado: "enviada", sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas, kgPorCubeta: kgc, netoKg: neto, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
         : h)));
@@ -633,6 +638,8 @@ export default function Modulo9() {
         aprobadoPor: aju.aprobacion?.por,
         aprobadoPorId: aju.aprobacion?.porId != null ? String(aju.aprobacion.porId) : undefined,
       });
+      // Async (flag ON): encolado → "pendiente"; se reusa el flujo G4 (⏳ + "verificar en SAP").
+      if (res?.pendiente) { marcarPendiente(mv, { tipo: "ajuste", id: aju.id }, { clave: `${mv.id}_ajuste_${aju.seq}`, absoluteEntry: ord.absoluteEntry, cubetas: cub, kgPorCubeta: 6, netoKg: aju.kg }); setFaltanteMov(null); return; }
       setMovimientos((prev) => prev.map((x) => (x.id === mv.id
         ? { ...x, vaciado: { ...baseVac(x), ajustes: (x.vaciado?.ajustes || []).map((a) => (a.id === aju.id
             ? { ...a, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, cubetas: cub, kgPorCubeta: 6, netoKg: aju.kg, absoluteEntry: ord.absoluteEntry, ts: new Date().toISOString() } }
