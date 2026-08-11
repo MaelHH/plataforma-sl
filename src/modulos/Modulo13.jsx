@@ -146,7 +146,7 @@ export default function Modulo13() {
     if (editId) {
       setMovMateriales((prev) => prev.map((mm) => (mm.id === editId ? { ...payload, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
     } else {
-      const mov = { ...payload, id: nuevoId("MMT_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
+      const mov = { ...payload, id: nuevoId("MMT_"), empresa: miEmpresa, creado: new Date().toLocaleString("es-MX") };
       setMovMateriales((prev) => [mov, ...prev]);
     }
     setEditId(null);
@@ -327,7 +327,7 @@ export default function Modulo13() {
   // Filtro de la lista: búsqueda de texto + filtros por Destino / Línea / Material
   const qLow = q.trim().toLowerCase();
   const movsFiltrados = movMateriales.filter((m) => {
-    if (acotaEmpresa && (m.empresa ?? 1) !== miEmpresa) return false;
+    if (acotaEmpresa && m.empresa != null && m.empresa !== miEmpresa) return false;   // sin etiqueta (null) = mío
     if (fDestino && m.destino !== fDestino) return false;
     if (fLinea && m.linea !== fLinea) return false;
     if (fMaterial && !(m.materialItems || []).some((it) => matDe(it.materialId)?.descripcion === fMaterial)) return false;

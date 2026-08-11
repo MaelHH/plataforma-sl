@@ -34,7 +34,10 @@ export default function Modulo8() {
   // etiqueta `empresa` se considera de la empresa ANCLA = 1 (SL Agrícola, la primera/original).
   const miEmpresa = usuario?.id_empresa ?? null;
   const acotaEmpresa = miEmpresa != null;
-  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? 1; };
+  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? null; };
+  // "Es de mi empresa": sin etiqueta (null = viejo/no sincronizado) cuenta como MÍO; si está
+  // etiquetado, debe coincidir. Así el catálogo sin etiqueta no se oculta (antes se asumía ancla=1).
+  const esDeMiEmpresa = (emp) => !acotaEmpresa || emp == null || emp === miEmpresa;
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
@@ -59,10 +62,12 @@ export default function Modulo8() {
     const base = Array.isArray(prev) ? prev : [];
     const next = base.map((p) => ({ ...p, ranchos: (p.ranchos || []).map((r) => ({ ...r })) }));
     for (const sp of sapList) {
-      // Empate acotado a MI empresa (empresa+code): un sync de otra empresa con el MISMO code
-      // crea su propia entrada en vez de mezclarse con la de otra empresa.
-      let proj = next.find((p) => p.code === sp.code && (p.empresa ?? 1) === (miEmpresa ?? 1));
-      if (!proj) { if (onlyExisting) continue; proj = { code: sp.code, nombre: sp.nombre, empresa: miEmpresa ?? 1, ranchos: [] }; next.push(proj); }
+      // Empate por code: MI empresa o SIN etiqueta (null = viejo/pre-multiempresa). Un sync de OTRA
+      // empresa con el mismo code crea su propia entrada. Si el existente estaba sin etiqueta, se
+      // RE-ETIQUETA a mi empresa → el catálogo viejo queda tuyo y deja de ocultarse al recargar.
+      let proj = next.find((p) => p.code === sp.code && (p.empresa == null || p.empresa === miEmpresa));
+      if (!proj) { if (onlyExisting) continue; proj = { code: sp.code, nombre: sp.nombre, empresa: miEmpresa, ranchos: [] }; next.push(proj); }
+      else if (miEmpresa != null && proj.empresa == null) proj.empresa = miEmpresa;
       for (const sr of (sp.ranchos || [])) {
         const sap = { item: sr.item, ordenes: sr.ordenes, plannedQty: sr.plannedQty, completedQty: sr.completedQty };
         // Identidad del rancho = (lote + cultivo): un mismo lote con 2 cultivos son 2 ranchos.
@@ -301,7 +306,7 @@ export default function Modulo8() {
 
   // ── Editor de Temporadas (manual + SAP) · estilo unificado, todo se guarda en BD ──
   const upTemp = (fn) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).map(fn));
-  const addTemporada = () => setProyectos((prev) => [...(Array.isArray(prev) ? prev : []), { code: nuevoId("TMP_"), nombre: "Nueva temporada", empresa: miEmpresa ?? 1, ranchos: [] }]);
+  const addTemporada = () => setProyectos((prev) => [...(Array.isArray(prev) ? prev : []), { code: nuevoId("TMP_"), nombre: "Nueva temporada", empresa: miEmpresa, ranchos: [] }]);
   const updTemporada = (code, val) => upTemp((p) => p.code === code ? { ...p, nombre: val } : p);
   const delTemporada = (code) => setProyectos((prev) => (Array.isArray(prev) ? prev : []).filter((p) => p.code !== code));
   const addRancho = (code) => upTemp((p) => p.code === code ? { ...p, ranchos: [...(p.ranchos || []), { nombre: "Nuevo rancho", departamento: "", responsables: [] }] } : p);
@@ -460,7 +465,7 @@ export default function Modulo8() {
     if (editId) {
       setMovimientos((prev) => prev.map((mm) => (mm.id === editId ? { ...form, cultivo: cultivoEfectivo, id: editId, actualizado: new Date().toLocaleString("es-MX") } : mm)));
     } else {
-      const mov = { ...form, cultivo: cultivoEfectivo, id: nuevoId("MOV_"), empresa: miEmpresa ?? 1, creado: new Date().toLocaleString("es-MX") };
+      const mov = { ...form, cultivo: cultivoEfectivo, id: nuevoId("MOV_"), empresa: miEmpresa, creado: new Date().toLocaleString("es-MX") };
       setMovimientos((prev) => [mov, ...prev]);
     }
     setEditId(null);
@@ -533,14 +538,14 @@ export default function Modulo8() {
   // administra el catálogo) sí puede aunque no tenga asignaciones.
   const puedeActualizarSAP = acotado || (can ? can("usuarios.administrar") : false);
   // Aislamiento por EMPRESA (primario): solo el catálogo de MI empresa (sin etiqueta → ancla 1).
-  const proyectosDeMiEmpresa = acotaEmpresa ? proyectos.filter((p) => (p.empresa ?? 1) === miEmpresa) : proyectos;
+  const proyectosDeMiEmpresa = acotaEmpresa ? proyectos.filter((p) => esDeMiEmpresa(p.empresa)) : proyectos;
   // Temporadas visibles en el form de crear: mi empresa + acotadas a los proyectos asignados (si aplica).
   const proyectosVisibles = acotado ? proyectosDeMiEmpresa.filter((p) => proyectosAsignados.has(p.code)) : proyectosDeMiEmpresa;
   // Cultivos visibles en la OC: acotados a los cultivos asignados (si el usuario tiene alguno).
   const cultivosAsignados = new Set(alcance?.cultivos || []);
   const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
-    if (acotaEmpresa && (m.empresa ?? empresaDeProy(m.proyecto)) !== miEmpresa) return false;
+    if (!esDeMiEmpresa(m.empresa ?? empresaDeProy(m.proyecto))) return false;
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;

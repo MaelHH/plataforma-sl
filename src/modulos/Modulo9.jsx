@@ -943,9 +943,11 @@ export default function Modulo9() {
   // sin etiqueta → ancla 1 = SL Agrícola). Admin sin empresa (id_empresa null) ve TODO.
   const miEmpresa = usuarioActual?.id_empresa ?? null;
   const acotaEmpresa = miEmpresa != null;
-  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? 1; };
+  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? null; };
+  // Sin etiqueta (null) cuenta como MÍO; si está etiquetado, debe coincidir (antes se asumía ancla=1).
+  const esDeMiEmpresa = (emp) => !acotaEmpresa || emp == null || emp === miEmpresa;
   const movsScope = movimientos.filter((m) => {
-    if (acotaEmpresa && (m.empresa ?? empresaDeProy(m.proyecto)) !== miEmpresa) return false;
+    if (!esDeMiEmpresa(m.empresa ?? empresaDeProy(m.proyecto))) return false;
     if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
     return true;
   });

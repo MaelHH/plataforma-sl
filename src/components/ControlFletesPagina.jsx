@@ -25,7 +25,7 @@ export default function ControlFletesPagina({ tipo, proyectos = [], onBack }) {
   const acotado = proyectosAsignados.size > 0;
   // Aislamiento por EMPRESA (primario): el selector solo ofrece proyectos de MI empresa (sin → ancla 1).
   const miEmpresa = usuario?.id_empresa ?? null;
-  const proyectosDeMiEmpresa = miEmpresa != null ? proyectos.filter((p) => (p.empresa ?? 1) === miEmpresa) : proyectos;
+  const proyectosDeMiEmpresa = miEmpresa != null ? proyectos.filter((p) => p.empresa == null || p.empresa === miEmpresa) : proyectos;
   const proyectosVisibles = acotado ? proyectosDeMiEmpresa.filter((p) => proyectosAsignados.has(p.code)) : proyectosDeMiEmpresa;
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(false);

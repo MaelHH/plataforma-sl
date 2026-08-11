@@ -158,7 +158,7 @@ export default function Dashboard() {
 
   // ── EMPAQUE · Vaciado a producción (lee `movimientos` con los MISMOS helpers del módulo → cuadra) ──
   const hoyEmp = hoyISO();
-  const recibidosEmp = (movimientos || []).filter((m) => (miEmpresa == null || (m.empresa ?? 1) === miEmpresa) && esRecibidoEmpaque(m));
+  const recibidosEmp = (movimientos || []).filter((m) => (miEmpresa == null || m.empresa == null || m.empresa === miEmpresa) && esRecibidoEmpaque(m));
   const empLoteDe = (m) => m.lote || m.rancho || m.consignado || "—";
   const empDestinoDe = (m) => m.consignado || m.distribuidor || m.destino || "—";
   const empDestinos = [...new Set(recibidosEmp.map(empDestinoDe).filter((d) => d && d !== "—"))].sort();
