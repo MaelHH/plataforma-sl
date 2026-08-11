@@ -596,8 +596,10 @@ export function DatosProvider({ children }) {
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
       clearTimeout(debRef.current);
       const snap = valores;
-      setEstadoSync("guardando");
+      // El setState va DENTRO del timer (no síncrono en el cuerpo del efecto → sin cascading renders),
+      // y "guardando" aparece justo cuando arranca el PUT, no durante el debounce.
       debRef.current = setTimeout(() => {
+        setEstadoSync("guardando");
         sincronizarBackend(snap, prevRef)
           .then(({ sincronizado, fallidas }) => { prevRef.current = sincronizado; setEstadoSync(fallidas.length ? "error" : "guardado"); })
           .catch((e) => { console.warn("Sincronización falló:", e); setEstadoSync("error"); });
