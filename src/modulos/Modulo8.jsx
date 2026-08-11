@@ -34,7 +34,6 @@ export default function Modulo8() {
   // etiqueta `empresa` se considera de la empresa ANCLA = 1 (SL Agrícola, la primera/original).
   const miEmpresa = usuario?.id_empresa ?? null;
   const acotaEmpresa = miEmpresa != null;
-  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? null; };
   // "Es de mi empresa": sin etiqueta (null = viejo/no sincronizado) cuenta como MÍO; si está
   // etiquetado, debe coincidir. Así el catálogo sin etiqueta no se oculta (antes se asumía ancla=1).
   const esDeMiEmpresa = (emp) => !acotaEmpresa || emp == null || emp === miEmpresa;
@@ -548,12 +547,16 @@ export default function Modulo8() {
   const proyectosDeMiEmpresa = acotaEmpresa ? proyectos.filter((p) => esDeMiEmpresa(p.empresa)) : proyectos;
   // Temporadas visibles en el form de crear: mi empresa + acotadas a los proyectos asignados (si aplica).
   const proyectosVisibles = acotado ? proyectosDeMiEmpresa.filter((p) => proyectosAsignados.has(p.code)) : proyectosDeMiEmpresa;
+  // Códigos de las temporadas que el usuario VE → se usan para acotar la LISTA de movimientos.
+  const codesVisibles = new Set(proyectosVisibles.map((p) => p.code));
   // Cultivos visibles en la OC: acotados a los cultivos asignados (si el usuario tiene alguno).
   const cultivosAsignados = new Set(alcance?.cultivos || []);
   const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
-    if (!esDeMiEmpresa(m.empresa ?? empresaDeProy(m.proyecto))) return false;
-    if (acotado && m.proyecto && !proyectosAsignados.has(m.proyecto)) return false;
+    // Solo movimientos de una temporada que el usuario VE (su empresa + asignadas). Los que NO
+    // pertenecen a ninguna temporada visible (p. ej. reparto directo sin temporada, u otra empresa)
+    // NO se muestran. Un admin sin empresa (acotaEmpresa false) ve todo.
+    if (acotaEmpresa && (!m.proyecto || !codesVisibles.has(m.proyecto))) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;
     if (qLow) {
