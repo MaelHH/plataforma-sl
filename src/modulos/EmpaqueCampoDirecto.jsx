@@ -110,12 +110,19 @@ export default function EmpaqueCampoDirecto() {
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
   const ordenDe = (m) => {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
-    const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
+    // Campo directo es de UN item (CULTIVO_FIJO = ejote). Con el catálogo por (lote+cultivo) un mismo
+    // lote puede tener varios ranchos (uno por cultivo); se elige el del item CORRECTO para NO mandar
+    // el recibo a la orden de otro cultivo. Si el lote es ambiguo (varios cultivos y ninguno del item),
+    // se devuelve SIN orden (falla CERRADO), nunca `ordenes[0]` arbitraria. Un solo rancho → ese.
+    const mismos = (proj?.ranchos || []).filter((x) => x.nombre === m.rancho);
+    const r = mismos.find((x) => (x.sap?.item || "").toLowerCase() === CULTIVO_FIJO)
+      || (mismos.length === 1 ? mismos[0] : null);
     const ords = r?.sap?.ordenes || [];
     const o0 = ords[0];
     const absoluteEntry = (o0 && typeof o0 === "object") ? o0.absoluteEntry : o0;
     const docNum = (o0 && typeof o0 === "object") ? (o0.docNum ?? o0.DocNum) : undefined;
-    return { absoluteEntry, docNum, item: r?.sap?.item, temporada: proj?.nombre, rancho: r?.nombre, varias: ords.length > 1, hayCatalogo: !!r };
+    return { absoluteEntry, docNum, item: r?.sap?.item, temporada: proj?.nombre, rancho: r?.nombre,
+             varias: ords.length > 1, hayCatalogo: !!r, ambiguo: mismos.length > 1 && !r };
   };
   // Tablas (departamento) conocidas: las de los ranchos + las ya usadas en campo directo.
   const tablaOpts = useMemo(() => {
@@ -451,7 +458,7 @@ export default function EmpaqueCampoDirecto() {
     setSapErrHora(null);
     if (esHistoricoSAP(m, goLiveSAP)) { setSapErrHora({ horaId: h.id, msg: `Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): no se manda a SAP desde aquí.` }); return; }
     if (!h.aprobacion) { setSapErrHora({ horaId: h.id, msg: "Falta APROBAR el cálculo antes de mandar a SAP." }); return; }
-    if (!ord?.absoluteEntry) { setSapErrHora({ horaId: h.id, msg: "Este folio no tiene orden de fabricación en SAP." }); return; }
+    if (!ord?.absoluteEntry) { setSapErrHora({ horaId: h.id, msg: ord?.ambiguo ? "El lote tiene varios cultivos y no se identificó la orden de ejote; no se manda (evita el recibo a otro cultivo). Revisa el catálogo." : "Este folio no tiene orden de fabricación en SAP." }); return; }
     if (!(cub > 0)) { setSapErrHora({ horaId: h.id, msg: "La cantidad calculada es 0." }); return; }
     // ÚLTIMO AVISO antes del POST. A SAP no se le puede deshacer desde aquí; se pregunta SIEMPRE.
     const seguro = await dlg.confirm({
@@ -933,7 +940,7 @@ export default function EmpaqueCampoDirecto() {
                   <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Cubetas a SAP</span><span className="text-2xl font-bold text-indigo-700">{cubetas.toLocaleString()}</span></div>
                   <div className="text-[10px] text-gray-400 mt-0.5">{fmt(neto)} kg ÷ {kgc} = {cubetas} cubetas → suma a "Cantidad completada".</div>
                 </div>
-                {!ord?.absoluteEntry && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> Este folio no tiene orden de fabricación en SAP.</div>}
+                {!ord?.absoluteEntry && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> {ord?.ambiguo ? "El lote tiene varios cultivos y no se identificó la orden de ejote; no se manda. Revisa el catálogo." : "Este folio no tiene orden de fabricación en SAP."}</div>}
                 {errMsg && <div className="text-[11px] text-red-600">No se pudo enviar: {errMsg}</div>}
               </div>
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
