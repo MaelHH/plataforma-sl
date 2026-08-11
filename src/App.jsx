@@ -13,13 +13,18 @@ import { DialogProvider, useDialog } from "./components/Dialog";
 import { AuthProvider, useAuth } from "./store/auth";
 import { getToken, setToken, me } from "./store/api";
 
-// Indicador de conexión al backend (verde = backend, ámbar = modo local).
+// Indicador de conexión al backend (verde = backend, ámbar = modo local) + estado del guardado a la
+// BD (antes un guardado fallido moría en console.warn y el usuario no se enteraba: rojo = no guardó).
 function EstadoConexion() {
-  const { fuente, cargando } = useDatos();
+  const { fuente, cargando, estadoSync } = useDatos();
   if (cargando) return <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-300 animate-pulse"></span>Conectando…</span>;
-  return fuente === "backend"
-    ? <span className="flex items-center gap-1.5 text-green-600"><span className="w-2 h-2 rounded-full bg-green-500"></span>Backend conectado</span>
-    : <span className="flex items-center gap-1.5 text-amber-600" title="El backend no respondió; los datos se guardan solo en este navegador."><span className="w-2 h-2 rounded-full bg-amber-500"></span>Modo local (sin backend)</span>;
+  if (fuente !== "backend")
+    return <span className="flex items-center gap-1.5 text-amber-600" title="El backend no respondió; los datos se guardan solo en este navegador."><span className="w-2 h-2 rounded-full bg-amber-500"></span>Modo local (sin backend)</span>;
+  if (estadoSync === "error")
+    return <span className="flex items-center gap-1.5 text-red-600" title="No se pudo guardar en la base de datos; se reintenta automáticamente. No cierres la app si acabas de capturar algo."><span className="w-2 h-2 rounded-full bg-red-500"></span>Error al guardar (reintentando…)</span>;
+  if (estadoSync === "guardando")
+    return <span className="flex items-center gap-1.5 text-blue-600"><span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>Guardando…</span>;
+  return <span className="flex items-center gap-1.5 text-green-600" title="Conectado y guardado en la base de datos."><span className="w-2 h-2 rounded-full bg-green-500"></span>Backend conectado</span>;
 }
 // Carga diferida (code-splitting): cada módulo se descarga solo cuando se abre, así el
 // bundle inicial es mucho más liviano (recharts/leaflet/xlsx no se cargan de entrada).

@@ -424,12 +424,14 @@ export const KG_POR_BIN_DEFAULT = 260;
 
 // Sincroniza el estado contra el backend (solo lo que cambió vs el último snapshot).
 // Colecciones: upsert por id (PUT) + borrar lo que ya no está. Singletons: PUT completo.
-// Devuelve el snapshot REALMENTE sincronizado: si una clave falla, conserva su valor
-// anterior para que NO se marque como guardada y se reintente en el próximo ciclo
-// (antes un fallo se ignoraba con console.warn y el dato se daba por sincronizado → se perdía).
+// Devuelve { sincronizado, fallidas }: `sincronizado` es el snapshot REALMENTE sincronizado (si una
+// clave falla, conserva su valor anterior para que NO se marque como guardada y se reintente en el
+// próximo ciclo); `fallidas` es la lista de claves que no se pudieron guardar, para AVISAR al usuario
+// (antes un fallo se ignoraba con console.warn y el usuario creía que todo estaba guardado).
 async function sincronizarBackend(snap, prevRef) {
   const prev = prevRef.current || {};
   const sincronizado = { ...snap };
+  const fallidas = [];
   for (const k of Object.keys(CONFIG)) {
     const cfg = CONFIG[k];
     const nuevo = snap[k];
@@ -455,9 +457,10 @@ async function sincronizarBackend(snap, prevRef) {
     } catch (e) {
       console.warn("Error sincronizando", k, e);
       sincronizado[k] = anterior;   // no se guardó → se reintenta en el próximo ciclo (no se da por sincronizado)
+      fallidas.push(k);
     }
   }
-  return sincronizado;
+  return { sincronizado, fallidas };
 }
 
 // ─── CONTEXT ───
@@ -498,6 +501,9 @@ export function DatosProvider({ children }) {
 
   const [fuente, setFuente] = useState("local"); // "local" | "backend"
   const [cargando, setCargando] = useState(true);
+  // Estado del guardado a la BD, para AVISAR al usuario (antes un PUT fallido moría en console.warn
+  // y el usuario creía que todo estaba guardado): "idle" | "guardando" | "guardado" | "error".
+  const [estadoSync, setEstadoSync] = useState("idle");
 
   const setters = {
     trailers: setTrailers, cargasEmbarques: setCargasEmbarques, monitoreo: setMonitoreo,
@@ -590,8 +596,11 @@ export function DatosProvider({ children }) {
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
       clearTimeout(debRef.current);
       const snap = valores;
+      setEstadoSync("guardando");
       debRef.current = setTimeout(() => {
-        sincronizarBackend(snap, prevRef).then((s) => { prevRef.current = s; });
+        sincronizarBackend(snap, prevRef)
+          .then(({ sincronizado, fallidas }) => { prevRef.current = sincronizado; setEstadoSync(fallidas.length ? "error" : "guardado"); })
+          .catch((e) => { console.warn("Sincronización falló:", e); setEstadoSync("error"); });
       }, 800);
     } else {
       // Modo local (sin backend): se conserva en el navegador solo como respaldo temporal.
@@ -623,7 +632,7 @@ export function DatosProvider({ children }) {
     bitacora, setBitacora, registrarEvento,
     materiales, setMateriales, contenedores: Array.isArray(contenedores) ? contenedores : CONTENEDORES_INICIAL, setContenedores, importaciones, setImportaciones,
     defectosCalidad, setDefectosCalidad, inspectoresCalidad, setInspectoresCalidad, lugaresCalidad, setLugaresCalidad,
-    fuente, cargando, // estado de conexión al backend
+    fuente, cargando, estadoSync, // estado de conexión al backend + estado del guardado a la BD
   };
   return <DatosContext.Provider value={value}>{children}</DatosContext.Provider>;
 }
