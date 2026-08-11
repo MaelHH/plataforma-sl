@@ -534,9 +534,12 @@ export function DatosProvider({ children }) {
   // que no las pisamos a ciegas). Se descongelan solo con un recargar (F5) que las vuelva a leer.
   const noCargadasRef = useRef(new Set());
 
-  // Marca el provider como desmontado (el guardado corre en timers/promesas que podrían resolver
+  // Marca el provider como vivo/desmontado (el guardado corre en timers/promesas que podrían resolver
   // después de desmontar; sin esto, un setState tardío avisa warning o deja el indicador pegado).
-  useEffect(() => () => { vivoRef.current = false; }, []);
+  // OJO: hay que RE-poner `true` en el cuerpo (no basta `useRef(true)`): en StrictMode (dev) React hace
+  // montar→desmontar→montar y, sin esto, el cleanup del 1er montaje deja vivoRef en false PARA SIEMPRE
+  // → en dev el indicador de guardado y el auto-reintento quedarían muertos (verde permanente).
+  useEffect(() => { vivoRef.current = true; return () => { vivoRef.current = false; }; }, []);
 
   // Carga inicial: intenta el backend; si no responde, se queda en modo local.
   useEffect(() => {
