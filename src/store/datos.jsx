@@ -508,6 +508,9 @@ export function DatosProvider({ children }) {
   // Estado del guardado a la BD, para AVISAR al usuario (antes un PUT fallido moría en console.warn
   // y el usuario creía que todo estaba guardado): "idle" | "guardando" | "guardado" | "error".
   const [estadoSync, setEstadoSync] = useState("idle");
+  // Contador para forzar un REINTENTO real del guardado tras un fallo (sin depender de que el usuario
+  // vuelva a capturar): al fallar se agenda un bump con timer → re-corre el efecto de persistencia.
+  const [reintentoSync, setReintentoSync] = useState(0);
 
   const setters = {
     trailers: setTrailers, cargasEmbarques: setCargasEmbarques, monitoreo: setMonitoreo,
@@ -525,9 +528,15 @@ export function DatosProvider({ children }) {
   const valores = { trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque };
   const prevRef = useRef(null);
   const debRef = useRef(null);
+  const reintentoRef = useRef(null);   // timer del reintento de guardado
+  const vivoRef = useRef(true);        // false tras desmontar → no llamar setState (evita warning/estado pegado)
   // Claves cuyo GET inicial falló: se SALTAN del guardado (no conocemos su valor real en la BD, así
   // que no las pisamos a ciegas). Se descongelan solo con un recargar (F5) que las vuelva a leer.
   const noCargadasRef = useRef(new Set());
+
+  // Marca el provider como desmontado (el guardado corre en timers/promesas que podrían resolver
+  // después de desmontar; sin esto, un setState tardío avisa warning o deja el indicador pegado).
+  useEffect(() => () => { vivoRef.current = false; }, []);
 
   // Carga inicial: intenta el backend; si no responde, se queda en modo local.
   useEffect(() => {
@@ -604,22 +613,32 @@ export function DatosProvider({ children }) {
     if (fuente === "backend") {
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
       clearTimeout(debRef.current);
+      clearTimeout(reintentoRef.current);
       const snap = valores;
+      // Si el guardado falla, REINTENTA solo (timer), sin depender de que el usuario siga capturando.
+      const agendarReintento = () => { reintentoRef.current = setTimeout(() => { if (vivoRef.current) setReintentoSync((n) => n + 1); }, 5000); };
       // El setState va DENTRO del timer (no síncrono en el cuerpo del efecto → sin cascading renders),
       // y "guardando" aparece justo cuando arranca el PUT, no durante el debounce.
       debRef.current = setTimeout(() => {
-        setEstadoSync("guardando");
+        if (vivoRef.current) setEstadoSync("guardando");
         sincronizarBackend(snap, prevRef, noCargadasRef.current)
-          .then(({ sincronizado, fallidas }) => { prevRef.current = sincronizado; setEstadoSync(fallidas.length ? "error" : "guardado"); })
-          .catch((e) => { console.warn("Sincronización falló:", e); setEstadoSync("error"); });
+          .then(({ sincronizado, fallidas }) => {
+            prevRef.current = sincronizado;
+            if (!vivoRef.current) return;
+            setEstadoSync(fallidas.length ? "error" : "guardado");
+            if (fallidas.length) agendarReintento();   // reintenta las que no se guardaron
+          })
+          .catch((e) => { console.warn("Sincronización falló:", e); if (vivoRef.current) { setEstadoSync("error"); agendarReintento(); } });
       }, 800);
     } else {
       // Modo local (sin backend): se conserva en el navegador solo como respaldo temporal.
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(valores)); }
       catch (e) { console.warn("No se pudo guardar en localStorage:", e); }
     }
+    // Al desmontar (o antes de re-correr) se cancelan los timers pendientes → sin setState tardío.
+    return () => { clearTimeout(debRef.current); clearTimeout(reintentoRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando]);
+  }, [trailers, cargasEmbarques, monitoreo, catalogo, cultivos, programa, requerimientoGen, requerimientoMeta, responsables, lineas, movimientos, movimientosCampo, vaciadoCampoLotes, movMateriales, cargaCampo, ubicaciones, bitacora, materiales, contenedores, importaciones, defectosCalidad, inspectoresCalidad, lugaresCalidad, zonas, consignados, rezagas, proyectos, proveedores, configEmpaque, fuente, cargando, reintentoSync]);
 
   // Registra un evento en la bitácora con estampa de tiempo. Esquema listo para el backend:
   //   { id, ts (ISO/UTC), tsLocal, evento, modulo, actor, destino, ref, detalle, meta }
