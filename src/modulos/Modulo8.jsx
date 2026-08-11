@@ -37,6 +37,9 @@ export default function Modulo8() {
   // "Es de mi empresa": sin etiqueta (null = viejo/no sincronizado) cuenta como MÍO; si está
   // etiquetado, debe coincidir. Así el catálogo sin etiqueta no se oculta (antes se asumía ancla=1).
   const esDeMiEmpresa = (emp) => !acotaEmpresa || emp == null || emp === miEmpresa;
+  // Empresa de un proyecto/temporada del catálogo (null si no se sabe). Se usa para derivar la
+  // empresa de un movimiento sin etiqueta a partir de su temporada.
+  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? null; };
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
@@ -553,10 +556,14 @@ export default function Modulo8() {
   const cultivosAsignados = new Set(alcance?.cultivos || []);
   const acotadoCultivo = cultivosAsignados.size > 0;
   const movsFiltrados = movimientos.filter((m) => {
-    // Solo movimientos de una temporada que el usuario VE (su empresa + asignadas). Los que NO
-    // pertenecen a ninguna temporada visible (p. ej. reparto directo sin temporada, u otra empresa)
-    // NO se muestran. Un admin sin empresa (acotaEmpresa false) ve todo.
-    if (acotaEmpresa && (!m.proyecto || !codesVisibles.has(m.proyecto))) return false;
+    // (1) EMPRESA: se oculta solo si el movimiento es de OTRA empresa conocida (por su etiqueta o,
+    //     si no tiene, por la empresa de su temporada). Sin dato (null) = mío → no se oculta aquí.
+    const empMov = m.empresa ?? empresaDeProy(m.proyecto);
+    if (acotaEmpresa && empMov != null && empMov !== miEmpresa) return false;
+    // (2) TEMPORADA VISIBLE: solo movimientos de una temporada que el usuario VE (su empresa +
+    //     asignadas). Se aplica SOLO si el catálogo ya cargó (codesVisibles no vacío), para no
+    //     vaciar la lista durante la carga. Así se ocultan los sin temporada (reparto directo).
+    if (acotaEmpresa && codesVisibles.size > 0 && (!m.proyecto || !codesVisibles.has(m.proyecto))) return false;
     if (fDestino && m.destino !== fDestino) return false;
     if (fRancho && ranchoDe(m) !== fRancho) return false;
     if (qLow) {
