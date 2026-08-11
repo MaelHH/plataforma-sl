@@ -110,12 +110,15 @@ export default function EmpaqueCampoDirecto() {
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
   const ordenDe = (m) => {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
-    // Campo directo es de UN item (CULTIVO_FIJO = ejote). Con el catálogo por (lote+cultivo) un mismo
-    // lote puede tener varios ranchos (uno por cultivo); se elige el del item CORRECTO para NO mandar
-    // el recibo a la orden de otro cultivo. Si el lote es ambiguo (varios cultivos y ninguno del item),
-    // se devuelve SIN orden (falla CERRADO), nunca `ordenes[0]` arbitraria. Un solo rancho → ese.
+    // Campo directo es de UN cultivo (CULTIVO_FIJO = ejote). Con el catálogo por (lote+cultivo) un
+    // mismo lote puede tener varios ranchos (uno por cultivo); se elige el del cultivo CORRECTO para
+    // NO mandar el recibo a la orden de otro cultivo. El campo canónico es `r.cultivo` (DistributionRule
+    // que llega del backend), IGUAL que Modulo9.ordenSAPde (x.cultivo === m.cultivo) y que lo que
+    // formVacio fija en m.cultivo — NO `sap.item` (ese es el ItemNo del artículo, otro namespace).
+    // Si el lote es ambiguo (varios cultivos y ninguno es el ejote), se devuelve SIN orden (falla
+    // CERRADO), nunca `ordenes[0]` arbitraria. Un solo rancho → ese.
     const mismos = (proj?.ranchos || []).filter((x) => x.nombre === m.rancho);
-    const r = mismos.find((x) => (x.sap?.item || "").toLowerCase() === CULTIVO_FIJO)
+    const r = mismos.find((x) => (x.cultivo || "").toLowerCase() === CULTIVO_FIJO)
       || (mismos.length === 1 ? mismos[0] : null);
     const ords = r?.sap?.ordenes || [];
     const o0 = ords[0];
@@ -1091,9 +1094,11 @@ function VaciadoPanel({ m, netoPorBin, taraBin, fmt, orden, sap, onAbrirHora, on
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-2.5 py-1.5">
             <Package size={13} />
-            {orden?.hayCatalogo
-              ? "Este lote no tiene orden de fabricación en SAP."
-              : "Lote fuera del catálogo SAP: no se podrá mandar a SAP hasta elegir un lote válido."}
+            {orden?.ambiguo
+              ? "El lote tiene varios cultivos y ninguno es ejote; no se identificó la orden. No se mandará a SAP."
+              : orden?.hayCatalogo
+                ? "Este lote no tiene orden de fabricación en SAP."
+                : "Lote fuera del catálogo SAP: no se podrá mandar a SAP hasta elegir un lote válido."}
           </span>
         )}
       </div>
