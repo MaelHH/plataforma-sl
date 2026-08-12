@@ -8,6 +8,7 @@ import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP, getPro
 import { guardarFolioOC } from "../utils/folioOC";
 import { generarPDFVaciadoLotes, generarExcelVaciadoLotes } from "./reportes/vaciadoPorHora";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
+import { esVaciadoPorTaras, METODO_BINS, METODO_TARAS } from "./helpers/vaciado";
 import { hoyISO } from "../utils/fecha";
 
 // Hora actual "HH:MM" (24h) para GUARDAR los registros de vaciado (formato inequívoco).
@@ -42,7 +43,7 @@ const fmt = (n) => Math.round(n || 0).toLocaleString("es-MX");
 
 const formVacio = () => ({
   folio: "", cultivo: CULTIVO_FIJO, fecha: hoyISO(),
-  transporte: "", chofer: "", bins: "",
+  transporte: "", chofer: "", bins: "", taras: "",
   rancho: "", proyecto: "", departamento: "",
   horaSalida: "", horaLlegada: ahoraHM(),   // se recibió AHORA (editable) → queda la hora de llegada
   observaciones: "",
@@ -156,13 +157,17 @@ export default function EmpaqueCampoDirecto() {
   const brutoTotal = bins * brutoPorBin;
   const netoTeorico = bins * netoPorBin;
   const cubetasTicket = bins * cubetasPorBin;
+  // Método de vaciado del folio (sale del cultivo del lote). "taras" = CACO pepino (no se pesa; el
+  // folio lleva el nº de taras de la remisión y va tal cual a SAP). Sin taras → 0.
+  const esTaras = esVaciadoPorTaras(form?.cultivo);
+  const taras = parseInt(form?.taras, 10) || 0;
 
   const abrirNuevo = () => { setEditId(null); setForm(formVacio()); };
   const abrirEditar = (m) => {
     setEditId(m.id);
     setForm({
       folio: m.folio || "", cultivo: m.cultivo || CULTIVO_FIJO, fecha: m.fecha || hoyISO(),
-      transporte: m.transporte || "", chofer: m.chofer || "", bins: m.bins ?? "",
+      transporte: m.transporte || "", chofer: m.chofer || "", bins: m.bins ?? "", taras: m.taras ?? "",
       rancho: m.rancho || "", proyecto: m.proyecto || "", departamento: m.departamento || "",
       horaSalida: m.horaSalida || "", horaLlegada: m.horaLlegada || "", observaciones: m.observaciones || "",
       flete: m.flete ?? "",
@@ -173,7 +178,9 @@ export default function EmpaqueCampoDirecto() {
   // Al cambiar el lote, resolver su temporada (y prellenar tabla si el rancho la trae).
   const onLote = (val) => {
     const info = loteIndex[val];
-    upd({ rancho: val, proyecto: info?.proyecto || "", departamento: (form?.departamento || info?.departamento || "") });
+    // El CULTIVO lo pone el LOTE (su asignación del catálogo), no se asume: de él sale el método de
+    // vaciado (ejote → bins/pesaje; pepino de CACO → taras). Si el lote no trae cultivo, cae a ejote.
+    upd({ rancho: val, proyecto: info?.proyecto || "", departamento: (form?.departamento || info?.departamento || ""), cultivo: info?.cultivo || CULTIVO_FIJO });
   };
 
   const guardar = () => {
@@ -186,26 +193,31 @@ export default function EmpaqueCampoDirecto() {
     if (!folio) { dlg.alerta({ title: "Falta el folio", message: "Captura el número de folio del ticket (la remisión) para saber de qué carga es." }); return; }
     if (!rancho) { dlg.alerta({ title: "Falta el lote", message: "El lote es obligatorio: con él se anida a su temporada y orden de fabricación." }); return; }
     if (!tabla) { dlg.alerta({ title: "Falta la tabla", message: "Captura la tabla (departamento) de donde salió el carro." }); return; }
-    if (bins <= 0) { dlg.alerta({ title: "Faltan los bins", message: "Captura cuántos bins llegaron." }); return; }
+    if (esTaras) {
+      if (taras <= 0) { dlg.alerta({ title: "Faltan las taras", message: "Captura cuántas taras llegaron (el número de la remisión)." }); return; }
+    } else if (bins <= 0) {
+      dlg.alerta({ title: "Faltan los bins", message: "Captura cuántos bins llegaron." }); return;
+    }
     // Folio duplicado dentro de campo directo.
     const dup = lista.find((m) => (m.folio || "").trim() === folio && m.id !== editId);
     if (dup) { dlg.alerta({ title: "Folio repetido", message: `Ya existe un folio ${folio} en campo directo.` }); return; }
 
     const t = ahora();
+    const metodo = esTaras ? METODO_TARAS : METODO_BINS;
     const base = {
       folio, cultivo: form.cultivo || CULTIVO_FIJO, fecha: form.fecha || hoyISO(),
       transporte: (form.transporte || "").trim(), chofer: (form.chofer || "").trim(),
-      bins, rancho: (form.rancho || "").trim(), proyecto: form.proyecto || temporadaDe(form.rancho) || "",
+      rancho: (form.rancho || "").trim(), proyecto: form.proyecto || temporadaDe(form.rancho) || "",
       departamento: (form.departamento || "").trim(),
       horaSalida: form.horaSalida || "", horaLlegada: form.horaLlegada || "",
       observaciones: (form.observaciones || "").trim(),
       flete: (form.flete ?? "").toString().trim(),   // precio del flete (opcional)
-      // Parámetros con los que se calculó el neto (se congelan por folio para auditar).
-      binParams: { brutoPorBin, taraBin, cubetasPorBin },
-      // Neto teórico como "recibido": así los helpers de empaque (kgRecibidosDe/kgEnPisoDe) y el
-      // vaciado (fases siguientes) funcionan igual que en logística. `kgRecibidos` es el override
-      // que lee kgRecibidosDe.
-      netoTeorico: bins * (brutoPorBin - taraBin),
+      metodo,
+      // Por MÉTODO: "taras" (CACO pepino) lleva el Nº de taras DIRECTO (sin pesar); "bins" (ejote SL)
+      // congela los binParams y estima el neto teórico como "recibido" (lo leen los helpers de empaque).
+      ...(esTaras
+        ? { taras, bins: 0 }
+        : { bins, binParams: { brutoPorBin, taraBin, cubetasPorBin }, netoTeorico: bins * (brutoPorBin - taraBin) }),
     };
     if (editId) {
       setMovimientosCampo((prev) => prev.map((m) => {
@@ -216,14 +228,14 @@ export default function EmpaqueCampoDirecto() {
           const ocConPedido = !!(m.ocSAP?.pedido?.docNum ?? m.ocSAP?.pedido?.docEntry);
           return ocConPedido ? m : { ...m, flete: base.flete, actualizado: t.iso };
         }
-        return { ...m, ...base, actualizado: t.iso, vaciado: { ...(m.vaciado || {}), kgRecibidos: base.netoTeorico } };
+        return { ...m, ...base, actualizado: t.iso, vaciado: esTaras ? (m.vaciado || {}) : { ...(m.vaciado || {}), kgRecibidos: base.netoTeorico } };
       }));
       registrarEvento?.({ evento: "campo_directo_editado", modulo: "M9-CD", actor: actorNombre, destino: folio || rancho, ref: editId, detalle: `Editó folio campo directo ${folio || rancho}` });
     } else {
       const id = nuevoId("MOVCD_");
-      const mov = { ...base, id, empresa: miEmpresa, creado: t.iso, vaciado: { kgRecibidos: base.netoTeorico } };
+      const mov = { ...base, id, empresa: miEmpresa, creado: t.iso, vaciado: esTaras ? {} : { kgRecibidos: base.netoTeorico } };
       setMovimientosCampo((prev) => [mov, ...prev]);
-      registrarEvento?.({ evento: "campo_directo_creado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio || rancho, ref: id, detalle: `Creó folio ${folio || "(s/folio)"} · lote ${rancho} · ${bins} bins` });
+      registrarEvento?.({ evento: "campo_directo_creado", modulo: "M9-CD", actor: usuario?.nombre || "Empaque", destino: folio || rancho, ref: id, detalle: `Creó folio ${folio || "(s/folio)"} · lote ${rancho} · ${esTaras ? `${taras} taras` : `${bins} bins`}` });
     }
     cerrarForm();
   };
@@ -832,10 +844,17 @@ export default function EmpaqueCampoDirecto() {
               <Campo lab="Folio * (remisión)">
                 <input value={form.folio} onChange={(e) => upd({ folio: e.target.value })} disabled={lockCamposEdit} placeholder="002038" className={inpLock} />
               </Campo>
-              <Campo lab="Bins mandados *">
-                <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
-              </Campo>
-              <Campo lab="Cultivo (fijo)">
+              {esTaras ? (
+                <Campo lab="Taras (de la remisión) *">
+                  <input type="number" min="0" step="1" value={form.taras ?? ""} onChange={(e) => upd({ taras: e.target.value })} disabled={lockCamposEdit} placeholder="574" className={inpLock} />
+                  <span className="text-[11px] text-gray-400 mt-0.5 block">Pepino: no se pesa; el nº de taras va TAL CUAL a SAP.</span>
+                </Campo>
+              ) : (
+                <Campo lab="Bins mandados *">
+                  <input type="number" min="0" step="1" value={form.bins} onChange={(e) => upd({ bins: e.target.value })} disabled={lockCamposEdit} placeholder="36" className={inpLock} />
+                </Campo>
+              )}
+              <Campo lab="Cultivo (del lote)">
                 <input value={form.cultivo} readOnly disabled className={`${INP} bg-gray-50 text-gray-500`} />
               </Campo>
               <Campo lab="Transporte">
@@ -864,14 +883,21 @@ export default function EmpaqueCampoDirecto() {
               </div>
 
               {/* Cálculo en vivo */}
-              <div className="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 flex items-center gap-4 flex-wrap text-sm">
-                <span className="inline-flex items-center gap-1 text-emerald-800 font-semibold"><Truck size={15} /> {fmt(bins)} bins</span>
-                <span className="text-gray-400">→</span>
-                <span className="text-gray-700">Bruto: <b>{fmt(brutoTotal)}</b> kg</span>
-                <span className="text-gray-700">Peso de bins: <b>{fmt(bins * taraBin)}</b> kg</span>
-                <span className="text-indigo-700">Neto teórico: <b>{fmt(netoTeorico)}</b> kg</span>
-                <span className="text-amber-700">Cubetas: <b>{fmt(cubetasTicket)}</b></span>
-              </div>
+              {esTaras ? (
+                <div className="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 flex items-center gap-3 flex-wrap text-sm">
+                  <span className="inline-flex items-center gap-1 text-emerald-800 font-semibold"><Truck size={15} /> {fmt(taras)} taras</span>
+                  <span className="text-gray-500">→ a SAP se mandarán <b>{fmt(taras)}</b> tal cual (sin pesar ni destarar).</span>
+                </div>
+              ) : (
+                <div className="sm:col-span-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 flex items-center gap-4 flex-wrap text-sm">
+                  <span className="inline-flex items-center gap-1 text-emerald-800 font-semibold"><Truck size={15} /> {fmt(bins)} bins</span>
+                  <span className="text-gray-400">→</span>
+                  <span className="text-gray-700">Bruto: <b>{fmt(brutoTotal)}</b> kg</span>
+                  <span className="text-gray-700">Peso de bins: <b>{fmt(bins * taraBin)}</b> kg</span>
+                  <span className="text-indigo-700">Neto teórico: <b>{fmt(netoTeorico)}</b> kg</span>
+                  <span className="text-amber-700">Cubetas: <b>{fmt(cubetasTicket)}</b></span>
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-100">
               <button onClick={cerrarForm} className="text-sm text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-100">{lockPrecioEdit ? "Cerrar" : "Cancelar"}</button>
