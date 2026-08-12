@@ -17,7 +17,7 @@ const CULTIVO_EJOTE = "ejcon-0001";
 // Resuelve el método de vaciado de un folio por su cultivo (parámetro `empresa` reservado para el
 // editor futuro por empresa+cultivo; hoy no se usa). Sin cultivo → bins (default seguro = el de hoy).
 export function resolverMetodoVaciado({ cultivo, empresa } = {}) {   // eslint-disable-line no-unused-vars
-  const c = (cultivo || "").toLowerCase();
+  const c = (cultivo || "").trim().toLowerCase();       // trim: un espacio en el seed NO debe convertir ejote en taras
   if (!c || c === CULTIVO_EJOTE) return METODO_BINS;   // SL / ejote → pesaje por bins (flujo de hoy)
   return METODO_TARAS;                                  // CACO pepino (y demás no-ejote) → taras directo
 }
