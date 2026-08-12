@@ -7,6 +7,7 @@ import SearchSelect from "../components/SearchSelect";
 import { reciboProduccionSAP, verificarReciboSAP, getOrdenFabricacionSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
 import { guardarFolioOC } from "../utils/folioOC";
 import { generarPDFVaciadoLotes, generarExcelVaciadoLotes } from "./reportes/vaciadoPorHora";
+import { generarPDFVaciadoTaras, generarExcelVaciadoTaras } from "./reportes/vaciadoTaras";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { esVaciadoPorTaras, METODO_BINS, METODO_TARAS } from "./helpers/vaciado";
 import { hoyISO } from "../utils/fecha";
@@ -339,6 +340,46 @@ export default function EmpaqueCampoDirecto() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista, vaciadoCampoLotes, diaReporte]);
   const hayVaciadoDia = argsReporte.lotesHora.length > 0;
+
+  // ── Reporte de TARAS (CACO/pepino): las taras que llegaron, agrupadas por HORA DE CREACIÓN del folio
+  // × lote, + detalle por folio con su estado en SAP. Solo lectura; no toca cómo se guarda ni SAP. ──
+  const argsReporteTaras = useMemo(() => {
+    const folios = lista.filter((f) => esVaciadoPorTaras(f.cultivo) && (f.fecha || hoyISO()) === diaReporte);
+    const porHoraAcc = {};        // hora(int) -> { total, lotes: {lote: taras} }
+    const totalPorLote = {};
+    const lotesSet = new Set();
+    const detalle = [];
+    let totalDia = 0, temporada = "";
+    folios.forEach((f) => {
+      const taras = parseInt(f.taras, 10) || 0;
+      const lote = f.rancho || "—";
+      // Hora de CREACIÓN (el momento exacto en que se creó el folio); fallback a la hora de llegada.
+      let hh = null, horaHM = f.horaLlegada || "";
+      const d = f.creado ? new Date(f.creado) : null;
+      if (d && !Number.isNaN(d.getTime())) { hh = d.getHours(); horaHM = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+      else if (f.horaLlegada) { const p = parseInt(String(f.horaLlegada).split(":")[0], 10); if (!Number.isNaN(p)) hh = p; }
+      const enviado = f.sapEnvio?.docNum != null;
+      const sap = enviado ? `SAP #${f.sapEnvio.docNum}` : (f.sapPendiente ? "Pendiente" : "Sin enviar");
+      detalle.push({ folio: f.folio || "", lote, hora: horaHM || "—", taras, sap, enviado });
+      if (taras <= 0) return;
+      lotesSet.add(lote);
+      totalPorLote[lote] = (totalPorLote[lote] || 0) + taras;
+      totalDia += taras;
+      if (hh != null) {
+        if (!porHoraAcc[hh]) porHoraAcc[hh] = { total: 0, lotes: {} };
+        porHoraAcc[hh].total += taras;
+        porHoraAcc[hh].lotes[lote] = (porHoraAcc[hh].lotes[lote] || 0) + taras;
+      }
+      if (!temporada) temporada = (proyectos || []).find((p) => p.code === f.proyecto)?.nombre || "";
+    });
+    const porHora = Object.entries(porHoraAcc).map(([h, v]) => [Number(h), v]).sort((a, b) => a[0] - b[0]);
+    const lotesTaras = [...lotesSet].sort((a, b) => a.localeCompare(b));
+    return { dia: diaReporte, temporada, porHora, lotesTaras, totalPorLote, totalDia, detalle };
+  }, [lista, diaReporte, proyectos]);
+  // La pantalla es "de taras" cuando TODOS sus lotes son de taras (ej. CACO/pepino). Si es ejote (bins)
+  // → el reporte de bins queda idéntico.
+  const esVistaTaras = lotes.length > 0 && lotes.every((lt) => esVaciadoPorTaras(lt.cultivo));
+  const hayTarasDia = argsReporteTaras.detalle.length > 0;
 
   const netoPorBinDe = (m) => Math.max(0, (parseFloat(m.binParams?.brutoPorBin) || brutoPorBin) - (parseFloat(m.binParams?.taraBin) || taraBin));
 
@@ -736,20 +777,41 @@ export default function EmpaqueCampoDirecto() {
         ))}
       </div>
 
-      {/* Reporte del día (PDF/Excel) — tabla por folio, igual que logística */}
+      {/* Reporte del día (PDF/Excel) — bins (SL/ejote) o TARAS (CACO/pepino) según la temporada */}
       <div className="mb-4 flex items-center gap-2 flex-wrap bg-white border border-gray-200 rounded-xl px-3 py-2.5">
-        <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de vaciado por hora</span>
-        <span className="text-[11px] text-gray-400">· una sola tabla, columnas por lote · bins = {fmt(kgPorBin)} kg</span>
-        <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
-          <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
-        </label>
-        <div className="flex-1" />
-        {!hayVaciadoDia ? (
-          <span className="text-[11px] text-gray-400 italic">Sin vaciados el día seleccionado</span>
+        {esVistaTaras ? (
+          <>
+            <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de taras por hora</span>
+            <span className="text-[11px] text-gray-400">· por hora de creación del folio · Nº de taras tal cual</span>
+            <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
+              <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
+            </label>
+            <div className="flex-1" />
+            {!hayTarasDia ? (
+              <span className="text-[11px] text-gray-400 italic">Sin folios de taras el día seleccionado</span>
+            ) : (
+              <>
+                <button onClick={() => generarExcelVaciadoTaras(argsReporteTaras)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+                <button onClick={() => generarPDFVaciadoTaras(argsReporteTaras)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+              </>
+            )}
+          </>
         ) : (
           <>
-            <button onClick={() => generarExcelVaciadoLotes(argsReporte)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
-            <button onClick={() => generarPDFVaciadoLotes(argsReporte)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+            <span className="text-[13px] font-semibold text-gray-700 inline-flex items-center gap-1.5"><FileText size={15} className="text-gray-400" /> Reporte de vaciado por hora</span>
+            <span className="text-[11px] text-gray-400">· una sola tabla, columnas por lote · bins = {fmt(kgPorBin)} kg</span>
+            <label className="text-xs text-gray-500 inline-flex items-center gap-1 ml-1">Día:
+              <input type="date" value={diaReporte} onChange={(e) => setDiaReporte(e.target.value)} className="text-xs px-2 py-1 border border-gray-200 rounded-md bg-white" />
+            </label>
+            <div className="flex-1" />
+            {!hayVaciadoDia ? (
+              <span className="text-[11px] text-gray-400 italic">Sin vaciados el día seleccionado</span>
+            ) : (
+              <>
+                <button onClick={() => generarExcelVaciadoLotes(argsReporte)} className="text-[11px] bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 inline-flex items-center gap-1"><FileText size={13} /> Excel</button>
+                <button onClick={() => generarPDFVaciadoLotes(argsReporte)} className="text-[11px] bg-red-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-red-700 inline-flex items-center gap-1"><FileText size={13} /> PDF</button>
+              </>
+            )}
           </>
         )}
       </div>
