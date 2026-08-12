@@ -111,15 +111,15 @@ export default function EmpaqueCampoDirecto() {
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
   const ordenDe = (m) => {
     const proj = (proyectos || []).find((p) => p.code === m.proyecto);
-    // Campo directo es de UN cultivo (CULTIVO_FIJO = ejote). Con el catálogo por (lote+cultivo) un
-    // mismo lote puede tener varios ranchos (uno por cultivo); se elige el del cultivo CORRECTO para
-    // NO mandar el recibo a la orden de otro cultivo. El campo canónico es `r.cultivo` (DistributionRule
-    // que llega del backend), IGUAL que Modulo9.ordenSAPde (x.cultivo === m.cultivo) y que lo que
-    // formVacio fija en m.cultivo — NO `sap.item` (ese es el ItemNo del artículo, otro namespace).
-    // Si el lote es ambiguo (varios cultivos y ninguno es el ejote), se devuelve SIN orden (falla
-    // CERRADO), nunca `ordenes[0]` arbitraria. Un solo rancho → ese.
+    // El recibo debe caer en la orden del CULTIVO DEL FOLIO (ejote de SL, o pepino de CACO), NO en la
+    // de otro cultivo. Con el catálogo por (lote+cultivo) un mismo lote puede tener varios ranchos (uno
+    // por cultivo); se elige el del cultivo del folio. El campo canónico es `r.cultivo` (DistributionRule
+    // del backend), IGUAL que Modulo9.ordenSAPde (x.cultivo === m.cultivo) — NO `sap.item` (otro namespace).
+    // Se compara contra `m.cultivo` (que sale del lote); si falta, cae a ejote. Si el lote tiene varios
+    // cultivos y ninguno coincide → SIN orden (falla CERRADO), nunca `ordenes[0]` arbitraria. Un rancho → ese.
+    const cultivoFolio = (m.cultivo || CULTIVO_FIJO).toLowerCase();
     const mismos = (proj?.ranchos || []).filter((x) => x.nombre === m.rancho);
-    const r = mismos.find((x) => (x.cultivo || "").toLowerCase() === CULTIVO_FIJO)
+    const r = mismos.find((x) => (x.cultivo || "").toLowerCase() === cultivoFolio)
       || (mismos.length === 1 ? mismos[0] : null);
     const ords = r?.sap?.ordenes || [];
     const o0 = ords[0];
@@ -243,7 +243,7 @@ export default function EmpaqueCampoDirecto() {
   // ¿El folio se puede tocar (borrar/editar bins)? NO si tiene OC, o si su LOTE ya mandó algo a SAP
   // (cambiar los bins desincronizaría el recibido del lote contra lo ya enviado).
   const loteConEnvio = (proyecto, rancho) => ((vaciadoCampoLotes || []).find((v) => v.id === loteKeyDe(proyecto, rancho))?.vaciado?.horas || []).some((h) => h.sapEnvio || h.sapPendiente);
-  const tieneSAPcd = (m) => !!m.ocSAP || loteConEnvio(m.proyecto, m.rancho);
+  const tieneSAPcd = (m) => !!m.ocSAP || !!m.sapEnvio || !!m.sapPendiente || loteConEnvio(m.proyecto, m.rancho);
   const borrar = async (m) => {
     if (tieneSAPcd(m)) {
       await dlg.alerta({ title: "No se puede borrar", message: `Este folio tiene OC en SAP o su lote ya mandó vaciado a SAP. Borrarlo desincronizaría con SAP, así que no se puede eliminar.` });
@@ -260,7 +260,7 @@ export default function EmpaqueCampoDirecto() {
     const map = {};
     lista.forEach((m) => {
       const key = loteKeyDe(m.proyecto, m.rancho);
-      if (!map[key]) map[key] = { key, proyecto: m.proyecto || "", rancho: m.rancho || "", folios: [], binsRec: 0 };
+      if (!map[key]) map[key] = { key, proyecto: m.proyecto || "", rancho: m.rancho || "", cultivo: m.cultivo || "", folios: [], binsRec: 0 };
       map[key].folios.push(m);
       map[key].binsRec += parseFloat(m.bins) || 0;
     });
@@ -275,7 +275,7 @@ export default function EmpaqueCampoDirecto() {
     // sin fecha, esHistoricoSAP lo trataba como histórico y bloqueaba el envío.
     const fecha = lt.folios.map((f) => f.fecha).filter(Boolean).sort().pop() || hoyISO();
     return {
-      id: lt.key, folio: lt.rancho || "(lote)", rancho: lt.rancho, proyecto: lt.proyecto, fecha,
+      id: lt.key, folio: lt.rancho || "(lote)", rancho: lt.rancho, proyecto: lt.proyecto, cultivo: lt.cultivo || "", fecha,
       bins: lt.binsRec, binParams: { brutoPorBin, taraBin, cubetasPorBin }, netoTeorico,
       vaciado: { eventos: [], mermas: [], horas: [], ...loteVacDe(lt.key), kgRecibidos: netoTeorico },
     };
@@ -433,6 +433,12 @@ export default function EmpaqueCampoDirecto() {
   const [ordSap, setOrdSap] = useState(null);
   const [ordSapCargando, setOrdSapCargando] = useState(false);
   const [ordSapError, setOrdSapError] = useState("");
+  // Envío por TARAS (CACO/pepino): por FOLIO, cantidad = taras exacto. Confirmación LIBRE (una persona),
+  // pero SIEMPRE tras el módulo de verificación (misma ficha en vivo de la orden que la hora).
+  const [tarasSapModal, setTarasSapModal] = useState(null); // folioId
+  const [enviandoTaras, setEnviandoTaras] = useState("");
+  const [verificandoTaras, setVerificandoTaras] = useState("");
+  const [sapErrTaras, setSapErrTaras] = useState(null);     // { folioId, msg }
   const cargarOrdenSAP = (absoluteEntry) => {
     setOrdSap(null); setOrdSapError("");
     if (!absoluteEntry) return;
@@ -496,6 +502,62 @@ export default function EmpaqueCampoDirecto() {
         setHoraSapModal(null);
       } else setSapErrHora({ horaId: h.id, msg: String(e?.message || e) });
     } finally { setEnviandoHora(""); }
+  };
+
+  // ── ENVÍO POR TARAS (CACO/pepino) — por FOLIO, cantidad = taras EXACTO (sin pesar) ──
+  // Abre el módulo de verificación (ficha EN VIVO de la orden: Nº, artículo, lote, departamento, avance).
+  const abrirEnvioTaras = (f) => { setSapErrTaras(null); setVerifMsgCD(null); setTarasSapModal(f.id); cargarOrdenSAP(ordenDe(f)?.absoluteEntry); };
+  // Confirmar desde el modal: LIBRE (una persona), tras verificar. Idempotente (claveEnvio = id del folio,
+  // anti doble conteo). Sin respuesta → PENDIENTE (G4), nunca reenvío a ciegas.
+  const confirmarEnvioTarasModal = async () => {
+    if (!tarasSapModal) return;
+    const f = lista.find((x) => x.id === tarasSapModal);   // folio vivo
+    if (!f) { setTarasSapModal(null); return; }
+    const ord = ordenDe(f);
+    const cantidad = parseInt(f.taras, 10) || 0;
+    setSapErrTaras(null);
+    if (esHistoricoSAP(f, goLiveSAP)) { setSapErrTaras({ folioId: f.id, msg: `Este folio es HISTÓRICO (anterior al corte ${goLiveSAP}): no se manda a SAP desde aquí.` }); return; }
+    if (!ord?.absoluteEntry) { setSapErrTaras({ folioId: f.id, msg: ord?.ambiguo ? "El lote tiene varios cultivos y no se identificó la orden de este cultivo; no se manda (evita el recibo a otro cultivo). Revisa el catálogo." : "Este folio no tiene orden de fabricación en SAP." }); return; }
+    if (!(cantidad > 0)) { setSapErrTaras({ folioId: f.id, msg: "Las taras del folio son 0." }); return; }
+    const seguro = await dlg.confirm({
+      title: `¿Mandar el folio ${f.folio || ""} a SAP?`,
+      message: `Se van a mandar ${cantidad.toLocaleString()} taras (tal cual la remisión, sin pesar ni destarar) a la orden de fabricación #${ord.docNum ?? ord.absoluteEntry}, del lote ${f.rancho || "—"} · tabla ${f.departamento || "—"}.\n\nEsto SUMA a la "Cantidad completada" en SAP y desde aquí NO se puede deshacer.`,
+      confirmText: `Sí, mandar ${cantidad.toLocaleString()} taras`, danger: true,
+    });
+    if (!seguro) return;
+    setEnviandoTaras(f.id); setSapErrTaras(null);
+    try {
+      const res = await reciboProduccionSAP({ absoluteEntry: ord.absoluteEntry, cantidad, movimientoId: f.id, claveEnvio: f.id });
+      setMovimientosCampo((prev) => prev.map((x) => x.id === f.id
+        ? { ...x, sapEnvio: { docEntry: res.docEntry, docNum: res.docNum, taras: cantidad, absoluteEntry: ord.absoluteEntry, ts: ahora().iso } }
+        : x));
+      registrarEvento?.({ evento: "campo_directo_recibo_taras_sap", modulo: "M9-CD", actor: actorNombre, destino: f.folio, ref: f.id, detalle: `${cantidad} taras → orden #${ord.docNum ?? ord.absoluteEntry} · SAP #${res.docNum}`, meta: { taras: cantidad, docNum: res.docNum } });
+      setTarasSapModal(null);
+    } catch (e) {
+      if (e?.sinRespuesta) {   // G4: no sabemos si quedó en SAP → PENDIENTE, no reenviar a ciegas
+        setMovimientosCampo((prev) => prev.map((x) => x.id === f.id ? { ...x, sapPendiente: { clave: f.id, absoluteEntry: ord.absoluteEntry, taras: cantidad, ts: ahora().iso } } : x));
+        setTarasSapModal(null);
+      } else setSapErrTaras({ folioId: f.id, msg: String(e?.message || e) });
+    } finally { setEnviandoTaras(""); }
+  };
+  // G4: preguntar a SAP (SOLO GET) si el recibo de taras ya existe; adopta su doc o libera el reenvío.
+  const verificarTaras = async (f) => {
+    const pend = f.sapPendiente;
+    if (!pend) return;
+    setVerificandoTaras(f.id); setVerifMsgCD(null);
+    try {
+      const r = await verificarReciboSAP({ clave: pend.clave, absoluteEntry: pend.absoluteEntry, cantidad: pend.taras });
+      if (r?.estado === "enviado" || r?.estado === "encontrado") {
+        setMovimientosCampo((prev) => prev.map((x) => x.id === f.id ? { ...x, sapEnvio: { docEntry: r.docEntry, docNum: r.docNum, taras: pend.taras, absoluteEntry: pend.absoluteEntry, ts: ahora().iso, verificado: true }, sapPendiente: undefined } : x));
+        setVerifMsgCD({ folioId: f.id, ok: true, texto: `El recibo SÍ está en SAP (#${r.docNum}). Ya quedó registrado; no se re-manda.` });
+      } else if (r?.estado === "no_encontrado") {
+        setMovimientosCampo((prev) => prev.map((x) => x.id === f.id ? { ...x, sapPendiente: undefined } : x));
+        setVerifMsgCD({ folioId: f.id, ok: false, texto: "SAP no tiene ese recibo: es seguro volver a mandarlo." });
+      } else {
+        setVerifMsgCD({ folioId: f.id, ok: false, texto: r?.mensaje || "Hay varios recibos que coinciden; revísalo en SAP." });
+      }
+    } catch (e) { setVerifMsgCD({ folioId: f.id, ok: false, texto: String(e?.message || e) }); }
+    finally { setVerificandoTaras(""); }
   };
 
   // G4: preguntar a SAP (SOLO GET) si el recibo ya existe; adopta su doc o libera el reenvío.
@@ -725,6 +787,72 @@ export default function EmpaqueCampoDirecto() {
           {lotes.map((lt) => {
             const lm = loteMov(lt);
             const abierto = expandido === lt.key;
+            // TARAS (CACO/pepino): tarjeta SIMPLE — por folio, sin bins/piso/hora. El envío es por folio
+            // (cantidad = taras exacto) tras el módulo de verificación. (El ejote/SL usa la tarjeta de bins de abajo.)
+            if (esVaciadoPorTaras(lt.cultivo)) {
+              const ord = ordenDe(lm);
+              const totTaras = lt.folios.reduce((a, f) => a + (parseInt(f.taras, 10) || 0), 0);
+              return (
+                <div key={lt.key} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5 flex-wrap">
+                    <span className="text-[10px] font-bold text-white bg-emerald-600 rounded px-1.5 py-0.5">LOTE</span>
+                    <span className="font-bold text-gray-900">{lt.rancho || "—"}</span>
+                    <span className="text-xs text-gray-400">{temporadaDe(lt.rancho) || "—"}</span>
+                    {lt.cultivo && <span className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5">{lt.cultivo}</span>}
+                    {ord?.absoluteEntry != null
+                      ? <span className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5">Orden #{ord.docNum ?? ord.absoluteEntry}</span>
+                      : <span className="text-[11px] bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">Sin orden en SAP</span>}
+                    <span className="text-[11px] text-gray-600"><b className="text-gray-800">{fmt(totTaras)}</b> taras · {lt.folios.length} folio{lt.folios.length !== 1 ? "s" : ""}</span>
+                    <div className="flex-1" />
+                    <button onClick={() => setExpandido(abierto ? null : lt.key)} className={`text-xs font-semibold px-2.5 py-1 rounded-lg inline-flex items-center gap-1 ${abierto ? "bg-emerald-600 text-white" : "border border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />} Folios</button>
+                  </div>
+                  {abierto && (
+                    <div className="border-t border-gray-100 px-3 py-3 bg-gray-50/60">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-semibold text-gray-500 uppercase">Folios de este lote ({lt.folios.length})</span>
+                        <button onClick={() => { setEditId(null); setForm({ ...formVacio(), rancho: lt.rancho, proyecto: lt.proyecto, cultivo: lt.cultivo || CULTIVO_FIJO, departamento: lt.folios[0]?.departamento || "" }); }} className="text-[11px] text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1"><Plus size={12} /> Agregar folio a este lote</button>
+                      </div>
+                      <div className="space-y-1">
+                        {lt.folios.map((f) => {
+                          const err = sapErrTaras?.folioId === f.id ? sapErrTaras.msg : null;
+                          const vmsg = verifMsgCD?.folioId === f.id ? verifMsgCD : null;
+                          return (
+                            <div key={f.id} className="text-xs bg-white border border-gray-100 rounded px-2 py-1.5">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-gray-800">{f.folio || "(sin folio)"}</span>
+                                <span className="text-emerald-700"><b>{fmt(parseInt(f.taras, 10) || 0)}</b> taras</span>
+                                {f.departamento && <span className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">Tabla: {f.departamento}</span>}
+                                <div className="flex-1" />
+                                {f.sapEnvio ? (
+                                  <span title="Recibo en SAP" className="text-[10px] px-1.5 py-0.5 border border-green-200 rounded bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={11} /> SAP #{f.sapEnvio.docNum ?? "?"}</span>
+                                ) : f.sapPendiente ? (
+                                  <button onClick={() => verificarTaras(f)} disabled={verificandoTaras === f.id} className="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-50">{verificandoTaras === f.id ? "Verificando…" : "⏳ Verificar en SAP"}</button>
+                                ) : (
+                                  <button onClick={() => abrirEnvioTaras(f)} disabled={enviandoTaras === f.id} className="text-[11px] px-2 py-0.5 rounded bg-green-600 text-white font-semibold hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1"><Send size={11} /> Mandar a SAP</button>
+                                )}
+                                {!f.ocSAP ? (
+                                  <button onClick={() => abrirOC(f)} title="Crear OC de flete de este folio" className="text-[11px] px-2 py-0.5 rounded border border-indigo-200 text-indigo-700 hover:bg-indigo-50 inline-flex items-center gap-1"><FileText size={12} /> OC</button>
+                                ) : (
+                                  <span title="OC en SAP" className="text-[10px] px-1.5 py-0.5 border border-green-200 rounded bg-green-50 text-green-700 inline-flex items-center gap-1"><Check size={11} /> OC</span>
+                                )}
+                                <button onClick={() => abrirEditar(f)} title="Editar / completar datos" className="text-gray-400 hover:text-emerald-700 p-0.5"><Pencil size={14} /></button>
+                                {tieneSAPcd(f) ? (
+                                  <span title="No se puede borrar: ya tocó SAP (recibo u OC)" className="text-gray-200 p-0.5 cursor-not-allowed"><Trash2 size={14} /></span>
+                                ) : (
+                                  <button onClick={() => borrar(f)} title="Borrar folio" className="text-gray-300 hover:text-red-600 p-0.5"><Trash2 size={14} /></button>
+                                )}
+                              </div>
+                              {err && <div className="text-[11px] text-red-600 mt-1">{err}</div>}
+                              {vmsg && <div className={`text-[11px] mt-1 ${vmsg.ok ? "text-green-700" : "text-amber-700"}`}>{vmsg.texto}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
             const rec = kgRecibidosDe(lm);
             const vac = kgVaciadosDe(lm);
             const piso = kgEnPisoDe(lm);
@@ -975,6 +1103,73 @@ export default function EmpaqueCampoDirecto() {
               <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
                 <button onClick={() => setHoraSapModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
                 <button onClick={confirmarEnvioHoraModal} disabled={enviandoHora === h.id || !ord?.absoluteEntry || !(cubetas > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{enviandoHora === h.id ? "Enviando…" : "Confirmar envío a SAP"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal de VERIFICACIÓN + envío por TARAS (CACO/pepino) — muestra TODO lo que va a SAP antes de mandar */}
+      {tarasSapModal && (() => {
+        const f = lista.find((x) => x.id === tarasSapModal);
+        if (!f) return null;
+        const ord = ordenDe(f);
+        const cantidad = parseInt(f.taras, 10) || 0;
+        const loteFolio = (f.rancho || "").trim().toUpperCase();
+        const loteSap = (ordSap?.lote || "").trim().toUpperCase();
+        const difiere = !!(ordSap && loteSap && loteFolio && loteSap !== loteFolio);
+        const errMsg = sapErrTaras?.folioId === f.id ? sapErrTaras.msg : null;
+        const fila = (l, v) => (
+          <div className="flex items-start justify-between gap-3 px-2.5 py-1">
+            <span className="text-gray-500 shrink-0">{l}</span>
+            <span className="text-gray-800 font-semibold text-right break-words">{v ?? "—"}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={() => setTarasSapModal(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-gray-100 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900 w-full"><Send size={16} /> Mandar folio {f.folio || "—"} a SAP</div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div><div className="text-gray-400">Temporada</div><div className="font-semibold">{ord?.temporada || "—"}</div></div>
+                  <div><div className="text-gray-400">Rancho / lote</div><div className="font-semibold">{ord?.rancho || f.rancho || "—"}</div></div>
+                  <div><div className="text-gray-400">Tabla (departamento)</div><div className="font-semibold">{f.departamento || "—"}</div></div>
+                  <div><div className="text-gray-400">Orden fabricación</div><div className="font-semibold">#{(ord?.docNum ?? ord?.absoluteEntry) ?? "—"}</div></div>
+                </div>
+                {/* Ficha de la orden leída EN VIVO de SAP (solo GET) — para verificar contra qué se suma */}
+                <div className="text-[11px] border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="px-2.5 py-1.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-700 inline-flex items-center gap-1"><Search size={12} /> Orden de fabricación (leída de SAP)</span>
+                    {ordSapCargando && <span className="text-gray-400">consultando…</span>}
+                  </div>
+                  {ordSapError ? (
+                    <div className="px-2.5 py-2 text-amber-700 bg-amber-50">No se pudo leer la orden en SAP para verificar ({ordSapError}). Revisa el número antes de mandar.</div>
+                  ) : ordSap ? (
+                    <div className="divide-y divide-gray-100">
+                      {fila("Nº de orden en SAP", <span className="text-indigo-700">#{ordSap.docNum ?? ordSap.absoluteEntry}</span>)}
+                      {fila("Artículo", <>{ordSap.item}{ordSap.descripcion ? ` · ${ordSap.descripcion}` : ""}</>)}
+                      {fila("Lote (rancho) en SAP", <span className={difiere ? "text-red-700" : "text-gray-800"}>{ordSap.lote || "—"}</span>)}
+                      {ordSap.departamento ? fila("Departamento en SAP", ordSap.departamento) : null}
+                      {ordSap.proyecto ? fila("Proyecto en SAP", ordSap.proyecto) : null}
+                      {fila("Avance de la orden", <>{fmt(ordSap.completado)} / {fmt(ordSap.planeado)} · faltan <b className="text-amber-700">{fmt(ordSap.restante)}</b></>)}
+                      {difiere && (
+                        <div className="px-2.5 py-2 bg-red-50 text-red-700">⚠️ <b>El lote NO coincide.</b> La orden #{ordSap.docNum ?? ordSap.absoluteEntry} es del lote <b>{ordSap.lote}</b>, pero este folio es del lote <b>{f.rancho}</b>. Verifícalo antes de mandar.</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="px-2.5 py-2 text-gray-400">Consultando la orden en SAP…</div>
+                  )}
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between"><span className="text-sm font-semibold text-indigo-700">Taras a SAP</span><span className="text-2xl font-bold text-indigo-700">{cantidad.toLocaleString()}</span></div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">Se manda el Nº de taras de la remisión TAL CUAL (sin pesar ni destarar) → suma a "Cantidad completada".</div>
+                </div>
+                {!ord?.absoluteEntry && <div className="inline-flex items-center gap-1 text-[11px] text-red-600"><AlertTriangle size={14} /> {ord?.ambiguo ? "El lote tiene varios cultivos y no se identificó la orden de este cultivo; no se manda. Revisa el catálogo." : "Este folio no tiene orden de fabricación en SAP."}</div>}
+                {errMsg && <div className="text-[11px] text-red-600">No se pudo enviar: {errMsg}</div>}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 flex gap-2 justify-end">
+                <button onClick={() => setTarasSapModal(null)} className="text-xs px-4 py-2 border border-gray-200 rounded-lg text-gray-600">Cancelar</button>
+                <button onClick={confirmarEnvioTarasModal} disabled={enviandoTaras === f.id || !ord?.absoluteEntry || !(cantidad > 0)} className="text-xs px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">{enviandoTaras === f.id ? "Enviando…" : "Confirmar envío a SAP"}</button>
               </div>
             </div>
           </div>
