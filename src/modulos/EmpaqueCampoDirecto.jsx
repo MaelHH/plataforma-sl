@@ -105,8 +105,10 @@ export default function EmpaqueCampoDirecto() {
     return idx;
   }, [proyectos]);
   const loteOpts = useMemo(() => Object.keys(loteIndex)
-    .filter((l) => (!acotaEmpresa || loteIndex[l].empresa == null || loteIndex[l].empresa === miEmpresa) && (!acotado || proyectosAsignados.has(loteIndex[l].proyecto)))
-    .sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex, acotado, proyectosAsignados, acotaEmpresa, miEmpresa]);
+    .filter((l) => (!acotaEmpresa || loteIndex[l].empresa == null || loteIndex[l].empresa === miEmpresa)
+      && (!acotado || proyectosAsignados.has(loteIndex[l].proyecto))
+      && (!acotadoCultivo || cultivosAsignados.has(loteIndex[l].cultivo)))   // solo lotes del cultivo asignado (ej. ejote). Si no hay cultivo asignado → no filtra.
+    .sort((a, b) => a.localeCompare(b)).map((l) => ({ value: l, label: l })), [loteIndex, acotado, proyectosAsignados, acotaEmpresa, miEmpresa, acotadoCultivo, cultivosAsignados]);
   const temporadaDe = (rancho) => loteIndex[rancho]?.temporada || "";
   // Orden de fabricación (SAP) del folio: se resuelve igual que en logística (ordenSAPde),
   // cruzando proyecto (temporada) + rancho (lote) contra el catálogo, y tomando su 1ª orden.
