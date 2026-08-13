@@ -290,6 +290,10 @@ export default function EmpaqueCampoDirecto() {
   const totVaciado = lotes.reduce((a, lt) => a + kgVaciadosDe(loteMov(lt)), 0);
   const totPiso = lotes.reduce((a, lt) => a + kgEnPisoDe(loteMov(lt)), 0);
   const totRecibido = lotes.reduce((a, lt) => a + lt.binsRec * netoPorBin, 0);
+  // Totales de TARAS (para los recuadros cuando la vista es de taras): capturadas, ya en SAP y por enviar.
+  const totTarasCap = lista.reduce((a, m) => a + (esVaciadoPorTaras(m.cultivo) ? (parseInt(m.taras, 10) || 0) : 0), 0);
+  const totTarasSAP = lista.reduce((a, m) => a + (esVaciadoPorTaras(m.cultivo) ? (m.sapEnvio?.taras || 0) : 0), 0);
+  const totTarasPorEnviar = Math.max(0, totTarasCap - totTarasSAP);
 
   // ── Reporte (jefes): UNA SOLA TABLA con columnas por LOTE (como "temporada alta"). Conteo = neto
   // vaciado ÷ 260 (así lo cuentan ellas). Agrega el vaciado del día por hora y por lote. ──
@@ -763,14 +767,19 @@ export default function EmpaqueCampoDirecto() {
         </button>
       </div>
 
-      {/* Resumen */}
+      {/* Resumen — en modo TARAS (CACO/pepino) los recuadros cuentan taras (no bins/kg, que darían 0). */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        {[
+        {(esVistaTaras ? [
+          { lab: "Folios", val: lista.length, color: "text-gray-900" },
+          { lab: "Taras capturadas", val: fmt(totTarasCap), color: "text-emerald-700" },
+          { lab: "Taras a SAP", val: fmt(totTarasSAP), color: "text-green-700" },
+          { lab: "Por enviar", val: fmt(totTarasPorEnviar), color: "text-amber-700", sub: "taras sin enviar a SAP" },
+        ] : [
           { lab: "Folios", val: lista.length, color: "text-gray-900" },
           { lab: "Bins mandados", val: fmt(totBins), color: "text-emerald-700" },
           { lab: "Vaciado (kg)", val: fmt(totVaciado), color: "text-green-700" },
           { lab: "En piso (kg)", val: fmt(totPiso), color: "text-amber-700", sub: `de ${fmt(totRecibido)} kg teóricos` },
-        ].map((s) => (
+        ]).map((s) => (
           <div key={s.lab} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5">
             <div className="text-[11px] text-gray-500">{s.lab}</div>
             <div className={`text-xl font-bold ${s.color}`}>{s.val}</div>
@@ -818,7 +827,8 @@ export default function EmpaqueCampoDirecto() {
         )}
       </div>
 
-      {/* Config del bin */}
+      {/* Config del bin — no aplica en modo taras (no se pesa por bins). */}
+      {!esVistaTaras && (
       <div className="mb-4 bg-emerald-50/50 border border-emerald-200 rounded-xl">
         <button onClick={() => setCfgAbierto((v) => !v)} className="w-full flex items-center justify-between px-3 py-2 text-[13px] font-semibold text-emerald-800">
           <span className="inline-flex items-center gap-1.5"><Package size={14} /> Parámetros del bin · 1 bin = {fmt(brutoPorBin)} kg bruto · peso del bin {fmt(taraBin)} kg · <b>{fmt(netoPorBin)} kg neto</b> · {fmt(cubetasPorBin)} cubetas</span>
@@ -840,6 +850,7 @@ export default function EmpaqueCampoDirecto() {
           </div>
         )}
       </div>
+      )}
 
       {/* Lista por LOTE (junta los folios de cada temporada+lote; se vacía a nivel lote) */}
       {lotes.length === 0 ? (
