@@ -20,13 +20,15 @@ import { useDialog } from "../components/Dialog";
 import EmpaqueCampoDirecto from "./EmpaqueCampoDirecto";
 
 // Switch de página del módulo Empaque (logística / campo directo). Se muestra en ambas vistas.
-function PaginaEmpaqueTabs({ vista, setVista }) {
+// `verLog`/`verCampo` = permisos por pestaña: si el rol solo puede ver UNA, no se muestra el switch.
+function PaginaEmpaqueTabs({ vista, setVista, verLog = true, verCampo = true }) {
   const tab = (key, label, sub) => (
     <button onClick={() => setVista(key)}
       className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${vista === key ? "bg-emerald-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}>
       {label}<span className={`hidden sm:inline font-normal ${vista === key ? "text-emerald-100" : "text-gray-400"}`}> · {sub}</span>
     </button>
   );
+  if (!(verLog && verCampo)) return null;   // solo una pestaña permitida → sin switch (no hay a dónde cambiar)
   return (
     <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl mb-4">
       {tab("logistica", "Empaque logística", "fletes que pasan por logística")}
@@ -390,6 +392,13 @@ export default function Modulo9() {
   const { usuario: usuarioActual, can, alcance } = useAuth();
   const puedeAprobar = can("empaque.vaciado.aprobar");
   const puedeEnviarSap = can("empaque.vaciado.enviar_sap");
+  // Pestañas visibles por permiso. Si el rol NO tiene NINGUNO de los dos permisos de pestaña
+  // (todos los usuarios de hoy) → ve AMBAS (idéntico a hoy). Marcar uno restringe a esa pestaña.
+  const verLogistica = can("empaque.logistica.ver");
+  const verCampoDirecto = can("empaque.campo_directo.ver");
+  const conGatePestana = verLogistica || verCampoDirecto;
+  const puedeVerLog = conGatePestana ? verLogistica : true;
+  const puedeVerCampo = conGatePestana ? verCampoDirecto : true;
   const puedeEditarVaciado = can("empaque.vaciado.editar");
 
   // Aprobación del cálculo (2ª persona): la encargada revisa y confirma que el cálculo es
@@ -1278,11 +1287,13 @@ export default function Modulo9() {
   };
 
   // EMPAQUE CAMPO DIRECTO: flujo INDEPENDIENTE (componente aparte). No comparte nada con el de
-  // logística salvo el switch de página de arriba.
-  if (vista === "campo") {
+  // logística salvo el switch de página de arriba. Se muestra si el rol PUEDE ver campo y (eligió
+  // esa pestaña O solo puede ver campo). El `puedeVerCampo &&` evita fugar el campo a un rol que
+  // solo puede ver logística aunque la vista quedara en "campo".
+  if (puedeVerCampo && (vista === "campo" || !puedeVerLog)) {
     return (
       <div>
-        <PaginaEmpaqueTabs vista={vista} setVista={setVista} />
+        <PaginaEmpaqueTabs vista={vista} setVista={setVista} verLog={puedeVerLog} verCampo={puedeVerCampo} />
         <EmpaqueCampoDirecto />
       </div>
     );
@@ -1290,7 +1301,7 @@ export default function Modulo9() {
 
   return (
     <div>
-      <PaginaEmpaqueTabs vista={vista} setVista={setVista} />
+      <PaginaEmpaqueTabs vista={vista} setVista={setVista} verLog={puedeVerLog} verCampo={puedeVerCampo} />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2 gap-y-3">
         <div>
           <h1 className="text-base font-semibold text-gray-900">Empaque</h1>
