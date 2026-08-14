@@ -10,6 +10,7 @@ import { generarPDFVaciadoLotes, generarExcelVaciadoLotes } from "./reportes/vac
 import { generarPDFVaciadoTaras, generarExcelVaciadoTaras } from "./reportes/vaciadoTaras";
 import { kgRecibidosDe, kgVaciadosDe, kgEnPisoDe, kgMermadosDe, cubetasDe, estaTerminado, kgSobranteCierre, esHistoricoSAP } from "./helpers/empaque";
 import { esVaciadoPorTaras, METODO_BINS, METODO_TARAS } from "./helpers/vaciado";
+import { cargarProyectosPermitidos } from "./helpers/catalogoSAP";
 import { hoyISO } from "../utils/fecha";
 
 // Hora actual "HH:MM" (24h) para GUARDAR los registros de vaciado (formato inequívoco).
@@ -54,7 +55,7 @@ const formVacio = () => ({
 const INP = "w-full text-sm px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-emerald-400";
 
 export default function EmpaqueCampoDirecto() {
-  const { movimientosCampo, setMovimientosCampo, vaciadoCampoLotes, setVaciadoCampoLotes, proyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
+  const { movimientosCampo, setMovimientosCampo, vaciadoCampoLotes, setVaciadoCampoLotes, proyectos, setProyectos, proveedores, setProveedores, configEmpaque, setConfigEmpaque, registrarEvento } = useDatos();
   const { usuario, can, alcance } = useAuth() || {};
   // Alcance por usuario (§2.1): acota folios y opciones a los proyectos/cultivos asignados.
   const proyectosAsignados = useMemo(() => new Set(alcance?.proyectos || []), [alcance]);
@@ -71,6 +72,26 @@ export default function EmpaqueCampoDirecto() {
   // Línea de corte SAP: folios anteriores a esta fecha son HISTÓRICO → no se mandan a SAP.
   const goLiveSAP = configEmpaque?.goLiveSAP || "";
   const actorNombre = usuario?.full_name || usuario?.nombre || usuario?.email || "Empaque";
+
+  // "Actualizar de SAP" DESDE AQUÍ (antes solo estaba en Movimientos Campo/Modulo8): un usuario
+  // SOLO-empaque necesita poder cargar sus temporadas/lotes asignados sin entrar a ese módulo. Solo GET.
+  const [sapCargando, setSapCargando] = useState(false);
+  const [sapError, setSapError] = useState("");
+  const [sapInfo, setSapInfo] = useState("");
+  const puedeActualizarSAP = acotado || (can ? can("usuarios.administrar") : false);
+  const actualizarDeSAP = async () => {
+    if (!puedeActualizarSAP) { setSapError("Necesitas temporadas asignadas para actualizar de SAP. Pídele a un administrador que te asigne."); return; }
+    setSapCargando(true); setSapError(""); setSapInfo("");
+    try {
+      const { lista, updater } = await cargarProyectosPermitidos({ acotado, proyectosAsignados, miEmpresa });
+      setProyectos(updater);
+      setSapInfo(acotado ? `Se cargaron tus temporadas permitidas (${lista.length}) desde SAP, con sus lotes.` : `Temporadas actualizadas desde SAP (${lista.length}).`);
+    } catch (e) {
+      setSapError(String(e?.message || e));
+    } finally {
+      setSapCargando(false);
+    }
+  };
 
   const lista = useMemo(() => {
     const base = Array.isArray(movimientosCampo) ? movimientosCampo : [];
@@ -762,10 +783,24 @@ export default function EmpaqueCampoDirecto() {
           <h1 className="text-base font-semibold text-gray-900 flex items-center gap-2"><Sprout size={18} className="text-emerald-600" /> Empaque campo directo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Carros que llegan directo de campo (sin pasar por logística). Se pesan y se vacían aquí.</p>
         </div>
-        <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
-          <Plus size={16} /> Nuevo folio
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={actualizarDeSAP} disabled={sapCargando || !puedeActualizarSAP}
+            title={!puedeActualizarSAP ? "Necesitas temporadas asignadas para actualizar de SAP" : "Carga tus temporadas y lotes permitidos desde SAP (solo lectura)"}
+            className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-lg border ${sapCargando || !puedeActualizarSAP ? "border-gray-200 text-gray-300 cursor-not-allowed" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"}`}>
+            {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
+          </button>
+          <button onClick={abrirNuevo} className="inline-flex items-center gap-1.5 bg-emerald-600 text-white text-sm font-semibold px-3.5 py-2 rounded-lg hover:bg-emerald-700 shadow-sm">
+            <Plus size={16} /> Nuevo folio
+          </button>
+        </div>
       </div>
+      {(sapError || sapInfo || !puedeActualizarSAP) && (
+        <div className="mb-3 space-y-0.5">
+          {!puedeActualizarSAP && <div className="text-[11px] text-amber-600">Necesitas <b>temporadas asignadas</b> para actualizar de SAP. Pídele a un administrador que te asigne.</div>}
+          {sapError && <div className="text-[11px] text-red-600">No se pudo traer de SAP: {sapError}</div>}
+          {sapInfo && <div className="text-[11px] text-green-700">{sapInfo} Lo que edites a mano se conserva al volver a traer.</div>}
+        </div>
+      )}
 
       {/* Resumen — en modo TARAS (CACO/pepino) los recuadros cuentan taras (no bins/kg, que darían 0). */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
