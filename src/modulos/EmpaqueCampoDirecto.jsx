@@ -967,7 +967,12 @@ export default function EmpaqueCampoDirecto() {
             const vac = kgVaciadosDe(lm);
             const piso = kgEnPisoDe(lm);
             const term = estaTerminado(lm);
-            const pct = rec > 0 ? Math.min(100, Math.round((vac / rec) * 100)) : 0;
+            // Barra de vaciado (sobre lo recibido): VERDE = ya enviado a SAP, AZUL = vaciado sin enviar, ROJO = merma.
+            const enviado = (lm.vaciado?.horas || []).reduce((a, h) => a + (h.sapEnvio?.netoKg || 0), 0);  // kg de horas YA confirmadas en SAP
+            const merma = kgMermadosDe(lm);
+            const pct = rec > 0 ? Math.min(100, Math.round((enviado / rec) * 100)) : 0;                        // % enviado a SAP (verde)
+            const pctPend = rec > 0 ? Math.min(100, Math.max(0, Math.round(((vac - enviado) / rec) * 100))) : 0; // vaciado sin enviar (azul)
+            const pctMerma = rec > 0 ? Math.min(100, Math.round((merma / rec) * 100)) : 0;                     // merma (rojo)
             const npb = netoPorBinDe(lm);
             const binsPiso = npb > 0 ? Math.round(piso / npb) : 0;
             const ord = ordenDe(lm);
@@ -985,9 +990,13 @@ export default function EmpaqueCampoDirecto() {
                   {term ? (
                     <span className="text-[11px] font-semibold text-gray-600 bg-gray-100 rounded-full px-2.5 py-1 inline-flex items-center gap-1"><Check size={12} /> Terminado{kgSobranteCierre(lm) > 1 ? ` · sobraron ${fmt(kgSobranteCierre(lm))} kg` : ""}</span>
                   ) : (
-                    <div className="flex items-center gap-2 min-w-[180px]">
-                      <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-green-500" style={{ width: `${pct}%` }} /></div>
-                      <span className="text-[11px] text-gray-500 whitespace-nowrap">{pct}%</span>
+                    <div className="flex items-center gap-2.5 min-w-[220px]">
+                      <div className="w-44 h-3 bg-gray-100 rounded-full overflow-hidden flex" title={`Enviado a SAP: ${fmt(enviado)} kg · Sin enviar: ${fmt(Math.max(0, vac - enviado))} kg · Merma: ${fmt(merma)} kg · En piso: ${fmt(piso)} kg`}>
+                        <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-blue-500" style={{ width: `${pctPend}%` }} />
+                        <div className="h-full bg-red-500" style={{ width: `${pctMerma}%` }} />
+                      </div>
+                      <span className="text-sm font-bold text-green-700 whitespace-nowrap" title="Porcentaje enviado a SAP">{pct}%</span>
                       <span className="text-xs whitespace-nowrap"><span className="text-amber-700 font-bold">{fmt(piso)}</span> <span className="text-gray-400">kg piso{binsPiso > 0 ? ` · ~${binsPiso} bins` : ""}</span></span>
                     </div>
                   )}
