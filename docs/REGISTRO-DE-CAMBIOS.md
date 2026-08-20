@@ -1,0 +1,69 @@
+# Registro de cambios — Plataforma SL
+
+> Bitácora **viva** de todo lo que cambiamos, para que **no se pase ningún cambio**. Cada entrada dice: qué se cambió, archivos/commits, **revisión de seguridad** (página + SAP) y estado (probado / desplegado). Regla: **cada cambio se revisa contra las reglas de seguridad antes de darlo por bueno.**
+
+---
+
+## 📌 Cómo funciona la app HOY (estructura nueva — tenerlo presente siempre)
+
+- **Dos repos:** frontend `plataforma-sl` (React+Vite) y backend `plataforma-sl-backend` (FastAPI + MySQL). Front en VPS (nginx), backend en servidor Windows (NSSM `PlataformaSL-Backend`, :4104), MySQL en el mismo Windows.
+- **Multi-empresa (multi-tenant):** cada **usuario** tiene una **empresa casa** (`usuarios.id_empresa` → tabla `empresas` con su `sap_company_db`) + **asignaciones** de temporadas/cultivos/proyectos (`usuario_cultivos`, `usuario_proyectos`). Un usuario **acotado** solo ve/opera lo asignado; admin/sin alcance ve todo (fail-safe). Regla de aislamiento: **etiqueta `null` = mío**; el id de empresa **NO es fijo** (nunca `?? 1`).
+- **Ruteo SAP por empresa** (contextvar), flag `SAP_ROUTING_POR_EMPRESA` (default OFF; se enciende aparte).
+- **RBAC:** permisos por módulo/acción en `catalogo_permisos.py` (fuente del código) → sembrados en la tabla `permisos` con `sembrar_permisos`. Roles: admin (super) / gerente / usuario. La pantalla *Roles y permisos* lee de la **tabla** (BD), no del código.
+- **Empaque campo directo:** método de vaciado **por cultivo** (allowlist): **bins** (ejote SL, pesaje) por defecto; **taras** solo pepino/CACO (Nº de remisión directo a SAP). Ramas: feature en `feat/multiempresa`; refactor de arquitectura en `feat/arquitectura` (marcador: `src/models/cola_sap.py`).
+
+## 🔒 Reglas que NO se rompen (checklist por cambio)
+- **SAP:** solo `GET`/`POST`/`PATCH` vía `client.py`; **nunca** PUT/DELETE; **no** tocar `client.py`/`session.py`/`hana_client.py`/`produccion.py`/`compras.py`/`queries.py`; **no** cambiar la forma de mandar al Service Layer; **nunca** crear/escribir objetos globales de SAP (UDF, series, tasas, `SetCurrencyRate`). Avisar antes de tocar datos globales de SAP.
+- **Seguridad de la página:** respetar auth JWT, RBAC, validación en fronteras, CORS; no debilitar candados "para que funcione"; no exponer datos/endpoints sin el patrón actual.
+- **`.env`:** no leer/cargar (usar fake/py_compile).
+- **Aditivo:** columnas/tablas nuevas nullable con default = estado de hoy; nada destructivo.
+- **Deploy:** commit/push solo cuando se pide; nada a producción sin autorización; punto de retorno antes de cambios sensibles.
+
+---
+
+## 🏷️ Puntos de retorno (checkpoints)
+- **`checkpoint-2026-08-18-antes-manifiestos`** (ambos repos) — antes de arrancar el módulo de manifiestos/embarques. Frontend `c272f0d`, backend `20d725f`.
+- `pre-deploy-multiempresa-2026-08-13` (ambos repos) — antes del despliegue de multiempresa.
+
+---
+
+## 📝 Cambios
+
+### 2026-08-18 — Documentación: plan de manifiestos + comparación con el Excel/AddOn SAP
+- **Qué:** análisis del Excel de embarques y del manual del AddOn de SAP; **plan del módulo de manifiestos** (embarque → manifiesto → OC, con PT reales de SAP + salida de emergencia autorizada por Kiko + tablero que reconcilia OV/OC/factura/manifiesto contra SAP). **Solo documentos, NO código.**
+- **Archivos:** `docs/embarques-excel-vs-programa.md`, `docs/plan-modulo-manifiestos.md`.
+- **Seguridad:** N/A (documentos). El plan respeta las reglas SAP (la app **no** crea OV/embarque/entregas en SAP; solo GET + el patrón de OC existente en fase futura).
+- **Estado:** plan aprobado en enfoque; pendiente confirmar preguntas abiertas antes de la Fase 1.
+
+### 2026-08-18 — Empaque campo directo: barra de vaciado de 3 colores
+- **Qué:** en la tarjeta de LOTE (bins/ejote) la barra ahora muestra 🟢 enviado a SAP · 🔵 vaciado sin enviar · 🔴 merma; % grande = lo enviado a SAP; barra más grande. Merma **solo en ejote** (CACO/taras se dejó pendiente por decisión del dueño).
+- **Archivos:** `src/modulos/EmpaqueCampoDirecto.jsx`. **Commit:** `c272f0d`.
+- **Seguridad:** ✅ display-only; **no** cambia el cálculo ni el envío a SAP.
+- **Estado:** probado local; frontend → subir `dist`.
+
+### 2026-08-13/18 — Empaque campo directo: "Actualizar de SAP" para usuario solo-empaque
+- **Qué:** botón "Actualizar de SAP" (cargar temporadas/lotes asignados) también en Empaque campo directo, para usuarios que no entran a Movimientos Campo. Helper compartido `helpers/catalogoSAP.js`.
+- **Archivos:** `src/modulos/helpers/catalogoSAP.js` (nuevo), `src/modulos/EmpaqueCampoDirecto.jsx`. **Commit:** `d3d09f5`.
+- **Seguridad:** ✅ solo **GET** de catálogo (`getCatalogoProyectosSAP`); no toca Modulo8 ni el envío a SAP.
+- **Estado:** frontend → `dist`.
+
+### 2026-08-13 — Empaque campo directo: método TARAS (CACO/pepino), reporte, MF3, fix regresión
+- **Qué:** vaciado por **taras** (Nº de remisión directo a SAP) para CACO/pepino; método por cultivo = **allowlist** (default bins) tras corregir la regresión que mandaba a taras cualquier cultivo ≠ ejote; reporte Excel/PDF de taras; recuadros de resumen en modo taras.
+- **Archivos:** `src/modulos/helpers/vaciado.js`, `src/modulos/reportes/vaciadoTaras.js` (nuevo), `src/modulos/EmpaqueCampoDirecto.jsx`. **Commits:** `d179235`, `84be10b`, `15dc739`, `a6f68fb`.
+- **Seguridad:** ✅ `cantidad = taras` exacto, idempotente (`RP_{folio}`), fail-closed; revisión adversarial OK; **no** cambia la forma de mandar a SAP.
+- **Estado:** validado local SL+CACO→SAP; desplegado a producción.
+
+### 2026-08-13 — Permisos por pestaña en Empaque + gateo del switch
+- **Qué:** 2 permisos nuevos `empaque.logistica.ver` / `empaque.campo_directo.ver`; el switch de Empaque se oculta según el permiso (sin ninguno = ve ambas).
+- **Archivos:** backend `src/auth/catalogo_permisos.py` (commits `f57ece8` en feat/multiempresa, `20d725f` cherry-pick en feat/arquitectura); frontend `src/modulos/Modulo9.jsx` (commit `238bcb5`).
+- **Seguridad:** ✅ aditivo; la pantalla lee de la tabla `permisos` → requiere `sembrar_permisos`. No debilita ningún candado (el backend sigue validando lo crítico).
+- **Estado:** desplegado (sembrado en prod).
+
+### 2026-08-13 — Despliegue de multiempresa a producción
+- **Qué:** migraciones de esquema (empresas, usuarios.id_empresa, asignaciones, proyectos.empresa, ranchos 191, id_empresa operativas) + backend nuevo + frontend `dist`. Corridas con scripts Python (sin cliente mysql).
+- **Seguridad:** ✅ aditivo; flag `SAP_ROUTING_POR_EMPRESA` OFF; SAP intacto.
+- **Estado:** desplegado. Detalle en `docs/DESPLIEGUE-MULTIEMPRESA.md` (backend) y memoria.
+
+---
+
+> **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.
