@@ -65,12 +65,11 @@ EMBARQUE ──► MANIFIESTO (anidado, con PT de SAP) ──► OC de flete (ma
 
 ### ✅ Decisión (2026-08-18): leer PALLETS REALES de SAP (no estimar)
 El **"cajas por parrilla" del Excel es un ESTIMADO** — y cuando no hay stock, en el Excel **"se lo inventan"**. La operación quiere que **todo sea de SAP**, así que lo correcto es **leer los PALLETS REALES de SAP** (como el AddOn: cada pallet con sus **cajas reales**), **NO** estimar con "cajas por parrilla".
-- **Lo que FALTA saber** (de quien programó/maneja el AddOn de SAP — manual `DEV_01`):
-  1. ¿En qué **entidad/tabla** viven los pallets? (nombre exacto)
-  2. ¿Se pueden **leer por Service Layer (OData / GET)**? ¿Qué campos trae cada pallet: item/PT, **cajas**, estado (disponible/asignado), ubicación/almacén?
-  3. ¿Hay ya una **consulta/servicio** para listarlos?
-- Con eso, la asignación pasa de "producto + estimado" a **elegir pallets reales de SAP** → cero estimación. Cuando **no haya pallets** → **bloqueo + salida de emergencia (Kiko)** para que no se inventen.
-- Lo ya hecho (**Panel de PT + stock real**, Fase 1) **sigue sirviendo** (muestra el stock real de SAP); el "cajas por parrilla" queda solo como **respaldo** si un PT no tuviera pallets/datos.
+- **DÓNDE VIVEN LOS PALLETS (resuelto):** tabla de usuario (UDT) **`P_PALLETS`** (en HANA: `"@P_PALLETS"`), con detalle `P_PALLETSDETAIL` y asignación `P_PALLET_ASGMNT` / `P_PALLET_ASGMNT_DET`. Cada pallet trae: **ItemCode (PT)**, **Número de cajas (real)**, **Activo (Y/N)**, **Agricultor (= empresa)**, **Cultivo**, **Lote**, **PalletId**, Tipo de pallet.
+- **CÓMO SE LEE (respeta reglas):** NO por Service Layer (es UDT), sino por **HANA directo con `SELECT` (solo lectura)** — el MISMO patrón ya probado de [[SAP Control de Fletes Acarreo]] (`hana_client.py`, SELECT-only, no toca SAP). Cero escritura.
+- **Pendiente para construir:** (1) el **`HANA_SCHEMA`** (el mismo que se iba a poner para los fletes de acarreo, por empresa/company); (2) los **nombres exactos de las columnas `U_...`** de `@P_PALLETS` y `@P_PALLET_ASGMNT` (se obtienen con un `SELECT TOP 1 * FROM "@P_PALLETS"` o del dev de SAP).
+- **Diseño:** SELECT read-only de pallets **disponibles** (`Activo='Y'` y **no** en `P_PALLET_ASGMNT`), por empresa/cultivo → en la asignación se eligen **pallets reales** (cero estimación). Cuando **no haya pallets** → **bloqueo + salida de emergencia (Kiko)** para que no se inventen.
+- Lo ya hecho (**Panel de PT + stock real**, Fase 1) **sigue sirviendo** (muestra el stock real de SAP); el "cajas por parrilla" queda solo como **respaldo** si un PT no tuviera pallets.
 
 ### No confundir: Orden de VENTA vs Orden de COMPRA
 - **Orden de Venta** = el producto al cliente (pallets). Vive en el **AddOn de SAP**. La app la **prepara/vincula**, no la crea.
