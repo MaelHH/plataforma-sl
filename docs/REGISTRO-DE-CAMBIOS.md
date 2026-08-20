@@ -29,6 +29,13 @@
 
 ## 📝 Cambios
 
+### 2026-08-18 — Fase 1 Manifiestos: stock real de SAP + Panel de PT (Evidencias/Modulo4)
+- **Qué:** en la asignación de PT se **separa el stock real de SAP** (cajas disponibles, `cajasStock`) del campo **"cajas por parrilla"** (densidad de empaque). El stock se muestra en el dropdown de PT (`N disp` / `SIN STOCK`) y en un nuevo **Panel de PT** (Código · Producto · Stock 🟢/🔴 · Cajas/parrilla **editable** · buscar · traer de SAP · resumen con/sin stock). "cajas por parrilla" ahora se **conserva** al actualizar de SAP (antes se pisaba con el stock → inflaba el conteo del manifiesto). Es el Método 2 (recomendado).
+- **Archivos:** `src/modulos/Modulo4.jsx`. **Commit:** `75daf32`.
+- **Seguridad:** ✅ solo **GET** (`getProductosTerminadosSAP`, empresa-aware, company del usuario); **sin escritura a SAP**; editar cajas/parrilla solo toca el catálogo local (store, ya persistido); sin nuevos endpoints ni cambios de auth. Ver [[sap-reglas-garantia]].
+- **Nota:** los PT ya cargados conservan su "cajas por parrilla" actual (si venía del stock por el bug viejo, corregirla en el Panel). PT nuevos empiezan en 0 (se definen en el Panel).
+- **Estado:** probado local (build/lint OK); frontend → subir `dist`. **Fase 2** (bloqueo sin stock + salida de emergencia de Kiko) pendiente.
+
 ### 2026-08-18 — Documentación: plan de manifiestos + comparación con el Excel/AddOn SAP
 - **Qué:** análisis del Excel de embarques y del manual del AddOn de SAP; **plan del módulo de manifiestos** (embarque → manifiesto → OC, con PT reales de SAP + salida de emergencia autorizada por Kiko + tablero que reconcilia OV/OC/factura/manifiesto contra SAP). **Solo documentos, NO código.**
 - **Archivos:** `docs/embarques-excel-vs-programa.md`, `docs/plan-modulo-manifiestos.md`.
