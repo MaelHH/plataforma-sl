@@ -63,6 +63,15 @@ EMBARQUE ──► MANIFIESTO (anidado, con PT de SAP) ──► OC de flete (ma
 - **Logística:** **sale a tiempo** (salida de emergencia), con datos reales donde los hay, y una lista clara de lo que falta.
 - **Producción:** ve la **presión/lista** de lo que falta registrar, con el **nombre del responsable** que autorizó cada salida de emergencia.
 
+### ✅ Decisión (2026-08-18): leer PALLETS REALES de SAP (no estimar)
+El **"cajas por parrilla" del Excel es un ESTIMADO** — y cuando no hay stock, en el Excel **"se lo inventan"**. La operación quiere que **todo sea de SAP**, así que lo correcto es **leer los PALLETS REALES de SAP** (como el AddOn: cada pallet con sus **cajas reales**), **NO** estimar con "cajas por parrilla".
+- **Lo que FALTA saber** (de quien programó/maneja el AddOn de SAP — manual `DEV_01`):
+  1. ¿En qué **entidad/tabla** viven los pallets? (nombre exacto)
+  2. ¿Se pueden **leer por Service Layer (OData / GET)**? ¿Qué campos trae cada pallet: item/PT, **cajas**, estado (disponible/asignado), ubicación/almacén?
+  3. ¿Hay ya una **consulta/servicio** para listarlos?
+- Con eso, la asignación pasa de "producto + estimado" a **elegir pallets reales de SAP** → cero estimación. Cuando **no haya pallets** → **bloqueo + salida de emergencia (Kiko)** para que no se inventen.
+- Lo ya hecho (**Panel de PT + stock real**, Fase 1) **sigue sirviendo** (muestra el stock real de SAP); el "cajas por parrilla" queda solo como **respaldo** si un PT no tuviera pallets/datos.
+
 ### No confundir: Orden de VENTA vs Orden de COMPRA
 - **Orden de Venta** = el producto al cliente (pallets). Vive en el **AddOn de SAP**. La app la **prepara/vincula**, no la crea.
 - **Orden de Compra (flete)** = el pago al transportista (como acarreo) + manifiesto + factura. Esa **sí** la puede crear la app con el patrón existente (fase futura).
