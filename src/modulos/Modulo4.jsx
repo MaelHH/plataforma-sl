@@ -37,9 +37,9 @@ export default function Modulo4() {
           id: it.ItemCode,
           // Código + nombre (como MangoFlow): así pueden buscar por "PT-0001" y ver cuál es.
           label: it.ItemName ? `${it.ItemCode} · ${it.ItemName}` : it.ItemCode,
-          nombre: it.ItemName || "",
           color: "bg-slate-100 text-slate-700",
-          cajasStock: cajas,           // STOCK REAL de SAP (cajas DISPONIBLES). NO es "cajas por parrilla".
+          cajasPorParrilla: cajas,     // ← ahora sale del stock real de SAP (antes 0)
+          cajasStock: cajas,           // referencia: existencia en cajas
           uom: it.InventoryUOM || "",  // unidad de inventario (ej. "Caja")
           librasPorCaja: 0,
           sap: true, sapGrupo: it.ItemsGroupCode,
@@ -48,9 +48,7 @@ export default function Modulo4() {
       setCatalogo((prev) => {
         const base = Array.isArray(prev) ? prev : [];
         const byId = new Map(base.map((c) => [c.id, c]));
-        // Actualiza stock/label/sap desde SAP, pero CONSERVA la "cajas por parrilla" que el usuario
-        // haya definido (SAP no la da). PT nuevo → cajasPorParrilla 0 (se define en el Panel de PT).
-        for (const p of pts) byId.set(p.id, { cajasPorParrilla: 0, ...byId.get(p.id), ...p });
+        for (const p of pts) byId.set(p.id, { ...byId.get(p.id), ...p });
         return Array.from(byId.values()).sort((a, b) => (a.label || "").localeCompare(b.label || ""));
       });
       setPtInfo(pts.length ? `${pts.length} PT de SAP` : "SAP no devolvió PT (revisa el grupo)");
@@ -58,12 +56,18 @@ export default function Modulo4() {
     finally { setPtCargando(false); }
   };
 
-  // Panel de PT: ver el STOCK real de SAP (cajas disponibles) + definir "cajas por parrilla" por PT
-  // (SAP no la da; la define el usuario y se conserva al actualizar de SAP).
-  const [panelPT, setPanelPT] = useState(false);
-  const [ptQ, setPtQ] = useState("");
-  const setCajasParrilla = (id, val) =>
-    setCatalogo((prev) => (Array.isArray(prev) ? prev : []).map((c) => c.id === id ? { ...c, cajasPorParrilla: Math.max(0, parseInt(val, 10) || 0) } : c));
+  // Ver los PT que tienen existencia (>0) en SAP, ordenados por cajas desc (solo lectura).
+  const [ptStock, setPtStock] = useState(null);       // null=cerrado | [] = abierto
+  const [ptStockCargando, setPtStockCargando] = useState(false);
+  const [ptStockError, setPtStockError] = useState("");
+  const verPTconStock = async () => {
+    setPtStock([]); setPtStockCargando(true); setPtStockError("");
+    try {
+      const d = await getProductosTerminadosSAP(true);
+      setPtStock(d.value || []);
+    } catch (e) { setPtStockError(String(e?.message || e)); }
+    finally { setPtStockCargando(false); }
+  };
   const [tabM4, setTabM4] = useState("preparar"); // preparar | enviados
   // Filtros de la pestaña "Enviados" (búsqueda + Destino + Estado SAP) — patrón M13.
   const [q, setQ] = useState("");
@@ -181,7 +185,7 @@ export default function Modulo4() {
               <SearchSelect value={p.prod} disabled={blocked}
                 onChange={(v) => { const n = [...data]; n[idx] = { ...n[idx], prod: v }; onChange(n); }}
                 className={`w-full text-xs px-1.5 py-1 rounded-md border ${blocked ? "bg-gray-100 border-gray-200 cursor-not-allowed text-gray-400" : ""} ${!blocked && p.prod && cat ? cat.color + " border-transparent" : "bg-white border-gray-200 text-gray-400"}`}
-                options={CATALOGO_PT.map((c) => ({ value: c.id, label: c.sap ? `${c.label} · ${(Number(c.cajasStock) || 0) > 0 ? Number(c.cajasStock).toLocaleString() + " disp" : "SIN STOCK"}` : c.label }))} />
+                options={CATALOGO_PT.map((c) => ({ value: c.id, label: c.label }))} />
             </div>
             <div className={`w-11 shrink-0 text-center text-[10px] font-semibold rounded px-0.5 py-1 ${!blocked && cat && p.prod ? "bg-gray-100 text-gray-600" : "text-gray-300"}`}>{!blocked && cat && p.prod ? cat.cajasPorParrilla + " cjs" : "—"}</div>
           </div>
@@ -309,10 +313,10 @@ export default function Modulo4() {
             title="Trae los Productos Terminados reales de SAP para elegirlos en la distribución (solo lectura)">
             <Package size={14} /> {ptCargando ? "Trayendo…" : "Traer PT de SAP"}{ptInfo ? ` · ${ptInfo}` : ""}
           </button>
-          <button onClick={() => setPanelPT(true)}
-            className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-100 inline-flex items-center gap-1"
-            title="Ver el stock real de SAP por PT y definir cuántas cajas caben por parrilla">
-            <Boxes size={14} /> Panel de PT
+          <button onClick={verPTconStock} disabled={ptStockCargando}
+            className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-100 disabled:opacity-50 inline-flex items-center gap-1"
+            title="Muestra los PT que tienen existencia (cajas) en SAP, de mayor a menor (solo lectura)">
+            <Boxes size={14} /> {ptStockCargando ? "Consultando…" : "PT con existencia"}
           </button>
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold">FF</div>
           <span className="text-sm font-medium text-gray-700">Francisco</span>
@@ -479,53 +483,45 @@ export default function Modulo4() {
         </>
       )}
 
-      {/* Panel de PT: stock REAL de SAP + "cajas por parrilla" editable (que SAP no da) */}
-      {panelPT && (() => {
-        const pts = (Array.isArray(catalogo) ? catalogo : []).filter((c) => /^PT/i.test(c.id || ""));
-        const q = ptQ.trim().toLowerCase();
-        const list = (q ? pts.filter((c) => (c.label || "").toLowerCase().includes(q)) : pts).sort((a, b) => (a.label || "").localeCompare(b.label || ""));
-        const conStock = pts.filter((c) => (Number(c.cajasStock) || 0) > 0).length;
-        return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPanelPT(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      {/* Modal: PT con existencia (stock de SAP) */}
+      {ptStock !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setPtStock(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] shadow-xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-emerald-50">
-              <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800"><Boxes size={16} /> Panel de PT — stock de SAP + cajas por parrilla</div>
-              <button onClick={() => setPanelPT(false)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-800"><Boxes size={16} /> PT con existencia en SAP</div>
+              <button onClick={() => setPtStock(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
             </div>
-            <div className="px-5 py-2 border-b border-gray-100 flex items-center gap-2 flex-wrap">
-              <input value={ptQ} onChange={(e) => setPtQ(e.target.value)} placeholder="Buscar PT…" className="text-xs px-2 py-1.5 border border-gray-200 rounded-md flex-1 min-w-[140px]" />
-              <button onClick={cargarPTsap} disabled={ptCargando} className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 disabled:opacity-50 inline-flex items-center gap-1"><Package size={13} /> {ptCargando ? "Trayendo…" : "Traer PT de SAP"}</button>
-            </div>
-            <div className="px-5 py-2 text-[11px] text-gray-400 border-b border-gray-100">El <b className="text-gray-600">stock</b> viene REAL de SAP (actualízalo con "Traer PT de SAP"). Las <b className="text-gray-600">cajas por parrilla</b> las defines tú (SAP no las da) y se conservan.</div>
+            <div className="px-5 py-2 text-xs text-gray-400 border-b border-gray-100">Cajas en stock (mayor a menor). Solo lectura de SAP.</div>
             <div className="overflow-y-auto">
-              {list.length === 0 ? (
-                <div className="text-center text-sm text-gray-400 py-10 px-5">No hay PT cargados. Da clic en <b>"Traer PT de SAP"</b>.</div>
+              {ptStockCargando ? (
+                <div className="text-center text-sm text-gray-400 py-10">Consultando SAP…</div>
+              ) : ptStockError ? (
+                <div className="text-center text-sm text-red-500 py-10 px-5">No se pudo consultar SAP.<div className="text-xs text-gray-400 mt-1">{ptStockError}</div></div>
+              ) : ptStock.length === 0 ? (
+                <div className="text-center text-sm text-gray-400 py-10 px-5">Ningún PT con existencia (o SAP no respondió / VPN caída).</div>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-500 sticky top-0">
-                    <tr><th className="text-left px-4 py-2 font-medium">Código</th><th className="text-left px-4 py-2 font-medium">Producto</th><th className="text-right px-4 py-2 font-medium">Stock (disp)</th><th className="text-center px-4 py-2 font-medium">Cajas/parrilla</th></tr>
+                    <tr><th className="text-left px-4 py-2 font-medium">Código</th><th className="text-left px-4 py-2 font-medium">Producto</th><th className="text-right px-4 py-2 font-medium">Cajas</th></tr>
                   </thead>
                   <tbody>
-                    {list.map((c) => {
-                      const stock = Number(c.cajasStock) || 0;
-                      return (
-                        <tr key={c.id} className="border-t border-gray-100 hover:bg-emerald-50/40">
-                          <td className="px-4 py-1.5 font-mono text-gray-700 whitespace-nowrap">{c.id}</td>
-                          <td className="px-4 py-1.5 text-gray-600">{c.nombre || (c.label || "").split(" · ").slice(1).join(" · ")}</td>
-                          <td className={`px-4 py-1.5 text-right font-semibold ${stock > 0 ? "text-emerald-700" : "text-red-500"}`}>{stock > 0 ? `🟢 ${stock.toLocaleString()}` : "🔴 sin stock"}</td>
-                          <td className="px-4 py-1.5 text-center"><input type="number" min="0" step="1" value={c.cajasPorParrilla ?? 0} onChange={(e) => setCajasParrilla(c.id, e.target.value)} className="w-20 text-center text-xs px-1.5 py-1 border border-gray-200 rounded-md" /></td>
-                        </tr>
-                      );
-                    })}
+                    {ptStock.map((it) => (
+                      <tr key={it.ItemCode} className="border-t border-gray-100 hover:bg-emerald-50/40">
+                        <td className="px-4 py-1.5 font-mono text-gray-700 whitespace-nowrap">{it.ItemCode}</td>
+                        <td className="px-4 py-1.5 text-gray-600">{it.ItemName}</td>
+                        <td className="px-4 py-1.5 text-right font-semibold text-emerald-700">{Math.round(Number(it.QuantityOnStock) || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
             </div>
-            <div className="px-5 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50">{pts.length} PT · <span className="text-emerald-700 font-semibold">{conStock} con stock</span> · <span className="text-red-500">{pts.length - conStock} sin stock</span></div>
+            {!ptStockCargando && !ptStockError && ptStock.length > 0 && (
+              <div className="px-5 py-2 text-xs text-gray-500 border-t border-gray-100 bg-gray-50">{ptStock.length} PT con existencia</div>
+            )}
           </div>
         </div>
-        );
-      })()}
+      )}
 
       {/* Modal cámara */}
       {activePhoto !== null && (

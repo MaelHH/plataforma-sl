@@ -34,7 +34,7 @@
 - **Archivos:** `src/modulos/Modulo4.jsx`. **Commit:** `75daf32`.
 - **Seguridad:** ✅ solo **GET** (`getProductosTerminadosSAP`, empresa-aware, company del usuario); **sin escritura a SAP**; editar cajas/parrilla solo toca el catálogo local (store, ya persistido); sin nuevos endpoints ni cambios de auth. Ver [[sap-reglas-garantia]].
 - **Nota:** los PT ya cargados conservan su "cajas por parrilla" actual (si venía del stock por el bug viejo, corregirla en el Panel). PT nuevos empiezan en 0 (se definen en el Panel).
-- **Estado:** probado local (build/lint OK); frontend → subir `dist`. **Fase 2** (bloqueo sin stock + salida de emergencia de Kiko) pendiente.
+- **Estado:** ~~probado local~~ **REVERTIDO 2026-08-20** (`git checkout checkpoint-2026-08-18-antes-manifiestos -- src/modulos/Modulo4.jsx`). El enfoque cambió: en vez de PT + "cajas por parrilla" estimado, se usarán **pallets reales de SAP** (`@P_PALLETSDETAIL` por HANA). El commit `75daf32` queda en el historial por si algo sirve. Ver `docs/plan-modulo-manifiestos.md` (flujo definitivo).
 
 ### 2026-08-18 — Documentación: plan de manifiestos + comparación con el Excel/AddOn SAP
 - **Qué:** análisis del Excel de embarques y del manual del AddOn de SAP; **plan del módulo de manifiestos** (embarque → manifiesto → OC, con PT reales de SAP + salida de emergencia autorizada por Kiko + tablero que reconcilia OV/OC/factura/manifiesto contra SAP). **Solo documentos, NO código.**
