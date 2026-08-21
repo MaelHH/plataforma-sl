@@ -39,6 +39,28 @@ EMBARQUE ──► MANIFIESTO (anidado, con PT de SAP) ──► OC de flete (ma
 
 ---
 
+## 🗺️ FLUJO DEFINITIVO (diagrama del dueño, 2026-08-20)
+
+```
+Generar OV  →  ¿Hay pallets completos en SAP?
+   │
+   ├── SÍ ──► OV (SAP) ──► Addon de embarque (SAP) ──► Entrega (SAP) ──► Manifiesto (de SAP) ──► Fin
+   │                                  ( TODO real, TODO en SAP — la app no inventa nada )
+   │
+   └── NO ──► Permiso del GERENTE ──► ¿autoriza?
+                                        ├── SÍ ──► Crear MANIFIESTO en la APP (SIN OV, SIN nada en SAP)
+                                        │            · pallets escritos A MANO (solo con permiso), solo en la BD
+                                        │            · sirve para SACAR el manifiesto y embarcar/mandar flete YA
+                                        │            · quedan PENDIENTES → al llegar los pallets reales a SAP:
+                                        │              OV real + embarque real + manifiesto real DESDE SAP
+                                        └── NO ──► Fin (no se crea)
+```
+
+**Reglas del flujo:**
+- **Camino A (con pallets reales):** todo va por SAP. Se genera la **OV** (Service Layer), el **addon de embarque** arma el embarque, SAP genera la **entrega**, y el **manifiesto sale de SAP** (el proceso correcto).
+- **Camino B (sin pallets):** la app **NO manda a SAP**. Solo con **permiso del gerente** se crea un **manifiesto NO real (app-only)** para salir del apuro. Se marca **pendiente**; al llegar los pallets reales, se hace el flujo real de SAP.
+- **Almacenamiento estilo MangoFlow:** la OV/manifiesto se guarda como **registro en la BD** (con secciones); de ahí se "manda a SAP" cuando esté completa con pallets reales. (En MangoFlow la OC se crea al tener folio+flete+cultivo; aquí es distinto pero se **almacena igual**.)
+
 ## 🔑 El AddOn de SAP (del manual `DEV_01`) y cómo convivir con él — LA RECOMENDACIÓN CLAVE
 
 ### Qué hace el AddOn de SAP (flujo real)
