@@ -9,7 +9,7 @@ import {
 } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
-import OrdenesVentaLista from "./OrdenesVentaLista";
+import TableroEmbarques from "./TableroEmbarques";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
 // FASE 2 (solo lectura): selecciona pallets REALES de SAP (GET /api/sap/pallets-disponibles),
@@ -309,8 +309,8 @@ export default function Modulo15() {
       ) : null}
 
       {vista === "ordenes" ? (
-        <OrdenesVentaLista
-          manifiestos={manifiestos} cargando={cargandoM} accionId={accionM}
+        <TableroEmbarques
+          manifiestos={manifiestos} clientes={clientes} cargando={cargandoM} accionId={accionM}
           onEnviar={enviarM} onCancelar={cancelarM} onRefrescar={cargarManifiestos}
         />
       ) : (
