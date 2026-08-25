@@ -10,6 +10,7 @@ import {
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
 import TableroEmbarques from "./TableroEmbarques";
+import ConfirmarEnvioSAP from "./ConfirmarEnvioSAP";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
 // FASE 2 (solo lectura): selecciona pallets REALES de SAP (GET /api/sap/pallets-disponibles),
@@ -54,6 +55,7 @@ export default function Modulo15() {
   const [manifiestos, setManifiestos] = useState([]);
   const [cargandoM, setCargandoM] = useState(false);
   const [accionM, setAccionM] = useState(null); // id del manifiesto en proceso (enviar/cancelar)
+  const [porEnviar, setPorEnviar] = useState(null); // manifiesto en el panel de confirmación
   const dlg = useDialog();
   const [addedIds, setAddedIds] = useState(() => new Set());   // detalles agregados a la OV
   const [selIds, setSelIds] = useState(() => new Set());       // detalles seleccionados en la lista
@@ -184,6 +186,15 @@ export default function Modulo15() {
     }
   }, [avisar, cargarManifiestos, cargar]);
 
+  // Abre el panel de confirmación (muestra lo que se mandará). El envío real ocurre al confirmar.
+  const pedirEnviar = useCallback((m) => setPorEnviar(m), []);
+  const confirmarEnvio = useCallback(async () => {
+    const m = porEnviar;
+    if (!m) return;
+    await enviarM(m);      // hace la escritura + refresca (maneja sus errores internamente)
+    setPorEnviar(null);    // cierra el panel
+  }, [porEnviar, enviarM]);
+
   const cancelarM = useCallback(async (m) => {
     const ok = await dlg.confirm({
       title: "Cancelar OV",
@@ -311,7 +322,7 @@ export default function Modulo15() {
       {vista === "ordenes" ? (
         <TableroEmbarques
           manifiestos={manifiestos} clientes={clientes} cargando={cargandoM} accionId={accionM}
-          onEnviar={enviarM} onCancelar={cancelarM} onRefrescar={cargarManifiestos}
+          onEnviar={pedirEnviar} onCancelar={cancelarM} onRefrescar={cargarManifiestos}
         />
       ) : (
       <>
@@ -545,6 +556,17 @@ export default function Modulo15() {
       </div>
       </>
       )}
+
+      {/* Panel de confirmación antes de mandar a SAP */}
+      {porEnviar ? (
+        <ConfirmarEnvioSAP
+          m={porEnviar}
+          cliente={clientes.find((c) => c.CardCode === porEnviar.cardCode)?.CardName || porEnviar.cardCode}
+          enviando={accionM === porEnviar.id}
+          onConfirm={confirmarEnvio}
+          onCancel={() => setPorEnviar(null)}
+        />
+      ) : null}
 
       {/* Toast */}
       {toast ? (
