@@ -44,6 +44,7 @@ export default function Modulo15() {
   const [cardCode, setCardCode] = useState("");
   const [creando, setCreando] = useState(false);
   const [creado, setCreado] = useState(null);   // { docNum } tras crear la OV
+  const [errorOV, setErrorOV] = useState(null); // { msg, verificar } si falló el Crear OV
   const [addedIds, setAddedIds] = useState(() => new Set());   // detalles agregados a la OV
   const [selIds, setSelIds] = useState(() => new Set());       // detalles seleccionados en la lista
   const [filtro, setFiltro] = useState("");
@@ -121,6 +122,7 @@ export default function Modulo15() {
   const crearOV = useCallback(async () => {
     if (!cardCode || !grupos.length || creando) return;
     setCreando(true);
+    setErrorOV(null);
     try {
       const lineas = grupos.map((g) => {
         const p0 = g.pallets[0] || {};
@@ -136,7 +138,9 @@ export default function Modulo15() {
       avisar(r?.yaExistia ? `Esa OV ya existía (SAP #${r?.docNum})` : `OV creada en SAP · #${r?.docNum}`);
       cargar();   // recarga disponibles (los asignados ya no aparecen)
     } catch (e) {
-      avisar(e?.message || "No se pudo crear la OV. Revisa e intenta de nuevo.");
+      // sinRespuesta (timeout/500/504) = NO sabemos si la OV se creó → verificar en SAP, no reintentar a ciegas.
+      setErrorOV({ msg: e?.message || "No se pudo crear la OV.", verificar: !!e?.sinRespuesta });
+      avisar(e?.sinRespuesta ? "Sin confirmación de SAP — revisa antes de reintentar" : (e?.message || "No se pudo crear la OV"));
     } finally {
       setCreando(false);
     }
@@ -259,6 +263,23 @@ export default function Modulo15() {
           </button>
         </div>
       </div>
+
+      {errorOV ? (
+        <div className={`rounded-xl px-4 py-2.5 flex items-start justify-between gap-3 border ${
+          errorOV.verificar ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"
+        }`}>
+          <span className={`text-sm font-semibold flex items-start gap-2 ${errorOV.verificar ? "text-amber-800" : "text-red-700"}`}>
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              {errorOV.msg}
+              {errorOV.verificar ? <><br /><b>Verifica en SAP</b> si la OV ya se creó (busca una OV reciente de este cliente con estos pallets) ANTES de volver a intentar — la OV no se puede borrar.</> : null}
+            </span>
+          </span>
+          <button onClick={() => setErrorOV(null)} className="p-1 rounded-md text-gray-500 hover:bg-black/5 shrink-0" aria-label="Cerrar">
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
 
       {creado ? (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
