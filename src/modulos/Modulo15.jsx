@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
-  PackagePlus, Plus, Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
-  X, RefreshCw, Package,
+  Plus, Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
+  X, RefreshCw, Package, Building2, ChevronDown, CalendarDays,
 } from "lucide-react";
 import { getPalletsDisponibles, getClientesVenta, crearOrdenVentaSAP } from "../store/api";
 
@@ -218,44 +218,53 @@ export default function Modulo15() {
 
   return (
     <div className="space-y-4">
-      {/* Encabezado: fecha + cliente (Fase 3) + totales + Crear OV */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-emerald-600 grid place-items-center text-white shrink-0">
-            <PackagePlus size={20} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-base font-bold text-gray-800 leading-tight">Asignar Pallets</h2>
-            <p className="text-xs text-gray-500">Arma la orden de venta para embarque con pallets reales de SAP</p>
-          </div>
+      {/* Barra de control: fecha + cliente + totales + Crear OV */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-end gap-4">
+        <div className="flex flex-wrap items-end gap-3 flex-1 min-w-0">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Fecha</span>
+            <div className="relative">
+              <CalendarDays size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="date" value={fecha} onChange={(e) => setFecha(e.target.value)}
+                className="h-10 w-44 pl-9 pr-2 text-sm font-medium text-gray-800 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+          </label>
+
+          <label className="flex flex-col gap-1.5 flex-1 min-w-[240px] max-w-md">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Cliente</span>
+            <div className="relative">
+              <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <select
+                value={cardCode} onChange={(e) => setCardCode(e.target.value)}
+                className={`h-10 w-full pl-9 pr-9 text-sm font-medium border rounded-lg bg-white appearance-none truncate focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 ${
+                  cardCode ? "border-gray-200 text-gray-800" : "border-gray-200 text-gray-400"
+                }`}
+              >
+                <option value="">Elige cliente…</option>
+                {clientes.map((c) => (
+                  <option key={c.CardCode} value={c.CardCode} className="text-gray-800">{c.CardCode} · {c.CardName}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+            {clientes.length ? (
+              <span className="text-[10.5px] text-gray-400 pl-1">{clientes.length} clientes de SAP</span>
+            ) : null}
+          </label>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 lg:ml-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400">Fecha</span>
-            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={INP + " w-40"} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400">Cliente</span>
-            <select value={cardCode} onChange={(e) => setCardCode(e.target.value)} className={INP + " w-60"}>
-              <option value="">— Elige cliente —</option>
-              {clientes.map((c) => (
-                <option key={c.CardCode} value={c.CardCode}>{c.CardCode} · {c.CardName}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="flex items-center gap-4 lg:ml-auto">
+        <div className="flex items-center gap-4 lg:pl-5 lg:border-l lg:border-gray-100 shrink-0">
           <Stat label="cajas" valor={totCajas} sub={`${totPallets} pallets · ${grupos.length} líneas`} />
           <button
             onClick={crearOV}
             disabled={!grupos.length || !cardCode || creando}
             title={!cardCode ? "Elige un cliente" : !grupos.length ? "Agrega pallets" : "Crear la Orden de Venta en SAP"}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm ${
+            className={`h-11 inline-flex items-center gap-2 px-5 rounded-lg font-bold text-sm transition-colors ${
               !grupos.length || !cardCode || creando
                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/30"
             }`}
           >
             {creando ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
