@@ -96,6 +96,12 @@
 - **Seguridad:** ✅ **SOLO LECTURA** — un `SELECT` HANA (candado `execute_select`), cero POST/PATCH; no toca `client.py`/`session.py`/`hana_client.py`; schema validado anti-inyección; bind params; empresa-aware (Paso G). BD: solo permiso nuevo → falta `sembrar_permisos`.
 - **Estado:** en código, sin desplegar. Punto de retorno tag `pre-manifiestos-2026-08-25` (ambos repos). `py_compile` OK; falta probar el GET contra HANA real.
 
+### 2026-08-25 — Módulo Manifiestos · Fase 2: pantalla "Asignar Pallets" (Modulo15, solo lectura)
+- **Qué:** módulo nuevo `Asignar Pallets` (id 15, permiso `manifiestos`) que lee los pallets disponibles de SAP (`getPalletsDisponibles` → GET solo lectura), permite seleccionarlos rápido (escaneo por folio, rango `25940-25960`, clic y **Shift+clic** para seleccionar/deseleccionar) y muestra la **vista previa de la OV agrupada** (por PT+lote+depto) con cultivo/lote/depto/cajas. Botón **"Crear OV" DESHABILITADO** (la escritura a SAP es Fase 3). Selector de **fecha** incluido.
+- **Archivos (front `feat/manifiestos`):** `src/modulos/Modulo15.jsx` (nuevo), `src/store/api.js` (`getPalletsDisponibles`), `src/App.jsx` (import icono + lazy + MODULOS + render). Backend: `src/sap/queries.py` expone flag `corregido` (cultivo tomado de la OF) — sigue solo lectura, sin cambio de esquema.
+- **Seguridad:** ✅ **aditivo** — módulo aislado, no toca ningún módulo existente ni el store global; solo consume el GET de solo lectura; gateado por `manifiestos.ver`; no escribe nada a SAP. `vite build` OK.
+- **Estado:** en código, sin desplegar. Falta: `sembrar_permisos` (para ver el módulo) + probar el GET contra HANA real. Próximo: Fase 3 (crear la OV en SAP, TEST_SLA primero).
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.

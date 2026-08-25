@@ -4,7 +4,7 @@ import { DatosProvider, useDatos } from "./store/datos";
 import {
   Users, LogOut, LayoutDashboard, Boxes, Sprout, PackageOpen, ClipboardList, Truck,
   LayoutGrid, Camera, PackageCheck, DollarSign, Radar, FlaskConical, Container, FileText,
-  AlertTriangle, MapPin, Menu, X, Megaphone, Building2,
+  AlertTriangle, MapPin, Menu, X, Megaphone, Building2, PackagePlus,
 } from "lucide-react";
 import Login from "./components/Login";
 import Usuarios from "./components/Usuarios";
@@ -43,6 +43,7 @@ const Modulo11 = lazy(() => import("./modulos/Modulo11"));
 const Modulo12 = lazy(() => import("./modulos/Modulo12"));
 const Modulo13 = lazy(() => import("./modulos/Modulo13"));
 const Modulo14 = lazy(() => import("./modulos/Modulo14"));
+const Modulo15 = lazy(() => import("./modulos/Modulo15"));
 
 // `desc`: descripción corta visible en el front (banner arriba del módulo).
 // El detalle profundo de cada módulo está en CLAUDE.md.
@@ -59,6 +60,7 @@ const MODULOS = [
   { id: 3, key: "trafico", nombre: "Tablero de Tráfico", sub: "Mónica", icono: LayoutGrid, desc: "Mónica consigue los trailers y confirma su llegada (los marca 'en instalaciones'). De ahí en adelante (carga, embarque…) es de otra área." },
   { id: 4, key: "evidencias", nombre: "Evidencias de Carga", sub: "Francisco", icono: Camera, desc: "Francisco sube fotos de carga y distribución por empresa del trailer, y lo envía a Embarques." },
   { id: 5, key: "embarques", nombre: "Embarques", sub: "Daniel / Cristina", icono: PackageCheck, desc: "Registro del embarque: se captura el manifiesto (folio) de cada empresa y se marca la carga como subida a SAP. (Aquí se REGISTRA.)" },
+  { id: 15, key: "manifiestos", nombre: "Asignar Pallets", sub: "Embarques", icono: PackagePlus, desc: "Arma la Orden de Venta para embarque seleccionando pallets reales de SAP (escaneo, rango y selección múltiple). Por ahora solo lectura: la creación de la OV en SAP llega en la siguiente fase." },
   { id: 6, key: "fletes", nombre: "Consolidado y Fletes", sub: "Cristina", icono: DollarSign, desc: "Reparto del flete entre las empresas de un consolidado (cuánto cobra cada una), con vista base de datos y export a Excel. (Aquí se COBRA/REPORTA.)" },
   { id: 7, key: "monitoreo", nombre: "Monitoreo en Ruta", sub: "Francisco / Kiko", icono: Radar, desc: "Seguimiento en ruta con mapa de México (TIVE) y eventos: preenfriado, retenes, aduanas, accidentes." },
   { id: 12, key: "qc", nombre: "QC - Bodegas", sub: "Control de Calidad", icono: FlaskConical, desc: "Control de calidad en las bodegas de EE.UU. (al llegar el embarque): inspección por producto y defectos (peso → %), con reporte QC tipo dashboard." },
@@ -196,6 +198,7 @@ function AppAutenticada({ onLogout }) {
                     {idActivo === 12 && <Modulo12 />}
                     {idActivo === 13 && <Modulo13 />}
                     {idActivo === 14 && <Modulo14 />}
+                    {idActivo === 15 && <Modulo15 />}
                   </Suspense>
                 </ErrorBoundary>
               </>

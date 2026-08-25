@@ -179,6 +179,10 @@ export const getItemsFleteSAP = () => req("GET", "/api/sap/items-flete");
 export const getProductosTerminadosSAP = (conStock = false) =>
   req("GET", `/api/sap/productos-terminados${qs({ con_stock: conStock ? "true" : undefined })}`, undefined, 60000);
 export const getItemGruposSAP = () => req("GET", "/api/sap/item-grupos");
+// Pallets DISPONIBLES para asignar a una OV de embarque (solo lectura; HANA directo, empresa-aware).
+// Trae los activos NO asignados con la info del AddOn + dimensiones ya derivadas (cultivo/lote/depto).
+export const getPalletsDisponibles = ({ pt, desde, top } = {}) =>
+  req("GET", `/api/sap/pallets-disponibles${qs({ pt, desde, top })}`, undefined, 60000);
 
 // ── Solicitud (necesidad) de trailer — la levanta el encargado de campo ──
 export const getSolicitudesTrailer = (estado) => req("GET", `/api/solicitudes-trailer${qs({ estado })}`);
