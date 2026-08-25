@@ -114,6 +114,12 @@
 - **Seguridad:** ✅ guardar borrador NO toca SAP; el envío sigue con las mismas garantías (solo GET/POST/PATCH, idempotente/resumible, candado in-flight, `_exigir_company_resuelta`, permiso `manifiestos.editar`). BD: columna `estado` **aditiva** → correr `python -m src.scripts.agregar_estado_manifiestos` en BDs donde la tabla ya existía.
 - **Estado:** en código, sin desplegar. `vite build` + `py_compile` OK. **Falta:** correr el script de la columna `estado` en local, y probar el flujo (guardar → lista → Mandar a SAP) en TEST_SLA.
 
+### 2026-08-25 — Módulo Manifiestos · Fase 5a: pestaña "Órdenes de venta" = Tablero de Embarques
+- **Qué:** la pestaña de OV se convierte en el **Tablero de Embarques** (del mockup): KPIs (Órdenes/Cajas/En la app/En SAP/Pallets), buscador + filtros (Todas/En la app/En SAP), tabla con **pipeline ASIG→EMB→MANIF→FLETE→FACT**, columna **Estado** y columna **SAP** (En SAP / Por enviar), y un **drawer** de detalle con líneas+pallets y acciones (Mandar a SAP / Cancelar). Muestra los **dos caminos** (En SAP vs En la app). Por ahora el pipeline solo enciende **ASIG** (en SAP); EMB/MANIF/FLETE/FACT se reconciliarán **automático desde SAP** en la Fase 5b.
+- **Archivos:** frontend (`src/modulos/TableroEmbarques.jsx` nuevo, `src/modulos/Modulo15.jsx`, se eliminó `OrdenesVentaLista.jsx`); backend (`src/sap/service.py` `_resumen` ahora incluye `productos` + `lineas`; commit `6b57ce2`). Commit front `ccef452`.
+- **Seguridad:** ✅ solo lectura de la BD local + acciones ya existentes (Mandar a SAP mantiene sus garantías). No toca SAP de más.
+- **Estado:** en código, sin desplegar. `vite build` + `py_compile` OK. **Falta (Fase 5b):** reconciliación automática desde SAP (embarque/entrega/factura/flete) para encender el resto del pipeline + alerta "generado en la app, falta en SAP"; y la ruta de emergencia (manifiesto sin pallets, permiso del gerente).
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.
