@@ -222,7 +222,7 @@ export default function Modulo15() {
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-end gap-4">
         <div className="flex flex-wrap items-end gap-3 flex-1 min-w-0">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Fecha</span>
+            <span className="h-4 flex items-center text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Fecha</span>
             <div className="relative">
               <CalendarDays size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <input
@@ -233,7 +233,10 @@ export default function Modulo15() {
           </label>
 
           <label className="flex flex-col gap-1.5 flex-1 min-w-[240px] max-w-md">
-            <span className="text-[10.5px] font-bold uppercase tracking-wider text-gray-400">Cliente</span>
+            <span className="h-4 flex items-center justify-between text-[10.5px] font-bold uppercase tracking-wider text-gray-400">
+              <span>Cliente</span>
+              {clientes.length ? <span className="font-medium normal-case tracking-normal text-gray-300">{clientes.length} en SAP</span> : null}
+            </span>
             <div className="relative">
               <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               <select
@@ -249,9 +252,6 @@ export default function Modulo15() {
               </select>
               <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>
-            {clientes.length ? (
-              <span className="text-[10.5px] text-gray-400 pl-1">{clientes.length} clientes de SAP</span>
-            ) : null}
           </label>
         </div>
 
