@@ -3,7 +3,7 @@ import {
   PackagePlus, Plus, Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
   X, RefreshCw, Package,
 } from "lucide-react";
-import { getPalletsDisponibles } from "../store/api";
+import { getPalletsDisponibles, getClientesVenta, crearOrdenVentaSAP } from "../store/api";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
 // FASE 2 (solo lectura): selecciona pallets REALES de SAP (GET /api/sap/pallets-disponibles),
@@ -40,6 +40,10 @@ export default function Modulo15() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [fecha, setFecha] = useState(hoyISO());
+  const [clientes, setClientes] = useState([]);
+  const [cardCode, setCardCode] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [creado, setCreado] = useState(null);   // { docNum } tras crear la OV
   const [addedIds, setAddedIds] = useState(() => new Set());   // detalles agregados a la OV
   const [selIds, setSelIds] = useState(() => new Set());       // detalles seleccionados en la lista
   const [filtro, setFiltro] = useState("");
@@ -70,6 +74,9 @@ export default function Modulo15() {
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => () => clearTimeout(toastT.current), []);
+  useEffect(() => {
+    getClientesVenta().then((r) => setClientes(Array.isArray(r?.value) ? r.value : [])).catch(() => {});
+  }, []);
 
   // Lista visible: disponibles (no agregados) filtrados por texto o por rango de folios.
   const visibles = useMemo(() => {
@@ -109,6 +116,31 @@ export default function Modulo15() {
 
   const totCajas = useMemo(() => grupos.reduce((a, l) => a + l.cajas, 0), [grupos]);
   const totPallets = useMemo(() => new Set(added.map((p) => p.palletCode)).size, [added]);
+
+  // Crear la OV en SAP (POST idempotente/resumible). Manda las mismas líneas de la vista previa.
+  const crearOV = useCallback(async () => {
+    if (!cardCode || !grupos.length || creando) return;
+    setCreando(true);
+    try {
+      const lineas = grupos.map((g) => {
+        const p0 = g.pallets[0] || {};
+        return {
+          pt: g.pt, cajas: g.cajas, cultivo: g.cultivo, lote: g.lote, depto: g.depto,
+          fraccion: p0.fraccion, unidadAduana: p0.unidadAduana, pesoKg: p0.pesoKg,
+          pallets: g.pallets.map((p) => ({ palletCode: p.palletCode, palletDet: p.palletDet, folio: p.folio })),
+        };
+      });
+      const r = await crearOrdenVentaSAP({ cardCode, fecha, lineas });
+      setCreado({ docNum: r?.docNum });
+      setAddedIds(new Set());
+      avisar(r?.yaExistia ? `Esa OV ya existía (SAP #${r?.docNum})` : `OV creada en SAP · #${r?.docNum}`);
+      cargar();   // recarga disponibles (los asignados ya no aparecen)
+    } catch (e) {
+      avisar(e?.message || "No se pudo crear la OV. Revisa e intenta de nuevo.");
+    } finally {
+      setCreando(false);
+    }
+  }, [cardCode, grupos, fecha, creando, avisar, cargar]);
 
   // ── acciones sobre la OV ──
   const agregar = useCallback((ids, quiet) => {
@@ -201,8 +233,11 @@ export default function Modulo15() {
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400">Cliente</span>
-            <select disabled className={INP + " w-52 opacity-60 cursor-not-allowed"} title="Se elige al crear la OV (Fase 3)">
-              <option>— (Fase 3) —</option>
+            <select value={cardCode} onChange={(e) => setCardCode(e.target.value)} className={INP + " w-60"}>
+              <option value="">— Elige cliente —</option>
+              {clientes.map((c) => (
+                <option key={c.CardCode} value={c.CardCode}>{c.CardCode} · {c.CardName}</option>
+              ))}
             </select>
           </label>
         </div>
@@ -210,14 +245,31 @@ export default function Modulo15() {
         <div className="flex items-center gap-4 lg:ml-auto">
           <Stat label="cajas" valor={totCajas} sub={`${totPallets} pallets · ${grupos.length} líneas`} />
           <button
-            disabled
-            title="La creación de la OV en SAP llega en la Fase 3"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm bg-gray-100 text-gray-400 cursor-not-allowed"
+            onClick={crearOV}
+            disabled={!grupos.length || !cardCode || creando}
+            title={!cardCode ? "Elige un cliente" : !grupos.length ? "Agrega pallets" : "Crear la Orden de Venta en SAP"}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm ${
+              !grupos.length || !cardCode || creando
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-emerald-600 text-white hover:bg-emerald-700"
+            }`}
           >
-            <Plus size={18} /> Crear OV
+            {creando ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+            {creando ? "Creando…" : "Crear OV"}
           </button>
         </div>
       </div>
+
+      {creado ? (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
+          <span className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
+            <Check size={16} /> Orden de venta creada en SAP · <b className="font-mono">#{creado.docNum}</b> — lista para el embarque.
+          </span>
+          <button onClick={() => setCreado(null)} className="p-1 rounded-md text-emerald-700 hover:bg-emerald-100" aria-label="Cerrar">
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {/* ── Disponibles ── */}

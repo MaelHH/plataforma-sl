@@ -183,6 +183,11 @@ export const getItemGruposSAP = () => req("GET", "/api/sap/item-grupos");
 // Trae los activos NO asignados con la info del AddOn + dimensiones ya derivadas (cultivo/lote/depto).
 export const getPalletsDisponibles = ({ pt, desde, top } = {}) =>
   req("GET", `/api/sap/pallets-disponibles${qs({ pt, desde, top })}`, undefined, 60000);
+// Clientes (BusinessPartners cCustomer) para elegir el de la OV (solo lectura).
+export const getClientesVenta = (q) => req("GET", `/api/sap/clientes-venta${qs({ q })}`, undefined, 60000);
+// ESCRITURA: crea la OV + asignación de pallets en SAP (idempotente/resumible).
+// body: { cardCode, fecha, lineas:[{ pt, cajas, cultivo, lote, depto, fraccion, unidadAduana, pesoKg, pallets:[{palletCode,palletDet,folio}] }] }.
+export const crearOrdenVentaSAP = (body) => req("POST", "/api/sap/orden-venta", body, TIMEOUT_SAP_WRITE);
 
 // ── Solicitud (necesidad) de trailer — la levanta el encargado de campo ──
 export const getSolicitudesTrailer = (estado) => req("GET", `/api/solicitudes-trailer${qs({ estado })}`);
