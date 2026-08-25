@@ -102,6 +102,12 @@
 - **Seguridad:** ✅ **aditivo** — módulo aislado, no toca ningún módulo existente ni el store global; solo consume el GET de solo lectura; gateado por `manifiestos.ver`; no escribe nada a SAP. `vite build` OK.
 - **Estado:** en código, sin desplegar. Falta: `sembrar_permisos` (para ver el módulo) + probar el GET contra HANA real. Próximo: Fase 3 (crear la OV en SAP, TEST_SLA primero).
 
+### 2026-08-25 — Módulo Manifiestos · Fase 3: crear OV + asignación de pallets en SAP (ESCRITURA)
+- **Qué:** la app crea la Orden de Venta + asignación de pallets en SAP (Service Layer, solo GET/POST/PATCH), replicando el POC probado. Idempotente/resumible. Módulo nuevo tabla `manifiestos` + `POST /api/sap/orden-venta` + `GET /api/sap/clientes-venta`. Frontend: botón "Crear OV" conectado (cliente + fecha) con aviso del DocNum.
+- **Archivos:** backend `feat/manifiestos` (`src/sap/manifiestos.py` nuevo, `src/sap/service.py` `crear_orden_venta`, `src/sap/router.py`, `src/sap/queries.py`, `src/models/manifiestos.py` nuevo; commits `8596f9a`, `3aed3a0`); frontend (`src/modulos/Modulo15.jsx`, `src/store/api.js`; commit `49eb540`). Docs: `docs/cambios/2026-08-25-manifiestos-fase3.md`, `docs/CAMBIOS-BD.md`.
+- **Seguridad:** ✅ **solo GET/POST/PATCH** (cero PUT/DELETE); no toca `client.py`/`session.py`; idempotente/resumible (la OV no se puede borrar → clave por conjunto de pallets, `order_docentry` UNIQUE); `_exigir_company_resuelta` + permiso `manifiestos.editar`; no crea objetos globales de SAP. Revisión adversarial hecha.
+- **Estado:** en código, **SIN desplegar**. **Falta probar en `TEST_SLA`** (crear OV real, verificar líneas/asignación/embarque + reintento no duplica) antes de cualquier company productiva. `py_compile` + `vite build` OK.
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.
