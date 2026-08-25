@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Plus, Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
-  X, RefreshCw, Package, Building2, ChevronDown, CalendarDays,
+  X, RefreshCw, Package, Building2, CalendarDays,
 } from "lucide-react";
 import { getPalletsDisponibles, getClientesVenta, crearOrdenVentaSAP } from "../store/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
 // FASE 2 (solo lectura): selecciona pallets REALES de SAP (GET /api/sap/pallets-disponibles),
@@ -238,19 +239,14 @@ export default function Modulo15() {
               {clientes.length ? <span className="font-medium normal-case tracking-normal text-gray-300">{clientes.length} en SAP</span> : null}
             </span>
             <div className="relative">
-              <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <select
-                value={cardCode} onChange={(e) => setCardCode(e.target.value)}
-                className={`h-10 w-full pl-9 pr-9 text-sm font-medium border rounded-lg bg-white appearance-none truncate focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 ${
-                  cardCode ? "border-gray-200 text-gray-800" : "border-gray-200 text-gray-400"
-                }`}
-              >
-                <option value="">Elige cliente…</option>
-                {clientes.map((c) => (
-                  <option key={c.CardCode} value={c.CardCode} className="text-gray-800">{c.CardCode} · {c.CardName}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Building2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 pointer-events-none" />
+              <SearchSelect
+                value={cardCode}
+                onChange={setCardCode}
+                options={clientes.map((c) => ({ value: c.CardCode, label: `${c.CardCode} · ${c.CardName}` }))}
+                placeholder="Elige cliente…"
+                className="h-10 w-full pl-9 pr-3 text-sm font-medium text-gray-800 border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              />
             </div>
           </label>
         </div>
