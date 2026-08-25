@@ -188,6 +188,15 @@ export const getClientesVenta = (q) => req("GET", `/api/sap/clientes-venta${qs({
 // ESCRITURA: crea la OV + asignación de pallets en SAP (idempotente/resumible).
 // body: { cardCode, fecha, lineas:[{ pt, cajas, cultivo, lote, depto, fraccion, unidadAduana, pesoKg, pallets:[{palletCode,palletDet,folio}] }] }.
 export const crearOrdenVentaSAP = (body) => req("POST", "/api/sap/orden-venta", body, TIMEOUT_SAP_WRITE);
+// ── Manifiestos / OV: guardar en la app (borrador) → lista → mandar a SAP ──
+// Guarda la OV como BORRADOR en la app (NO toca SAP). Mismo body que crearOrdenVentaSAP.
+export const guardarManifiesto = (body) => req("POST", "/api/sap/manifiestos", body);
+// Lista las OV/manifiestos (borradores + enviadas) de la empresa del usuario.
+export const getManifiestos = () => req("GET", "/api/sap/manifiestos");
+// Manda a SAP una OV guardada (crea la OV + asignación). Lento (escritura a SAP).
+export const enviarManifiestoSAP = (id) => req("POST", `/api/sap/manifiestos/${encodeURIComponent(id)}/enviar`, undefined, TIMEOUT_SAP_WRITE);
+// Cancela (borra de la app) un borrador que aún no se envió a SAP.
+export const cancelarManifiesto = (id) => req("POST", `/api/sap/manifiestos/${encodeURIComponent(id)}/cancelar`);
 
 // ── Solicitud (necesidad) de trailer — la levanta el encargado de campo ──
 export const getSolicitudesTrailer = (estado) => req("GET", `/api/solicitudes-trailer${qs({ estado })}`);

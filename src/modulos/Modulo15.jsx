@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
-  Plus, Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
-  X, RefreshCw, Package, Building2, CalendarDays,
+  Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
+  X, RefreshCw, Package, Building2, CalendarDays, Save, PackagePlus, ListChecks,
 } from "lucide-react";
-import { getPalletsDisponibles, getClientesVenta, crearOrdenVentaSAP } from "../store/api";
+import {
+  getPalletsDisponibles, getClientesVenta,
+  guardarManifiesto, getManifiestos, enviarManifiestoSAP, cancelarManifiesto,
+} from "../store/api";
 import SearchSelect from "../components/SearchSelect";
+import { useDialog } from "../components/Dialog";
+import OrdenesVentaLista from "./OrdenesVentaLista";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
 // FASE 2 (solo lectura): selecciona pallets REALES de SAP (GET /api/sap/pallets-disponibles),
@@ -44,8 +49,12 @@ export default function Modulo15() {
   const [clientes, setClientes] = useState([]);
   const [cardCode, setCardCode] = useState("");
   const [creando, setCreando] = useState(false);
-  const [creado, setCreado] = useState(null);   // { docNum } tras crear la OV
-  const [errorOV, setErrorOV] = useState(null); // { msg, verificar } si falló el Crear OV
+  const [errorOV, setErrorOV] = useState(null); // { msg, verificar } si falló el envío a SAP
+  const [vista, setVista] = useState("asignar"); // 'asignar' | 'ordenes'
+  const [manifiestos, setManifiestos] = useState([]);
+  const [cargandoM, setCargandoM] = useState(false);
+  const [accionM, setAccionM] = useState(null); // id del manifiesto en proceso (enviar/cancelar)
+  const dlg = useDialog();
   const [addedIds, setAddedIds] = useState(() => new Set());   // detalles agregados a la OV
   const [selIds, setSelIds] = useState(() => new Set());       // detalles seleccionados en la lista
   const [filtro, setFiltro] = useState("");
@@ -119,33 +128,76 @@ export default function Modulo15() {
   const totCajas = useMemo(() => grupos.reduce((a, l) => a + l.cajas, 0), [grupos]);
   const totPallets = useMemo(() => new Set(added.map((p) => p.palletCode)).size, [added]);
 
-  // Crear la OV en SAP (POST idempotente/resumible). Manda las mismas líneas de la vista previa.
-  const crearOV = useCallback(async () => {
+  const cargarManifiestos = useCallback(async () => {
+    setCargandoM(true);
+    try {
+      const r = await getManifiestos();
+      setManifiestos(Array.isArray(r?.manifiestos) ? r.manifiestos : []);
+    } catch { /* silencioso: la lista queda como estaba */ }
+    finally { setCargandoM(false); }
+  }, []);
+  useEffect(() => { cargarManifiestos(); }, [cargarManifiestos]);
+
+  // Arma las líneas del payload desde la vista previa agrupada.
+  const lineasDePreview = useCallback(() => grupos.map((g) => {
+    const p0 = g.pallets[0] || {};
+    return {
+      pt: g.pt, cajas: g.cajas, cultivo: g.cultivo, lote: g.lote, depto: g.depto,
+      fraccion: p0.fraccion, unidadAduana: p0.unidadAduana, pesoKg: p0.pesoKg,
+      pallets: g.pallets.map((p) => ({ palletCode: p.palletCode, palletDet: p.palletDet, folio: p.folio })),
+    };
+  }), [grupos]);
+
+  // GUARDAR la OV como borrador EN LA APP (NO va a SAP). Aparece en "Órdenes de venta".
+  const guardarOV = useCallback(async () => {
     if (!cardCode || !grupos.length || creando) return;
     setCreando(true);
-    setErrorOV(null);
     try {
-      const lineas = grupos.map((g) => {
-        const p0 = g.pallets[0] || {};
-        return {
-          pt: g.pt, cajas: g.cajas, cultivo: g.cultivo, lote: g.lote, depto: g.depto,
-          fraccion: p0.fraccion, unidadAduana: p0.unidadAduana, pesoKg: p0.pesoKg,
-          pallets: g.pallets.map((p) => ({ palletCode: p.palletCode, palletDet: p.palletDet, folio: p.folio })),
-        };
-      });
-      const r = await crearOrdenVentaSAP({ cardCode, fecha, lineas });
-      setCreado({ docNum: r?.docNum });
+      await guardarManifiesto({ cardCode, fecha, lineas: lineasDePreview() });
       setAddedIds(new Set());
-      avisar(r?.yaExistia ? `Esa OV ya existía (SAP #${r?.docNum})` : `OV creada en SAP · #${r?.docNum}`);
-      cargar();   // recarga disponibles (los asignados ya no aparecen)
+      avisar("OV guardada — en la app, aún NO en SAP");
+      cargar();              // recarga disponibles (los del borrador quedan reservados)
+      await cargarManifiestos();
+      setVista("ordenes");   // llévalo a la lista para que la vea guardada
     } catch (e) {
-      // sinRespuesta (timeout/500/504) = NO sabemos si la OV se creó → verificar en SAP, no reintentar a ciegas.
-      setErrorOV({ msg: e?.message || "No se pudo crear la OV.", verificar: !!e?.sinRespuesta });
-      avisar(e?.sinRespuesta ? "Sin confirmación de SAP — revisa antes de reintentar" : (e?.message || "No se pudo crear la OV"));
+      avisar(e?.message || "No se pudo guardar la OV");
     } finally {
       setCreando(false);
     }
-  }, [cardCode, grupos, fecha, creando, avisar, cargar]);
+  }, [cardCode, grupos, fecha, creando, lineasDePreview, avisar, cargar, cargarManifiestos]);
+
+  // MANDAR A SAP una OV guardada (crea la OV real + asignación + PATCH).
+  const enviarM = useCallback(async (m) => {
+    setAccionM(m.id);
+    setErrorOV(null);
+    try {
+      const r = await enviarManifiestoSAP(m.id);
+      avisar(`OV en SAP · #${r?.docNum}`);
+      await cargarManifiestos();
+      cargar();
+    } catch (e) {
+      // sinRespuesta (timeout/500/504) = NO sabemos si la OV se creó → verificar en SAP, no reintentar a ciegas.
+      setErrorOV({ msg: e?.message || "No se pudo mandar a SAP.", verificar: !!e?.sinRespuesta });
+      avisar(e?.sinRespuesta ? "Sin confirmación de SAP — revisa antes de reintentar" : (e?.message || "No se pudo mandar a SAP"));
+    } finally {
+      setAccionM(null);
+    }
+  }, [avisar, cargarManifiestos, cargar]);
+
+  const cancelarM = useCallback(async (m) => {
+    const ok = await dlg.confirm({
+      title: "Cancelar OV",
+      message: `¿Borrar el borrador de OV de ${m.cardCode} (${m.cajas} cajas · ${m.nPallets} pallets)? Solo se borra de la app; no toca SAP.`,
+      confirmText: "Sí, cancelar", danger: true,
+    });
+    if (!ok) return;
+    setAccionM(m.id);
+    try { await cancelarManifiesto(m.id); avisar("Borrador cancelado"); await cargarManifiestos(); cargar(); }
+    catch (e) { avisar(e?.message || "No se pudo cancelar"); }
+    finally { setAccionM(null); }
+  }, [dlg, avisar, cargarManifiestos, cargar]);
+
+  const nBorradores = useMemo(() => manifiestos.filter((m) => m.estado !== "enviada").length, [manifiestos]);
 
   // ── acciones sobre la OV ──
   const agregar = useCallback((ids, quiet) => {
@@ -217,9 +269,53 @@ export default function Modulo15() {
     });
   };
 
+  const TabBtn = ({ id, icon: Icon, children, badge }) => (
+    <button
+      onClick={() => setVista(id)}
+      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+        vista === id ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30" : "text-gray-500 hover:bg-gray-100"
+      }`}
+    >
+      <Icon size={16} /> {children}
+      {badge ? (
+        <span className={`text-[11px] font-bold px-1.5 rounded-full ${vista === id ? "bg-white/25" : "bg-gray-200 text-gray-600"}`}>{badge}</span>
+      ) : null}
+    </button>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Barra de control: fecha + cliente + totales + Crear OV */}
+      {/* Pestañas: armar la OV vs. la lista de OV creadas */}
+      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 w-fit">
+        <TabBtn id="asignar" icon={PackagePlus}>Asignar pallets</TabBtn>
+        <TabBtn id="ordenes" icon={ListChecks} badge={nBorradores || undefined}>Órdenes de venta</TabBtn>
+      </div>
+
+      {errorOV ? (
+        <div className={`rounded-xl px-4 py-2.5 flex items-start justify-between gap-3 border ${
+          errorOV.verificar ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"
+        }`}>
+          <span className={`text-sm font-semibold flex items-start gap-2 ${errorOV.verificar ? "text-amber-800" : "text-red-700"}`}>
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <span>
+              {errorOV.msg}
+              {errorOV.verificar ? <><br /><b>Verifica en SAP</b> si la OV ya se creó (busca una OV reciente de este cliente con estos pallets) ANTES de volver a intentar — la OV no se puede borrar.</> : null}
+            </span>
+          </span>
+          <button onClick={() => setErrorOV(null)} className="p-1 rounded-md text-gray-500 hover:bg-black/5 shrink-0" aria-label="Cerrar">
+            <X size={15} />
+          </button>
+        </div>
+      ) : null}
+
+      {vista === "ordenes" ? (
+        <OrdenesVentaLista
+          manifiestos={manifiestos} cargando={cargandoM} accionId={accionM}
+          onEnviar={enviarM} onCancelar={cancelarM} onRefrescar={cargarManifiestos}
+        />
+      ) : (
+      <>
+      {/* Barra de control: fecha + cliente + totales + Guardar OV */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-end gap-4">
         <div className="flex flex-wrap items-end gap-3 flex-1 min-w-0">
           <label className="flex flex-col gap-1.5">
@@ -254,48 +350,20 @@ export default function Modulo15() {
         <div className="flex items-center gap-4 lg:pl-5 lg:border-l lg:border-gray-100 shrink-0">
           <Stat label="cajas" valor={totCajas} sub={`${totPallets} pallets · ${grupos.length} líneas`} />
           <button
-            onClick={crearOV}
+            onClick={guardarOV}
             disabled={!grupos.length || !cardCode || creando}
-            title={!cardCode ? "Elige un cliente" : !grupos.length ? "Agrega pallets" : "Crear la Orden de Venta en SAP"}
+            title={!cardCode ? "Elige un cliente" : !grupos.length ? "Agrega pallets" : "Guardar la OV en la app (se manda a SAP después)"}
             className={`h-11 inline-flex items-center gap-2 px-5 rounded-lg font-bold text-sm transition-colors ${
               !grupos.length || !cardCode || creando
                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                 : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/30"
             }`}
           >
-            {creando ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-            {creando ? "Creando…" : "Crear OV"}
+            {creando ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+            {creando ? "Guardando…" : "Guardar OV"}
           </button>
         </div>
       </div>
-
-      {errorOV ? (
-        <div className={`rounded-xl px-4 py-2.5 flex items-start justify-between gap-3 border ${
-          errorOV.verificar ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"
-        }`}>
-          <span className={`text-sm font-semibold flex items-start gap-2 ${errorOV.verificar ? "text-amber-800" : "text-red-700"}`}>
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>
-              {errorOV.msg}
-              {errorOV.verificar ? <><br /><b>Verifica en SAP</b> si la OV ya se creó (busca una OV reciente de este cliente con estos pallets) ANTES de volver a intentar — la OV no se puede borrar.</> : null}
-            </span>
-          </span>
-          <button onClick={() => setErrorOV(null)} className="p-1 rounded-md text-gray-500 hover:bg-black/5 shrink-0" aria-label="Cerrar">
-            <X size={15} />
-          </button>
-        </div>
-      ) : null}
-
-      {creado ? (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3">
-          <span className="text-sm font-semibold text-emerald-800 flex items-center gap-2">
-            <Check size={16} /> Orden de venta creada en SAP · <b className="font-mono">#{creado.docNum}</b> — lista para el embarque.
-          </span>
-          <button onClick={() => setCreado(null)} className="p-1 rounded-md text-emerald-700 hover:bg-emerald-100" aria-label="Cerrar">
-            <X size={15} />
-          </button>
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {/* ── Disponibles ── */}
@@ -475,6 +543,8 @@ export default function Modulo15() {
           </div>
         </section>
       </div>
+      </>
+      )}
 
       {/* Toast */}
       {toast ? (

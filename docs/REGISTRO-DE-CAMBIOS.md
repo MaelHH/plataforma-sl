@@ -108,6 +108,12 @@
 - **Seguridad:** ✅ **solo GET/POST/PATCH** (cero PUT/DELETE); no toca `client.py`/`session.py`; idempotente/resumible (la OV no se puede borrar → clave por conjunto de pallets, `order_docentry` UNIQUE); `_exigir_company_resuelta` + permiso `manifiestos.editar`; no crea objetos globales de SAP. Revisión adversarial hecha.
 - **Estado:** en código, **SIN desplegar**. **Falta probar en `TEST_SLA`** (crear OV real, verificar líneas/asignación/embarque + reintento no duplica) antes de cualquier company productiva. `py_compile` + `vite build` OK.
 
+### 2026-08-25 — Módulo Manifiestos · Fase 4: guardar OV en la app (borrador) → lista → "Mandar a SAP"
+- **Qué:** cambia el flujo — "Crear OV" ya NO pega a SAP directo. Ahora **"Guardar OV"** guarda la orden en la app (borrador, con sus pallets); aparece en una nueva pestaña **"Órdenes de venta"** con su estado (Borrador · en la app / En proceso / En SAP), y un botón **"Mandar a SAP"** la envía cuando esté lista (+ "Cancelar" para borradores). Los pallets de un borrador se **reservan** (no aparecen como disponibles para no ponerlos en dos OV). Alinea con el diagrama (la app prepara y ALIMENTA a SAP). La ruta de emergencia (sin pallets/gerente) queda para después.
+- **Archivos:** backend `feat/manifiestos` (`src/models/manifiestos.py` col `estado`, `src/sap/service.py` `guardar_borrador`/`enviar_a_sap`/`listar_manifiestos`/`palletdets_reservados`/`cancelar_borrador`, `src/sap/router.py` endpoints `POST/GET /manifiestos`, `POST /manifiestos/{id}/enviar|cancelar`, `src/scripts/agregar_estado_manifiestos.py`; commit `8eb3275`); frontend (`src/modulos/Modulo15.jsx` pestañas + guardar, `src/modulos/OrdenesVentaLista.jsx` nuevo, `src/store/api.js`, `src/App.jsx`).
+- **Seguridad:** ✅ guardar borrador NO toca SAP; el envío sigue con las mismas garantías (solo GET/POST/PATCH, idempotente/resumible, candado in-flight, `_exigir_company_resuelta`, permiso `manifiestos.editar`). BD: columna `estado` **aditiva** → correr `python -m src.scripts.agregar_estado_manifiestos` en BDs donde la tabla ya existía.
+- **Estado:** en código, sin desplegar. `vite build` + `py_compile` OK. **Falta:** correr el script de la columna `estado` en local, y probar el flujo (guardar → lista → Mandar a SAP) en TEST_SLA.
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.
