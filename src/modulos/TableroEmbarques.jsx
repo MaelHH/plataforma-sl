@@ -12,8 +12,9 @@ import NuevoEmbarque from "./NuevoEmbarque";
 const PASOS = ["Asig", "Emb", "Manif", "Flete", "Fact"];
 const PASOS_F = ["Asignación", "Embarque", "Manifiesto", "OC de flete", "Factura"];
 
-// s = [asig, emb, manif, flete, fact] (1 = completado). Hoy solo sabemos ASIG (en SAP).
-const pasosDe = (m) => [m.estado === "enviada" ? 1 : 0, 0, 0, 0, 0];
+// s = [asig, emb, manif, flete, fact] (1 = completado). ASIG = OV en SAP; EMB = ya está en un embarque
+// de la app; manif/flete/fact se reconcilian desde SAP en una fase siguiente.
+const pasosDe = (m) => [m.estado === "enviada" ? 1 : 0, m.embarcada ? 1 : 0, 0, 0, 0];
 
 const fmtFecha = (iso) => {
   if (!iso) return "—";
@@ -61,6 +62,7 @@ function SapBadge({ m }) {
 }
 
 function EstadoPill({ m }) {
+  if (m.embarcada) return <span className="text-[11px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap bg-amber-100 text-amber-800">Embarcada</span>;
   const map = {
     borrador: ["bg-amber-100 text-amber-800", "Borrador · en la app"],
     enviando: ["bg-orange-100 text-orange-800", "En proceso"],
