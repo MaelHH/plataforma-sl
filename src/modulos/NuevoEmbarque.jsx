@@ -35,6 +35,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   const anchor = useRef({ last: null, state: false });
   const dragFrom = useRef(null);
 
+  const [numeros, setNumeros] = useState({});   // { ovEntry: nº de manifiesto }
   const [creando, setCreando] = useState(false);
   const [creado, setCreado] = useState(null);
 
@@ -71,13 +72,13 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   const nSel = useMemo(() => [...sel].filter((pd) => !usados.has(String(pd))).length, [sel, usados]);
   const nextFree = () => bed.findIndex((x) => x == null);
 
-  // agrupado por cliente (para la vista previa de manifiestos)
-  const porCliente = useMemo(() => {
+  // agrupado por OV (un manifiesto por OV) — para la vista previa + capturar el nº de manifiesto
+  const porOV = useMemo(() => {
     const m = new Map();
     for (const p of enCamion) {
-      const k = p.cardCode;
-      if (!m.has(k)) m.set(k, { cardCode: k, cardName: p.cardName, cajas: 0, ovs: new Set(), pallets: 0 });
-      const g = m.get(k); g.cajas += p.cajas || 0; g.ovs.add(p.ovNum); g.pallets += 1;
+      const k = String(p.ovEntry);
+      if (!m.has(k)) m.set(k, { ovEntry: p.ovEntry, ovNum: p.ovNum, cardCode: p.cardCode, cardName: p.cardName, cajas: 0, pallets: 0 });
+      const g = m.get(k); g.cajas += p.cajas || 0; g.pallets += 1;
     }
     return [...m.values()];
   }, [enCamion]);
@@ -126,8 +127,12 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
     if (!linea || !enCamion.length || creando) return;
     setCreando(true); setError("");
     try {
+      // nº de manifiesto por OV (solo los que se capturaron)
+      const nums = {};
+      Object.entries(numeros).forEach(([k, v]) => { if (v && String(v).trim()) nums[k] = String(v).trim(); });
       const payload = {
         linea, flete: Number(flete) || 0, anticipo: Number(anticipo) || 0, agente, fecha,
+        numeros: nums,
         pallets: enCamion.map((p) => ({
           palletCode: p.palletCode, palletDet: p.palletDet, ovEntry: p.ovEntry, ovNum: p.ovNum,
           cardCode: p.cardCode, pt: p.pt, cajas: p.cajas, lote: p.lote, baseLine: p.baseLine, position: p.position,
@@ -139,7 +144,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
     } catch (e) {
       setError((e?.sinRespuesta ? "Sin confirmación de SAP — verifica antes de reintentar. " : "") + (e?.message || "No se pudo crear el embarque."));
     } finally { setCreando(false); }
-  }, [linea, flete, anticipo, agente, fecha, enCamion, creando, onCreated]);
+  }, [linea, flete, anticipo, agente, fecha, enCamion, numeros, creando, onCreated]);
 
   const TABS = [["Transporte", Truck], ["Pallets y distribución", Package], ["Manifiestos", FileText]];
 
@@ -186,7 +191,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
             ) : tab === 1 ? (
               <Distribucion {...{ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas }} />
             ) : (
-              <Manifiestos porCliente={porCliente} />
+              <Manifiestos porOV={porOV} numeros={numeros} setNumeros={setNumeros} />
             )}
           </div>
         </div>
@@ -300,29 +305,31 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
   );
 }
 
-function Manifiestos({ porCliente }) {
+function Manifiestos({ porOV, numeros, setNumeros }) {
   const [dest, setDest] = useState({});   // cardCode → { suc, state, city, country } | null (cargando)
   useEffect(() => {
-    porCliente.forEach((c) => {
-      if (c.cardCode && !(c.cardCode in dest)) {
-        setDest((d) => ({ ...d, [c.cardCode]: null }));
-        getClienteDestino(c.cardCode)
-          .then((r) => setDest((d) => ({ ...d, [c.cardCode]: r || {} })))
-          .catch(() => setDest((d) => ({ ...d, [c.cardCode]: {} })));
+    porOV.forEach((o) => {
+      if (o.cardCode && !(o.cardCode in dest)) {
+        setDest((d) => ({ ...d, [o.cardCode]: null }));
+        getClienteDestino(o.cardCode)
+          .then((r) => setDest((d) => ({ ...d, [o.cardCode]: r || {} })))
+          .catch(() => setDest((d) => ({ ...d, [o.cardCode]: {} })));
       }
     });
-  }, [porCliente]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [porOV]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!porCliente.length) return <div className="py-14 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">Acomoda pallets y aquí se arma un manifiesto por cliente (destino y consecutivos automáticos al crear).</div>;
+  if (!porOV.length) return <div className="py-14 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">Acomoda pallets y aquí se arma un manifiesto por OV (destino y consecutivos automáticos al crear).</div>;
   return (
     <div className="space-y-3">
-      {porCliente.map((c) => {
-        const d = dest[c.cardCode];
+      <div className="text-[11px] text-gray-400 font-medium">Un manifiesto por OV. El <b className="text-emerald-600">número de manifiesto</b> es opcional: si lo pones, se escribe en el manifiesto y también en la Entrega de SAP (queda anidado). Si no, queda en blanco para capturarlo después.</div>
+      {porOV.map((o) => {
+        const d = dest[o.cardCode];
+        const k = String(o.ovEntry);
         return (
-          <div key={c.cardCode} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div key={k} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-gray-50">
-              <div className="flex items-center gap-2"><Building2 size={16} className="text-gray-400" /><b className="text-gray-800">{c.cardName || c.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{c.cardCode}</span></div>
-              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full">{c.cajas} cajas · {c.ovs.size} OV · {c.pallets} pallets</span>
+              <div className="flex items-center gap-2"><Building2 size={16} className="text-gray-400" /><b className="text-gray-800">{o.cardName || o.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{o.cardCode} · OV {o.ovNum}</span></div>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full">auto del destino · {o.cajas} cajas · {o.pallets} pallets</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 py-3">
               {/* destino (auto del cliente) */}
@@ -339,10 +346,14 @@ function Manifiestos({ porCliente }) {
                   <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-[11.5px]">El cliente no tiene dirección de embarque (ship-to) en SAP; se creará el manifiesto sin destino.</div>
                 )}
               </div>
-              {/* manual (número + sellos) */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11.5px] text-amber-800">
-                <div className="font-bold uppercase tracking-wide text-[10px] mb-1 flex items-center gap-1.5"><AlertCircle size={12} /> Se captura después</div>
-                <b>Consecutivos destino/embarcado</b>: automáticos al crear. <b>Número de manifiesto</b> y <b>sellos/pedimentos</b>: quedan en blanco para capturarlos en SAP.
+              {/* número de manifiesto (opcional, se escribe en SAP) */}
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Número de manifiesto <span className="normal-case text-gray-300 font-medium">(opcional)</span></label>
+                <input
+                  value={numeros[k] || ""} onChange={(e) => setNumeros((n) => ({ ...n, [k]: e.target.value }))}
+                  placeholder="Ej. 35480" inputMode="numeric"
+                  className={INP + " mt-1 font-mono"} />
+                <div className="text-[10.5px] text-gray-400 mt-1">Se guarda en el manifiesto y en la Entrega (ODLN). Consecutivos y sellos: automáticos / manual en SAP.</div>
               </div>
             </div>
           </div>

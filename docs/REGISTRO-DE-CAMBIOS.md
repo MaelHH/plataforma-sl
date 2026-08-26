@@ -132,6 +132,12 @@
 - **Seguridad:** ✅ solo GET/POST/PATCH (cero PUT/DELETE); no toca `client.py`/`session.py`; idempotente/resumible (embarque + Entrega no se borran → clave `EMB_{hash}`, `shipment_code` UNIQUE, candado in-flight, adopt-by-GET del detalle/manifiesto, y la Entrega reconcilia re-leyendo la OV); `_exigir_company_resuelta` + permiso `manifiestos.editar`; HANA solo SELECT. **Revisión adversarial hecha** (se endureció la Entrega). Residual: consecutivos de manifiesto entre embarques concurrentes (raro).
 - **Estado:** en código, **SIN desplegar**. **Falta probar en `TEST_SLA`** (embarque real desde la app). `py_compile` + `vite build` OK.
 
+### 2026-08-26 — Módulo Manifiestos · Fase 6 (cont.): número de manifiesto + tablero embarcada + lista de embarques
+- **Qué:** (1) **Número de manifiesto desde la app** (pestaña Manifiestos de Nuevo embarque, un input por OV): se escribe en `U_P_SHIPMENT_MANIFEST.U_ManifestNumber` **y** en la Entrega `ODLN.U_Manifiesto` (queda anidado) — todo PATCH/POST a campos que YA existen. (2) El **tablero marca la OV como "Embarcada"** y avanza el paso EMB cuando la OV ya está en un embarque de la app. (3) Nueva pestaña **"Embarques"** con la **lista** de embarques creados (folio/camión/OVs/cajas/pallets), como la del AddOn. Y la pestaña Manifiestos ahora **carga el destino real** (ship-to) del cliente.
+- **Archivos:** backend (`src/sap/embarques.py` `crear_manifest`+`patch_entrega_manifiesto`, `src/sap/service.py` `crear_embarque`+`listar_embarques`+`ovnums_embarcadas`, `src/sap/router.py` `/embarques`+`/cliente-destino`+`numeros`); frontend (`src/modulos/NuevoEmbarque.jsx`, `EmbarquesLista.jsx` nuevo, `TableroEmbarques.jsx`, `Modulo15.jsx`, `store/api.js`).
+- **Seguridad:** ✅ solo GET/POST/PATCH a campos existentes (autorizado por el gerente); el nº de manifiesto en la Entrega es un PATCH best-effort (no rompe el embarque si falla). Lista de embarques = solo lectura de la BD. Multiempresa respetado. Residual conocido: consecutivos de manifiesto entre embarques concurrentes; nº de manifiesto solo se escribe al crear (editar después = fase futura).
+- **Estado:** en código, `vite build` + `py_compile` OK. Falta probar en `TEST_SLA` (crear embarque con nº de manifiesto y ver que quede en el manifiesto + la Entrega).
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.
