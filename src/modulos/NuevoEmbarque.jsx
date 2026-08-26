@@ -110,9 +110,13 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   const onDrop = (pos, e) => {
     e.preventDefault();
     let data = ""; try { data = e.dataTransfer.getData("text/plain"); } catch (_) { /* */ }
-    if (data.indexOf("avail:") === 0) placeAt(pos, data.slice(6));
-    else if (dragFrom.current != null && dragFrom.current !== pos) {
-      setBed((prev) => { const n = [...prev]; const t = n[pos]; n[pos] = n[dragFrom.current]; n[dragFrom.current] = t; return n; });
+    if (data.indexOf("avail:") === 0) {                 // vino de la LISTA → a esa posición exacta
+      placeAt(pos, data.slice(6));
+    } else if (data.indexOf("bed:") === 0) {            // reordenar DENTRO del camión → mueve/intercambia
+      const from = parseInt(data.slice(4), 10);
+      if (!Number.isNaN(from) && from !== pos) {
+        setBed((prev) => { const n = [...prev]; const t = n[pos]; n[pos] = n[from]; n[from] = t; return n; });
+      }
     }
     dragFrom.current = null;
   };
@@ -273,7 +277,7 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
                   const pos = row * 2 + col; const pd = bed[pos]; const p = pd != null ? byPd(pd) : null;
                   return (
                     <div key={pos} data-pos={pos} draggable={!!p}
-                      onDragStart={(e) => { if (!p) { e.preventDefault(); return; } dragFrom.current = pos; }}
+                      onDragStart={(e) => { if (!p) { e.preventDefault(); return; } dragFrom.current = pos; try { e.dataTransfer.setData("text/plain", "bed:" + pos); e.dataTransfer.effectAllowed = "move"; } catch (_) { /* */ } }}
                       onDragOver={(e) => e.preventDefault()} onDrop={(e) => onDrop(pos, e)}
                       className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 min-h-[44px] border ${p ? "border-emerald-300 bg-white cursor-grab" : (pos === nf ? "border-emerald-500 border-dashed bg-emerald-50" : "border-gray-200 border-dashed bg-white")}`}>
                       <span className="font-mono font-bold text-[13px] text-gray-400 w-5 text-center shrink-0">{pos}</span>
