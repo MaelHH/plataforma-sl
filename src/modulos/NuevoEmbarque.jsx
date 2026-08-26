@@ -216,7 +216,7 @@ function Transporte({ transp, linea, setLinea, tp, conductor, flete, setFlete, a
         <label className="block"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Agente aduanal · de SAP</span>
           <select value={agente} onChange={(e) => setAgente(e.target.value)} className={INP + " mt-1"}>
             <option value="">— Elige agente aduanal —</option>
-            {agentes.map((a) => <option key={a.Code} value={a.Name || a.Code}>{a.Name || a.Code}</option>)}
+            {agentes.map((a) => <option key={a.Code} value={a.Code}>{a.Code}{a.Name && a.Name !== a.Code ? ` — ${a.Name}` : ""}</option>)}
           </select></label>
       </div>
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
