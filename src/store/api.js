@@ -193,6 +193,7 @@ export const crearOrdenVentaSAP = (body) => req("POST", "/api/sap/orden-venta", 
 export const getPalletsPorEmbarcar = ({ desde, top } = {}) =>
   req("GET", `/api/sap/pallets-por-embarcar${qs({ desde, top })}`, undefined, 60000);
 export const getTransportistas = () => req("GET", "/api/sap/transportistas", undefined, 60000);
+export const getClienteDestino = (card) => req("GET", `/api/sap/cliente-destino${qs({ card })}`, undefined, 60000);
 export const getConductores = () => req("GET", "/api/sap/conductores", undefined, 60000);
 export const getAgentesAduanales = () => req("GET", "/api/sap/agentes-aduanales", undefined, 60000);
 // ESCRITURA: crea el embarque completo (cabecera + detalle + manifiesto + entrega) en SAP.

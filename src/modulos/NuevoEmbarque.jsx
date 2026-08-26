@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import {
   getPalletsPorEmbarcar, getTransportistas, getConductores, getAgentesAduanales, crearEmbarqueSAP,
+  getClienteDestino,
 } from "../store/api";
 
 // Nuevo embarque (Fase 6): 3 pestañas — Transporte (camión de catálogo), Pallets + distribución en el
@@ -300,20 +301,53 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
 }
 
 function Manifiestos({ porCliente }) {
+  const [dest, setDest] = useState({});   // cardCode → { suc, state, city, country } | null (cargando)
+  useEffect(() => {
+    porCliente.forEach((c) => {
+      if (c.cardCode && !(c.cardCode in dest)) {
+        setDest((d) => ({ ...d, [c.cardCode]: null }));
+        getClienteDestino(c.cardCode)
+          .then((r) => setDest((d) => ({ ...d, [c.cardCode]: r || {} })))
+          .catch(() => setDest((d) => ({ ...d, [c.cardCode]: {} })));
+      }
+    });
+  }, [porCliente]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!porCliente.length) return <div className="py-14 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">Acomoda pallets y aquí se arma un manifiesto por cliente (destino y consecutivos automáticos al crear).</div>;
   return (
     <div className="space-y-3">
-      {porCliente.map((c) => (
-        <div key={c.cardCode} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-gray-50">
-            <div className="flex items-center gap-2"><Building2 size={16} className="text-gray-400" /><b className="text-gray-800">{c.cardName || c.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{c.cardCode}</span></div>
-            <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full">auto del destino · {c.cajas} cajas · {c.ovs.size} OV</span>
+      {porCliente.map((c) => {
+        const d = dest[c.cardCode];
+        return (
+          <div key={c.cardCode} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-gray-50">
+              <div className="flex items-center gap-2"><Building2 size={16} className="text-gray-400" /><b className="text-gray-800">{c.cardName || c.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{c.cardCode}</span></div>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full">{c.cajas} cajas · {c.ovs.size} OV · {c.pallets} pallets</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 py-3">
+              {/* destino (auto del cliente) */}
+              <div className="space-y-1.5 text-[12.5px]">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Destino (del cliente)</div>
+                {d === null ? (
+                  <div className="text-gray-400 flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Cargando destino…</div>
+                ) : d && (d.suc || d.state) ? (
+                  <>
+                    <div className="text-gray-700"><b>Sucursal:</b> {d.suc || "—"}</div>
+                    <div className="text-gray-700 font-mono">{d.country || "—"} · {d.state || "—"} · {d.city || "—"}</div>
+                  </>
+                ) : (
+                  <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-[11.5px]">El cliente no tiene dirección de embarque (ship-to) en SAP; se creará el manifiesto sin destino.</div>
+                )}
+              </div>
+              {/* manual (número + sellos) */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11.5px] text-amber-800">
+                <div className="font-bold uppercase tracking-wide text-[10px] mb-1 flex items-center gap-1.5"><AlertCircle size={12} /> Se captura después</div>
+                <b>Consecutivos destino/embarcado</b>: automáticos al crear. <b>Número de manifiesto</b> y <b>sellos/pedimentos</b>: quedan en blanco para capturarlos en SAP.
+              </div>
+            </div>
           </div>
-          <div className="px-4 py-3 text-[12.5px] text-gray-500">
-            El <b>destino, sucursal y consecutivos</b> se toman del cliente al crear el embarque. El <b>número de manifiesto</b> y los <b>sellos/pedimentos</b> quedan en blanco para capturarlos después.
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
