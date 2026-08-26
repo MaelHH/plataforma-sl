@@ -139,7 +139,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
         })),
       };
       const r = await crearEmbarqueSAP(payload);
-      setCreado({ folio: r?.folio });
+      setCreado({ folio: r?.folio, pendientes: r?.entregasPendientes || 0 });
       onCreated?.(r);
     } catch (e) {
       setError((e?.sinRespuesta ? "Sin confirmación de SAP — verifica antes de reintentar. " : "") + (e?.message || "No se pudo crear el embarque."));
@@ -179,7 +179,12 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
           {/* body */}
           <div className="flex-1 overflow-y-auto p-4">
             {creado ? (
-              <div className="mb-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-emerald-800 flex items-center gap-2"><Check size={16} /> Embarque creado en SAP · folio <b className="font-mono">#{creado.folio}</b> (cabecera + detalle + manifiesto + entrega).</div>
+              <div className="mb-3 space-y-2">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-emerald-800 flex items-center gap-2"><Check size={16} /> Embarque creado en SAP · folio <b className="font-mono">#{creado.folio}</b> (cabecera + detalle + manifiesto{creado.pendientes ? "" : " + entrega"}).</div>
+                {creado.pendientes ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-[12.5px] font-semibold text-amber-800 flex items-start gap-2"><AlertCircle size={15} className="mt-0.5 shrink-0" /> {creado.pendientes} OV quedaron <b>sin Entrega</b> (falta stock en SAP / inventario negativo). El embarque y el manifiesto sí quedaron; la Entrega se puede generar cuando haya stock.</div>
+                ) : null}
+              </div>
             ) : null}
             {error ? (
               <div className="mb-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-700 flex items-start gap-2"><AlertCircle size={16} className="mt-0.5" /> {error}</div>
