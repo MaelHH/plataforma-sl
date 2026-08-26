@@ -126,6 +126,12 @@
 - **Seguridad:** ✅ solo lectura de la BD local + acciones ya existentes (Mandar a SAP mantiene sus garantías). No toca SAP de más.
 - **Estado:** en código, sin desplegar. `vite build` + `py_compile` OK. **Falta (Fase 5b):** reconciliación automática desde SAP (embarque/entrega/factura/flete) para encender el resto del pipeline + alerta "generado en la app, falta en SAP"; y la ruta de emergencia (manifiesto sin pallets, permiso del gerente).
 
+### 2026-08-26 — Módulo Manifiestos · Fase 6: Crear Embarque (camión + pallets + manifiesto + entrega)
+- **Qué:** módulo nuevo para armar el **embarque completo en SAP** (Service Layer), replicando el AddOn (POC probado, embarque 881). Pantalla "Nuevo embarque" (3 pestañas: Transporte con camión de catálogo, Pallets con **Shift+click + distribución drag&drop** en el camión, Manifiestos auto por cliente) abierta desde el botón del Tablero de Embarques. Backend: GET pallets-por-embarcar + catálogos (transportistas/conductores/agentes) + `POST /api/sap/embarque` (crea `U_P_SHIPMENT`+`_DETAIL`+`_MANIFEST` + Entrega `DeliveryNotes` BaseType 17 + PATCH `IsDelivery`), idempotente/resumible. Tabla `embarques_sap`.
+- **Archivos:** backend `feat/manifiestos` (`src/sap/embarques.py` nuevo, `src/sap/service.py` `crear_embarque`, `src/sap/queries.py`, `src/sap/router.py`, `src/models/embarques.py` nuevo; commits `87b4d11`/`9c0dd28`/`9c6b497`); frontend (`src/modulos/NuevoEmbarque.jsx` nuevo, `src/modulos/TableroEmbarques.jsx`, `src/store/api.js`). Doc `docs/cambios/2026-08-26-manifiestos-fase6-embarque.md`, `docs/CAMBIOS-BD.md`.
+- **Seguridad:** ✅ solo GET/POST/PATCH (cero PUT/DELETE); no toca `client.py`/`session.py`; idempotente/resumible (embarque + Entrega no se borran → clave `EMB_{hash}`, `shipment_code` UNIQUE, candado in-flight, adopt-by-GET del detalle/manifiesto, y la Entrega reconcilia re-leyendo la OV); `_exigir_company_resuelta` + permiso `manifiestos.editar`; HANA solo SELECT. **Revisión adversarial hecha** (se endureció la Entrega). Residual: consecutivos de manifiesto entre embarques concurrentes (raro).
+- **Estado:** en código, **SIN desplegar**. **Falta probar en `TEST_SLA`** (embarque real desde la app). `py_compile` + `vite build` OK.
+
 ---
 
 > **Formato para las próximas entradas:** fecha · qué · archivos/commits · **revisión de seguridad (página + SAP)** · estado (probado/desplegado). Nada se cierra sin la revisión de seguridad.

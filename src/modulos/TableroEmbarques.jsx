@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import {
-  Search, RefreshCw, Loader2, Check, Clock, Send, Trash2, X, Package, AlertTriangle,
+  Search, RefreshCw, Loader2, Check, Clock, Send, Trash2, X, Package, AlertTriangle, Truck,
 } from "lucide-react";
+import NuevoEmbarque from "./NuevoEmbarque";
 
 // Tablero de Embarques: la lista de OV/manifiestos de la app + su control. Portado del mockup.
 // Muestra los DOS caminos: 'En SAP' (OV real en SAP) y 'En la app' (borrador / macro, aún sin SAP).
@@ -74,6 +75,7 @@ export default function TableroEmbarques({ manifiestos, clientes, cargando, acci
   const [q, setQ] = useState("");
   const [filtro, setFiltro] = useState("todas");
   const [sel, setSel] = useState(null); // manifiesto abierto en el drawer
+  const [nuevoEmb, setNuevoEmb] = useState(false); // pantalla "Nuevo embarque"
 
   const nombreCliente = useMemo(() => {
     const m = new Map((clientes || []).map((c) => [c.CardCode, c.CardName]));
@@ -144,10 +146,17 @@ export default function TableroEmbarques({ manifiestos, clientes, cargando, acci
             </button>
           ))}
         </div>
+        <button onClick={() => setNuevoEmb(true)} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-bold text-sm bg-emerald-600 text-white hover:bg-emerald-700">
+          <Truck size={16} /> Nuevo embarque
+        </button>
         <button onClick={onRefrescar} title="Recargar" className="p-2 rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-100 border border-gray-200">
           <RefreshCw size={16} className={cargando ? "animate-spin" : ""} />
         </button>
       </div>
+
+      {nuevoEmb ? (
+        <NuevoEmbarque onClose={() => setNuevoEmb(false)} onCreated={() => { onRefrescar && onRefrescar(); }} />
+      ) : null}
 
       {/* Tabla */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
