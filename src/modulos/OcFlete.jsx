@@ -72,6 +72,12 @@ export default function OcFlete() {
   }, [manifiesto, buscando]);
 
   const elegirManifiesto = useCallback((v) => { setManifiesto(v); buscar(v); }, [buscar]);
+  // Al elegir un flete, autollena su IVA (de la lista curada por empresa).
+  const elegirFlete = useCallback((code) => {
+    setFlete(code);
+    const f = fletes.find((x) => x.code === code);
+    if (f && f.iva) setIvaCode(f.iva);
+  }, [fletes]);
 
   const importe = useMemo(() => r2((Number(precio) || 0) - (Number(diesel) || 0)), [precio, diesel]);
   const ivaRate = ivaCode === "IVAA16" ? 0.16 : 0;
@@ -165,11 +171,11 @@ export default function OcFlete() {
             </div>
             <div>
               <label className={LB}>Flete (artículo)</label>
-              <SearchSelect value={flete} onChange={setFlete} placeholder="— flete —"
+              <SearchSelect value={flete} onChange={elegirFlete} placeholder="— flete —"
                 className={INP} options={fletes.map((f) => ({ value: f.code, label: `${f.code} · ${f.name}` }))} />
             </div>
             <div>
-              <label className={LB}>IVA del flete</label>
+              <label className={LB}>IVA del flete <span className="normal-case font-medium text-gray-300">(auto, editable)</span></label>
               <select value={ivaCode} onChange={(e) => setIvaCode(e.target.value)} className={INP + " font-mono"}>
                 <option value="IVAA16">IVAA16 · 16%</option>
                 <option value="IVAA0">IVAA0 · 0%</option>
