@@ -131,7 +131,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   };
 
   const crear = useCallback(async () => {
-    if (!linea || !enCamion.length || creando) return;
+    if (!linea || !enCamion.length || creando || creado) return;  // ya creado → no recrear
     setCreando(true); setError("");
     try {
       // nº de manifiesto por OV (solo los que se capturaron)
@@ -174,10 +174,17 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
             <label className="flex flex-col gap-1 ml-2"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Fecha</span>
               <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={INP + " w-40 py-1.5"} /></label>
             <div className="ml-auto text-right leading-none"><div className="text-2xl font-bold text-gray-800 tabular-nums">{totCajas}</div><div className="text-[11px] text-gray-400 font-semibold">cajas · {enCamion.length} pallets</div></div>
-            <button onClick={crear} disabled={!linea || !enCamion.length || creando}
-              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm ${(!linea || !enCamion.length || creando) ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>
-              {creando ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />} {creando ? "Creando…" : "Crear embarque"}
-            </button>
+            {creado ? (
+              <button onClick={onClose}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm bg-emerald-600 text-white hover:bg-emerald-700">
+                <Check size={17} /> Listo · cerrar
+              </button>
+            ) : (
+              <button onClick={crear} disabled={!linea || !enCamion.length || creando}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm ${(!linea || !enCamion.length || creando) ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>
+                {creando ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />} {creando ? "Creando…" : "Crear embarque"}
+              </button>
+            )}
             <button onClick={onClose} disabled={creando} className="p-1.5 rounded-md text-gray-400 hover:bg-gray-100 disabled:opacity-40"><X size={18} /></button>
           </div>
 
