@@ -68,8 +68,9 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   }, [tp, conductores]);
 
   const usados = useMemo(() => new Set(bed.filter((x) => x != null).map(String)), [bed]);
+  const fechaDe = (p) => String(p.fechaOV || p.fechaOVCreada || p.fecha || "").slice(0, 10); // día en que se hizo la OV
   const disponibles = useMemo(
-    () => pallets.filter((p) => !usados.has(String(p.palletDet)) && (!fechaPallet || String(p.fecha).slice(0, 10) === fechaPallet)),
+    () => pallets.filter((p) => !usados.has(String(p.palletDet)) && (!fechaPallet || fechaDe(p) === fechaPallet)),
     [pallets, usados, fechaPallet]
   );
   const enCamion = useMemo(() => bed.map((pd, pos) => (pd != null ? { ...byPd(pd), position: pos } : null)).filter(Boolean), [bed, byPd]);
@@ -285,7 +286,7 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
                   className={`grid grid-cols-[18px_1fr_auto_24px] gap-2 items-center px-2 py-1.5 rounded-lg cursor-pointer select-none border ${s ? "bg-emerald-50 border-emerald-300" : "border-transparent hover:bg-gray-50"}`}>
                   <span className={`w-[17px] h-[17px] rounded-[5px] grid place-items-center border-[1.7px] ${s ? "bg-emerald-600 border-emerald-600" : "border-gray-300"}`}>{s ? <Check size={11} className="text-white" strokeWidth={3.5} /> : null}</span>
                   <span className="min-w-0"><span className="flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden text-ellipsis"><span className="font-mono font-bold text-[13px]">{p.folio}</span><span className="font-mono font-extrabold text-[11px] text-gray-600">{p.pt}</span><span className="text-[11px] text-gray-400">OV {p.ovNum}</span></span>
-                    <span className="block text-[10px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{p.presentacion} · {p.cardName || p.cardCode}</span></span>
+                    <span className="block text-[10px] text-gray-400 whitespace-nowrap overflow-hidden text-ellipsis">{(p.fechaOV || p.fechaOVCreada || p.fecha || "").slice(0, 10)} · {p.presentacion} · {p.cardName || p.cardCode}</span></span>
                   <span className="font-mono font-bold text-[13px] text-gray-500">{p.cajas}</span>
                   <button onClick={(e) => { e.stopPropagation(); placeNext(String(p.palletDet)); }} className="w-[22px] h-[22px] rounded-md grid place-items-center text-gray-400 hover:bg-emerald-600 hover:text-white border border-gray-200 text-base font-bold">+</button>
                 </div>
