@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
-  Truck, Package, FileText, X, Check, Loader2, AlertCircle, Send, GripVertical, Building2,
+  Truck, Package, FileText, X, Check, Loader2, AlertCircle, Send, GripVertical,
 } from "lucide-react";
 import {
   getPalletsPorEmbarcar, getTransportistas, getConductores, getAgentesAduanales, crearEmbarqueSAP,
@@ -38,6 +38,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   const dragFrom = useRef(null);
 
   const [numeros, setNumeros] = useState({});   // { ovEntry: nº de manifiesto }
+  const [sellos, setSellos] = useState({});     // { ovEntry: { origen, reemplazo, lateral, adicional } }
   const [creando, setCreando] = useState(false);
   const [creado, setCreado] = useState(null);
 
@@ -136,9 +137,16 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
       // nº de manifiesto por OV (solo los que se capturaron)
       const nums = {};
       Object.entries(numeros).forEach(([k, v]) => { if (v && String(v).trim()) nums[k] = String(v).trim(); });
+      // sellos por OV (solo los que traen al menos un valor)
+      const sll = {};
+      Object.entries(sellos).forEach(([k, s]) => {
+        const clean = {};
+        ["origen", "reemplazo", "lateral", "adicional"].forEach((f) => { if (s?.[f] && String(s[f]).trim()) clean[f] = String(s[f]).trim(); });
+        if (Object.keys(clean).length) sll[k] = clean;
+      });
       const payload = {
         linea, flete: Number(flete) || 0, anticipo: Number(anticipo) || 0, agente, fecha,
-        numeros: nums,
+        numeros: nums, sellos: sll,
         pallets: enCamion.map((p) => ({
           palletCode: p.palletCode, palletDet: p.palletDet, ovEntry: p.ovEntry, ovNum: p.ovNum,
           cardCode: p.cardCode, pt: p.pt, cajas: p.cajas, lote: p.lote, baseLine: p.baseLine, position: p.position,
@@ -150,7 +158,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
     } catch (e) {
       setError((e?.sinRespuesta ? "Sin confirmación de SAP — verifica antes de reintentar. " : "") + (e?.message || "No se pudo crear el embarque."));
     } finally { setCreando(false); }
-  }, [linea, flete, anticipo, agente, fecha, enCamion, numeros, creando, onCreated]);
+  }, [linea, flete, anticipo, agente, fecha, enCamion, numeros, sellos, creando, onCreated]);
 
   const TABS = [["Transporte", Truck], ["Pallets y distribución", Package], ["Manifiestos", FileText]];
 
@@ -202,7 +210,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
             ) : tab === 1 ? (
               <Distribucion {...{ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas, fechaPallet, setFechaPallet }} />
             ) : (
-              <Manifiestos porOV={porOV} numeros={numeros} setNumeros={setNumeros} />
+              <Manifiestos porOV={porOV} numeros={numeros} setNumeros={setNumeros} sellos={sellos} setSellos={setSellos} />
             )}
           </div>
         </div>
@@ -335,7 +343,9 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
   );
 }
 
-function Manifiestos({ porOV, numeros, setNumeros }) {
+const SELLOS = [["origen", "Sello origen"], ["reemplazo", "Sello reemplazo"], ["lateral", "Sello lateral"], ["adicional", "Sello adicional"]];
+
+function Manifiestos({ porOV, numeros, setNumeros, sellos, setSellos }) {
   const [dest, setDest] = useState({});   // cardCode → { suc, state, city, country } | null (cargando)
   useEffect(() => {
     porOV.forEach((o) => {
@@ -348,47 +358,66 @@ function Manifiestos({ porOV, numeros, setNumeros }) {
     });
   }, [porOV]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!porOV.length) return <div className="py-14 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">Acomoda pallets y aquí se arma un manifiesto por OV (destino y consecutivos automáticos al crear).</div>;
+  const setSello = (k, f, v) => setSellos((s) => ({ ...s, [k]: { ...(s[k] || {}), [f]: v } }));
+
+  if (!porOV.length) return <div className="py-14 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">Acomoda pallets y aquí se arma un manifiesto por cliente (destino y consecutivos automáticos al crear).</div>;
   return (
     <div className="space-y-3">
-      <div className="text-[11px] text-gray-400 font-medium">Un manifiesto por OV. El <b className="text-emerald-600">número de manifiesto</b> es opcional: si lo pones, se escribe en el manifiesto y también en la Entrega de SAP (queda anidado). Si no, queda en blanco para capturarlo después.</div>
+      <div className="flex items-center gap-2 text-sm font-bold text-gray-700"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Manifiestos <span className="text-[11px] font-medium text-gray-400">(uno por cliente · auto del destino)</span></div>
       {porOV.map((o) => {
         const d = dest[o.cardCode];
         const k = String(o.ovEntry);
         return (
           <div key={k} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-gray-50">
-              <div className="flex items-center gap-2"><Building2 size={16} className="text-gray-400" /><b className="text-gray-800">{o.cardName || o.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{o.cardCode} · OV {o.ovNum}</span></div>
-              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-2.5 py-1 rounded-full">auto del destino · {o.cajas} cajas · {o.pallets} pallets</span>
+            {/* cabecera cliente */}
+            <div className="flex items-center justify-between gap-2 px-5 py-3 bg-gray-50 border-b border-gray-100">
+              <div className="flex items-baseline gap-2"><b className="text-[15px] font-extrabold text-gray-800 uppercase tracking-tight">{o.cardName || o.cardCode}</b><span className="font-mono text-[11.5px] text-gray-400">{o.cardCode}</span></div>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-sky-700 bg-sky-100 px-3 py-1.5 rounded-md">auto del destino · {o.cajas} cajas</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4 py-3">
-              {/* destino (auto del cliente) */}
-              <div className="space-y-1.5 text-[12.5px]">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Destino (del cliente)</div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 px-5 py-4">
+              {/* info del destino (auto) */}
+              <dl className="space-y-2.5 text-[13px]">
                 {d === null ? (
-                  <div className="text-gray-400 flex items-center gap-1.5"><Loader2 size={13} className="animate-spin" /> Cargando destino…</div>
-                ) : d && (d.suc || d.state) ? (
-                  <>
-                    <div className="text-gray-700"><b>Sucursal:</b> {d.suc || "—"}</div>
-                    <div className="text-gray-700 font-mono">{d.country || "—"} · {d.state || "—"} · {d.city || "—"}</div>
-                  </>
-                ) : (
-                  <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-[11.5px]">El cliente no tiene dirección de embarque (ship-to) en SAP; se creará el manifiesto sin destino.</div>
-                )}
-              </div>
-              {/* número de manifiesto (opcional, se escribe en SAP) */}
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Número de manifiesto <span className="normal-case text-gray-300 font-medium">(opcional)</span></label>
-                <input
-                  value={numeros[k] || ""} onChange={(e) => setNumeros((n) => ({ ...n, [k]: e.target.value }))}
-                  placeholder="Ej. 35480" inputMode="numeric"
-                  className={INP + " mt-1 font-mono"} />
-                <div className="text-[10.5px] text-gray-400 mt-1">Se guarda en el manifiesto y en la Entrega (ODLN). Consecutivos y sellos: automáticos / manual en SAP.</div>
+                  <div className="text-gray-400 flex items-center gap-1.5"><Loader2 size={14} className="animate-spin" /> Cargando destino…</div>
+                ) : (<>
+                  <Fila label="Sucursal" val={d?.suc || "—"} />
+                  <Fila label="País / Estado / Ciudad" val={<span className="font-mono">{d?.country || "—"} · {d?.state || "—"} · {d?.city || "—"}</span>} />
+                  <Fila label="Consecutivo destino" val={<span className="text-gray-400 italic font-normal">se asigna al crear</span>} />
+                  <Fila label="Consecutivo embarcado" val={<span className="text-gray-400 italic font-normal">se asigna al crear</span>} />
+                  <Fila label="Agricultor" val={<span className="font-mono">SL AGRÍCOLA</span>} />
+                  {d && !(d.suc || d.state) ? <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 text-[11.5px]">El cliente no tiene dirección de embarque (ship-to) en SAP; se crea el manifiesto sin destino.</div> : null}
+                </>)}
+              </dl>
+              {/* captura (se llena aquí) */}
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-3.5 space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Número de manifiesto</label>
+                  <input value={numeros[k] || ""} onChange={(e) => setNumeros((n) => ({ ...n, [k]: e.target.value }))}
+                    placeholder="Ej. 35480" inputMode="numeric" className={INP + " mt-1 font-mono"} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {SELLOS.map(([f, lbl]) => (
+                    <div key={f}>
+                      <label className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{lbl}</label>
+                      <input value={sellos[k]?.[f] || ""} onChange={(e) => setSello(k, f, e.target.value)}
+                        placeholder="—" className={INP + " mt-1 font-mono text-[13px] py-1.5"} />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function Fila({ label, val }) {
+  return (
+    <div className="grid grid-cols-[130px_1fr] gap-3 items-baseline">
+      <dt className="text-gray-400 font-medium">{label}</dt>
+      <dd className="text-gray-800 font-semibold">{val}</dd>
     </div>
   );
 }
