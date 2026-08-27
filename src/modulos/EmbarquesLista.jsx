@@ -84,22 +84,30 @@ export default function EmbarquesLista() {
                         <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
                       ) : (() => {
                         const st = stocks[e.id];
-                        const listo = st?.listo;
+                        const listo = st?.listo === true;         // SÉ que hay stock
+                        const faltaStock = st && st.listo === false; // SÉ que falta
+                        const cargandoStock = st === undefined;    // aún consultando
                         const detalle = st?.items?.length
                           ? st.items.map((i) => `${i.pt}: hay ${i.hay} / necesita ${i.necesita}${i.ok ? " ✓" : " ✗"}`).join("\n")
                           : "";
+                        // se bloquea el botón mientras carga o mientras falte stock (para no picar a cada rato)
+                        const bloqueado = cargandoStock || faltaStock || accion === e.id;
                         return (
                           <div className="flex items-center gap-2">
-                            {st === undefined ? (
+                            {cargandoStock ? (
                               <span className="text-[11px] font-semibold text-gray-400 inline-flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> stock…</span>
                             ) : listo ? (
                               <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 inline-flex items-center gap-1.5" title={detalle}><Check size={12} /> Stock listo</span>
-                            ) : (
+                            ) : faltaStock ? (
                               <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 inline-flex items-center gap-1.5 whitespace-nowrap" title={detalle}><AlertTriangle size={12} /> Falta stock</span>
+                            ) : (
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap" title="No se pudo leer el stock">Sin entrega</span>
                             )}
-                            <button onClick={() => generarEntregas(e)} disabled={accion === e.id}
-                              title={listo ? "Generar las entregas (ya hay stock)" : "Intentar generar las entregas (puede quedar pendiente por stock)"}
-                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg disabled:opacity-60 inline-flex items-center gap-1.5 ${listo ? "bg-emerald-600 text-white hover:bg-emerald-700" : "border border-emerald-600 text-emerald-700 hover:bg-emerald-50"}`}>
+                            <button onClick={() => generarEntregas(e)} disabled={bloqueado}
+                              title={faltaStock ? "Falta stock: espera a que producción registre los pallets en SAP" : "Generar las entregas (ya hay stock)"}
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 ${
+                                bloqueado ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                              }`}>
                               {accion === e.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Generar entregas
                             </button>
                           </div>
