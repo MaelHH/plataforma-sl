@@ -18,6 +18,18 @@ function fechaReciboEmpaque(m) {
   return m.recepcion?.estado === "recibido" ? (m.recepcion.fechaLlegada || "") : "";
 }
 
+// OF de SAP a la que apunta un rancho (lote+cultivo) del catálogo. Devuelve el nº VISIBLE de la
+// orden (docNum) que se usaría, su item, si empieza con PT- (regla: la orden de campo NO es PT-) y
+// cuántas órdenes tiene ese lote. SOLO informativo (para verificar antes de mandar cubetas a SAP).
+function ofDeRancho(rancho) {
+  const ord = rancho?.sap?.ordenes || [];
+  const o0 = ord[0];
+  if (o0 == null) return null;
+  const docNum = (typeof o0 === "object") ? (o0.docNum ?? o0.absoluteEntry) : o0;
+  const item = rancho?.sap?.item || "";
+  return { docNum, item, esPT: String(item).toUpperCase().startsWith("PT"), n: ord.length };
+}
+
 // Días entre la salida de campo y el recibo en empaque (el "plazo" en que llegó).
 function diasPlazo(salidaISO, reciboISO) {
   if (!salidaISO || !reciboISO) return null;
@@ -400,6 +412,10 @@ export default function Modulo8() {
   const sinCultivoValido = cultivosTemporadaTodos.length > 0 && cultivosTemporada.length === 0;
   // Rancho elegido → responsables; se identifica por (lote + cultivo efectivo).
   const ranchoSelForm = proyectoSel?.ranchos.find((r) => r.nombre === form.rancho && (!cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo));
+
+  // OF de SAP a la que apunta el rancho elegido — para VERIFICAR antes de crear el movimiento
+  // (evita mandar cubetas a la orden equivocada). Es SOLO informativo (no cambia nada).
+  const ofDelRancho = ofDeRancho(ranchoSelForm);
 
   // Visualización del movimiento: la TEMPORADA va en el campo "Rancho", y el RANCHO elegido va en "Lote".
   // (Movimientos viejos sin `proyecto` siguen mostrando su rancho/lote original.)
@@ -839,6 +855,18 @@ export default function Modulo8() {
                       placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
                       options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => ({ value: r.nombre, label: r.nombre }))} />
                     {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
+                    {/* OF que afectará este rancho (verificación antes de mandar cubetas a SAP) */}
+                    {ranchoSelForm && (
+                      ofDelRancho ? (
+                        <div className={`mt-1 text-[11px] rounded-md px-2 py-1 border ${ofDelRancho.esPT ? "bg-red-50 border-red-300 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+                          {ofDelRancho.esPT ? "⚠️ " : "✓ "}Orden de fabricación: <b className="font-mono">#{ofDelRancho.docNum}</b> <span className="font-mono">({ofDelRancho.item || "sin item"})</span>
+                          {ofDelRancho.esPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Verifica antes de mandar.</div>}
+                          {ofDelRancho.n > 1 && <div className="mt-0.5">Hay <b>{ofDelRancho.n}</b> órdenes para este lote; se usaría la #{ofDelRancho.docNum}.</div>}
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-[11px] rounded-md px-2 py-1 border bg-amber-50 border-amber-300 text-amber-700">⚠️ Este rancho no tiene orden de fabricación en SAP; el recibo no se podrá mandar.</div>
+                      )
+                    )}
                   </div>
                   <div><label className={LBL}>Responsable cosecha</label>
                     <SearchSelect className={INP} value={form.responsableCosecha} onChange={(v) => setForm((f) => ({ ...f, responsableCosecha: v }))} disabled={!ranchoSelForm}
@@ -1174,6 +1202,11 @@ export default function Modulo8() {
                           <div className="flex items-center gap-2 mb-1">
                             <input value={r.nombre} onChange={(e) => updRanchoFld(p.code, ri, "nombre", e.target.value)} className={INP_TBL + " font-medium"} placeholder="Rancho" />
                             {r.cultivo && <span title="Cultivo de este lote (de SAP)" className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-[11px]"><Sprout size={11} /> {r.cultivo}</span>}
+                            {r.sap && (() => { const of = ofDeRancho(r); return of ? (
+                              <span title={`Orden de fabricación de SAP para este lote${of.n > 1 ? ` (hay ${of.n})` : ""}`} className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono ${of.esPT ? "border-red-300 bg-red-50 text-red-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>{of.esPT ? "⚠️" : "OF"} #{of.docNum}{of.n > 1 ? ` +${of.n - 1}` : ""}</span>
+                            ) : (
+                              <span title="Sin orden de fabricación en SAP" className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 text-[11px]">sin OF</span>
+                            ); })()}
                             <button onClick={() => delRancho(p.code, ri)} className="text-gray-300 hover:text-red-500 text-xs inline-flex items-center" title="Eliminar rancho"><Trash2 size={14} /></button>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
