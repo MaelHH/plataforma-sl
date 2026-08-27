@@ -178,6 +178,27 @@ function DrawerEmbarque({ d, cargando, accion, onGenerar, onClose }) {
               ))}
             </div>
 
+            {/* manifiestos (nº por OV) */}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">Manifiestos · nº por OV</div>
+              <div className="space-y-2">
+                {(d.manifiestos || []).map((m) => (
+                  <div key={m.ovEntry} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-800 text-[13px] truncate">{m.cardName || m.cardCode}</div>
+                      <div className="font-mono text-[11px] text-gray-400">OV {m.ovNum}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Nº manifiesto</div>
+                      {m.numero
+                        ? <div className="font-mono font-bold text-sm text-gray-800">{m.numero}</div>
+                        : <div className="text-[11px] text-amber-600 font-semibold">sin número</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* PTs y stock */}
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 flex items-center justify-between">
