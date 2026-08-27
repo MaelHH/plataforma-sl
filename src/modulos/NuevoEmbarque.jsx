@@ -29,7 +29,8 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   const [flete, setFlete] = useState("0");
   const [anticipo, setAnticipo] = useState("0");
   const [agente, setAgente] = useState("");
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useState(hoyISO());          // fecha de creación del EMBARQUE
+  const [fechaPallet, setFechaPallet] = useState(hoyISO()); // filtro: ver pallets de ESE día ("" = todas)
 
   const [bed, setBed] = useState(() => new Array(CAP).fill(null));   // posición → palletDet
   const [sel, setSel] = useState(() => new Set());                  // palletDet seleccionados
@@ -67,7 +68,10 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
   }, [tp, conductores]);
 
   const usados = useMemo(() => new Set(bed.filter((x) => x != null).map(String)), [bed]);
-  const disponibles = useMemo(() => pallets.filter((p) => !usados.has(String(p.palletDet))), [pallets, usados]);
+  const disponibles = useMemo(
+    () => pallets.filter((p) => !usados.has(String(p.palletDet)) && (!fechaPallet || String(p.fecha).slice(0, 10) === fechaPallet)),
+    [pallets, usados, fechaPallet]
+  );
   const enCamion = useMemo(() => bed.map((pd, pos) => (pd != null ? { ...byPd(pd), position: pos } : null)).filter(Boolean), [bed, byPd]);
   const totCajas = useMemo(() => enCamion.reduce((a, p) => a + (p?.cajas || 0), 0), [enCamion]);
   const nSel = useMemo(() => [...sel].filter((pd) => !usados.has(String(pd))).length, [sel, usados]);
@@ -195,7 +199,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
             ) : tab === 0 ? (
               <Transporte {...{ transp, linea, setLinea, tp, conductor, flete, setFlete, anticipo, setAnticipo, agente, setAgente, agentes }} />
             ) : tab === 1 ? (
-              <Distribucion {...{ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas }} />
+              <Distribucion {...{ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas, fechaPallet, setFechaPallet }} />
             ) : (
               <Manifiestos porOV={porOV} numeros={numeros} setNumeros={setNumeros} />
             )}
@@ -252,7 +256,7 @@ function Transporte({ transp, linea, setLinea, tp, conductor, flete, setFlete, a
   );
 }
 
-function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas }) {
+function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acomodarSel, acomodarTodos, quitar, nSel, dragFrom, onDrop, totCajas, fechaPallet, setFechaPallet }) {
   const nf = bed.findIndex((x) => x == null);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.35fr] gap-4">
@@ -260,9 +264,18 @@ function Distribucion({ disponibles, bed, sel, byPd, onRowClick, placeNext, acom
       <div className="bg-white border border-gray-200 rounded-xl p-3">
         <div className="flex items-center justify-between mb-1"><span className="text-sm font-bold text-gray-700">Pallets por embarcar</span>
           <button onClick={acomodarTodos} className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 hover:border-emerald-500 hover:text-emerald-700">Acomodar todos</button></div>
+        {/* filtro Fecha pallet: día en que se hizo la OV/asignación (como en SAP) */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Fecha pallet</span>
+          <input type="date" value={fechaPallet} onChange={(e) => setFechaPallet(e.target.value)}
+            className="px-2 py-1 rounded-lg border border-gray-300 text-[12.5px] font-semibold text-gray-700 focus:border-emerald-500 focus:outline-none" />
+          {fechaPallet
+            ? <button onClick={() => setFechaPallet("")} className="text-[11px] font-semibold text-gray-500 hover:text-emerald-700 underline">ver todas</button>
+            : <span className="text-[11px] font-semibold text-emerald-600">todas las fechas</span>}
+        </div>
         <div className="text-[11px] text-gray-400 font-medium mb-2"><b className="text-emerald-600">Shift+click</b> = rango · <b>+</b> acomoda uno · o <b className="text-emerald-600">arrastra</b> a la posición del camión.</div>
         <div className="max-h-[54vh] overflow-y-auto">
-          {!disponibles.length ? <div className="py-10 text-center text-gray-400 text-sm">Sin pallets por embarcar.</div> :
+          {!disponibles.length ? <div className="py-10 text-center text-gray-400 text-sm">{fechaPallet ? "Sin pallets de esa fecha — cambia la fecha o pulsa “ver todas”." : "Sin pallets por embarcar."}</div> :
             disponibles.map((p) => {
               const s = sel.has(String(p.palletDet));
               return (
