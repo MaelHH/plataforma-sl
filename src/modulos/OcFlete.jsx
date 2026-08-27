@@ -282,14 +282,6 @@ export default function OcFlete() {
               <div className={`text-[12.5px] font-bold flex items-center gap-2 ${calc.sumBase === calc.importe ? "text-emerald-700" : "text-red-600"}`}>
                 {calc.sumBase === calc.importe ? "✓" : "✗"} Suma de bases {money(calc.sumBase)} {calc.sumBase === calc.importe ? "= Importe (cuadra exacto)" : `≠ Importe (${money(calc.importe)})`} · el IVA lo agrega SAP con el TaxCode.
               </div>
-              <div className="flex justify-end pt-1">
-                {creado ? null : (
-                  <button onClick={crear} disabled={!puede}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm ${!puede ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>
-                    {creando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {creando ? "Creando…" : "Crear OC de flete"}
-                  </button>
-                )}
-              </div>
             </>) : null}
           </div>
         )}
