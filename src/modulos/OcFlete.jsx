@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Truck, Search, Loader2, AlertCircle, Send, Check } from "lucide-react";
+import { ReceiptText, Search, Loader2, AlertCircle, Send, Check } from "lucide-react";
 import {
   getFleteManifiestos, getFleteEntrega, getFleteProveedores, getFleteArticulos, crearOcFlete,
 } from "../store/api";
@@ -95,55 +95,94 @@ export default function OcFlete() {
     } finally { setCreando(false); }
   }, [puede, manifiesto, prov, flete, ivaCode, precio, diesel, comentario, fecha]);
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4">
-      {/* ENTRADA */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4 self-start">
-        <div>
-          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">1 · Manifiesto</span>
-          <div className="flex gap-2 mt-2">
-            <div className="flex-1 min-w-0">
-              <SearchSelect value={manifiesto} onChange={elegirManifiesto} allowCustom
-                placeholder="Elige o teclea un nº de manifiesto"
-                className={INP + " font-mono"}
-                options={manifiestosDisp.map((m) => ({
-                  value: m.manifiesto,
-                  label: `${m.manifiesto}${m.cardCode ? " · " + m.cardCode : ""}${m.ovNum ? " · OV " + m.ovNum : ""}${m.tieneOC ? " · ya tiene OC" : ""}`,
-                }))} />
-            </div>
-            <button onClick={() => buscar()} disabled={!manifiesto.trim() || buscando}
-              className="shrink-0 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400">
-              {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />} Buscar
-            </button>
-          </div>
-          {manifiestosDisp.length ? (
-            <div className="text-[10.5px] text-gray-400 mt-1.5">{manifiestosDisp.length} manifiesto{manifiestosDisp.length === 1 ? "" : "s"} de tus embarques · o teclea uno manual</div>
-          ) : null}
-        </div>
+  const optsManifiestos = manifiestosDisp.map((m) => ({
+    value: m.manifiesto,
+    label: `${m.manifiesto}${m.cardCode ? " · " + m.cardCode : ""}${m.ovNum ? " · OV " + m.ovNum : ""}${m.tieneOC ? " · ya tiene OC" : ""}`,
+  }));
 
-        <div className="pt-1">
-          <span className="text-xs font-bold uppercase tracking-wide text-gray-400">2 · Transporte y flete</span>
-          <div className="mt-2 space-y-3">
+  return (
+    <div className="space-y-4">
+      {/* encabezado */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="w-10 h-10 rounded-xl bg-emerald-600 grid place-items-center text-white shrink-0"><ReceiptText size={20} /></div>
+        <div className="mr-auto min-w-0">
+          <h2 className="text-base font-bold text-gray-800 leading-tight">OC de flete</h2>
+          <p className="text-xs text-gray-500">Manifiesto → Entrega → OC al transportista · flete prorrateado por cajas</p>
+        </div>
+        {entrega && !creado ? (
+          <button onClick={crear} disabled={!puede}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-bold text-sm ${!puede ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>
+            {creando ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} {creando ? "Creando…" : "Crear OC de flete"}
+          </button>
+        ) : null}
+      </div>
+
+      {error ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-700 flex items-start gap-2"><AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}</div>
+      ) : null}
+      {creado ? (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+          <div className="font-bold text-emerald-800 flex items-center gap-2"><Check size={17} /> OC de flete creada en SAP{creado.yaExistia ? " (ya existía)" : ""} · manifiesto {creado.manifiesto}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+            <Kpi lab="Nº documento" val={creado.docNum ?? "—"} />
+            <Kpi lab="Total sin impuestos" val={money(creado.sumBase)} />
+            <Kpi lab="Total con IVA" val={creado.docTotal != null ? money(creado.docTotal) : "—"} />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,360px)_1fr] gap-5 items-start">
+        {/* ENTRADA */}
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-5 lg:sticky lg:top-4">
+          {/* 1 · manifiesto */}
+          <section className="space-y-2.5">
+            <Sec n="1">Manifiesto</Sec>
+            <div className="flex gap-2">
+              <div className="flex-1 min-w-0">
+                <SearchSelect value={manifiesto} onChange={elegirManifiesto} allowCustom
+                  placeholder="Elige o teclea un nº"
+                  className={INP + " font-mono"} options={optsManifiestos} />
+              </div>
+              <button onClick={() => buscar()} disabled={!manifiesto.trim() || buscando}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400">
+                {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />} Buscar
+              </button>
+            </div>
+            {manifiestosDisp.length ? (
+              <div className="text-[11px] text-gray-400">{manifiestosDisp.length} de tus embarques · o teclea uno manual</div>
+            ) : null}
+          </section>
+
+          <div className="border-t border-gray-100" />
+
+          {/* 2 · transporte y flete */}
+          <section className="space-y-3.5">
+            <Sec n="2">Transporte y flete</Sec>
             <div>
               <label className={LB}>Proveedor (transportista)</label>
               <SearchSelect value={prov} onChange={setProv} placeholder="— selecciona —"
-                options={proveedores.map((p) => ({ value: p.code, label: `${p.code} · ${p.name}` }))} />
+                className={INP} options={proveedores.map((p) => ({ value: p.code, label: `${p.code} · ${p.name}` }))} />
             </div>
-            <div className="grid grid-cols-[1fr_120px] gap-2">
-              <div>
-                <label className={LB}>Flete (artículo)</label>
-                <SearchSelect value={flete} onChange={setFlete} placeholder="— flete —"
-                  options={fletes.map((f) => ({ value: f.code, label: `${f.code} · ${f.name}` }))} />
-              </div>
-              <div>
-                <label className={LB}>IVA</label>
-                <select value={ivaCode} onChange={(e) => setIvaCode(e.target.value)} className={INP + " font-mono"}>
-                  <option value="IVAA16">IVAA16 · 16%</option>
-                  <option value="IVAA0">IVAA0 · 0%</option>
-                </select>
-              </div>
+            <div>
+              <label className={LB}>Flete (artículo)</label>
+              <SearchSelect value={flete} onChange={setFlete} placeholder="— flete —"
+                className={INP} options={fletes.map((f) => ({ value: f.code, label: `${f.code} · ${f.name}` }))} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={LB}>IVA del flete</label>
+              <select value={ivaCode} onChange={(e) => setIvaCode(e.target.value)} className={INP + " font-mono"}>
+                <option value="IVAA16">IVAA16 · 16%</option>
+                <option value="IVAA0">IVAA0 · 0%</option>
+              </select>
+            </div>
+          </section>
+
+          <div className="border-t border-gray-100" />
+
+          {/* 3 · importe */}
+          <section className="space-y-3.5">
+            <Sec n="3">Importe del flete</Sec>
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={LB}>Precio del flete</label>
                 <input value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="0.00"
@@ -155,42 +194,30 @@ export default function OcFlete() {
                   inputMode="decimal" className={INP + " font-mono"} />
               </div>
             </div>
+            <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-bold ${importe > 0 ? "bg-emerald-50 text-emerald-700" : "bg-gray-50 text-gray-400"}`}>
+              <span className="text-[11px] font-bold uppercase tracking-wide">Importe neto</span>
+              <span className="font-mono">{money(importe)}</span>
+            </div>
             <div>
               <label className={LB}>Comentario</label>
               <textarea value={comentario} onChange={(e) => setComentario(e.target.value)} rows={2}
-                placeholder="Ej. Flete manifiesto…" className={INP} />
+                placeholder="Ej. Flete manifiesto…" className={INP + " resize-none"} />
             </div>
             <div>
               <label className={LB}>Fecha de la OC</label>
               <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={INP + " font-mono"} />
             </div>
-          </div>
+          </section>
         </div>
-      </div>
 
-      {/* SALIDA */}
-      <div className="min-w-0">
-        {error ? (
-          <div className="mb-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-700 flex items-start gap-2"><AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}</div>
-        ) : null}
-
-        {creado ? (
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-3">
-            <div className="font-bold text-emerald-800 flex items-center gap-2"><Check size={17} /> OC de flete creada en SAP{creado.yaExistia ? " (ya existía)" : ""} · manifiesto {creado.manifiesto}</div>
-            <div className="grid grid-cols-3 gap-3 mt-3">
-              <Kpi lab="Nº documento" val={creado.docNum ?? "—"} />
-              <Kpi lab="Total sin impuestos" val={money(creado.sumBase)} />
-              <Kpi lab="Total con IVA" val={creado.docTotal != null ? money(creado.docTotal) : "—"} />
-            </div>
-          </div>
-        ) : null}
-
+        {/* SALIDA */}
         {!entrega ? (
-          <div className="py-20 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-xl">
-            {buscando ? <><Loader2 size={18} className="inline animate-spin mr-2" />Buscando la Entrega…</> : "Busca un manifiesto para ver su Entrega y prorratear el flete."}
+          <div className="py-24 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-2xl">
+            {buscando ? <><Loader2 size={18} className="inline animate-spin mr-2" />Buscando la Entrega…</>
+              : <><ReceiptText size={26} className="mx-auto mb-2 text-gray-300" />Elige un manifiesto para ver su Entrega y prorratear el flete.</>}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {/* cabecera entrega */}
             <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
               <div>
@@ -206,7 +233,7 @@ export default function OcFlete() {
               <div className="font-mono text-[11.5px] text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2">
                 prorrateo = ( <b className="text-emerald-700">Importe</b> ÷ cajas ) × cajas del lote → ( {money(calc.importe)} ÷ {calc.totalCajas} ) = <b className="text-emerald-700">{money(calc.porCaja)}</b> por caja
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <Kpi lab="Importe neto (pre-IVA)" val={money(calc.importe)} em />
                 <Kpi lab="Total de cajas" val={calc.totalCajas} />
                 <Kpi lab="Importe por caja" val={money(calc.porCaja)} />
@@ -261,6 +288,15 @@ export default function OcFlete() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Sec({ n, children }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-5 h-5 rounded-full bg-emerald-600 text-white grid place-items-center text-[11px] font-bold shrink-0">{n}</span>
+      <span className="text-[13px] font-bold text-gray-700">{children}</span>
     </div>
   );
 }
