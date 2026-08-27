@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Truck, RefreshCw, Loader2, Check, Package, Send, AlertTriangle } from "lucide-react";
-import { getEmbarques, reintentarEntregasEmbarque, getStockEmbarque } from "../store/api";
+import { Truck, RefreshCw, Loader2, Check, Package, Send, AlertTriangle, X } from "lucide-react";
+import { getEmbarques, reintentarEntregasEmbarque, getStockEmbarque, getEmbarqueDetalle } from "../store/api";
 
 // Lista de EMBARQUES creados desde la app (como la "Lista de embarques" del AddOn): folio, camión,
 // OVs, cajas, pallets, fecha. Solo lectura de la BD.
@@ -17,6 +17,15 @@ export default function EmbarquesLista() {
   const [error, setError] = useState("");
   const [accion, setAccion] = useState(null);   // id del embarque generando entregas
   const [stocks, setStocks] = useState({});     // id → { listo, items } (detector de stock)
+  const [detalle, setDetalle] = useState(null); // embarque abierto (drawer)
+  const [cargandoDet, setCargandoDet] = useState(false);
+
+  const abrir = useCallback(async (id) => {
+    setDetalle({ id }); setCargandoDet(true);
+    try { const d = await getEmbarqueDetalle(id); setDetalle(d); }
+    catch { setDetalle(null); }
+    finally { setCargandoDet(false); }
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -35,7 +44,12 @@ export default function EmbarquesLista() {
 
   const generarEntregas = useCallback(async (e) => {
     setAccion(e.id);
-    try { await reintentarEntregasEmbarque(e.id); await cargar(); }
+    try {
+      await reintentarEntregasEmbarque(e.id);
+      await cargar();
+      // si el drawer de este embarque está abierto, refréscalo (functional setter → sin dep de `detalle`)
+      try { const d = await getEmbarqueDetalle(e.id); setDetalle((prev) => (prev && prev.id === e.id ? d : prev)); } catch { /* */ }
+    }
     catch (err) { setError(err?.message || "No se pudieron generar las entregas."); }
     finally { setAccion(null); }
   }, [cargar]);
@@ -66,7 +80,7 @@ export default function EmbarquesLista() {
                 <tr><td colSpan={8} className="text-center text-gray-400 py-12"><Package size={30} className="mx-auto mb-2 text-gray-300" />Aún no hay embarques. Créalos con <b>Nuevo embarque</b>.</td></tr>
               ) : (
                 embarques.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
+                  <tr key={e.id} onClick={() => abrir(e.id)} className="hover:bg-gray-50 cursor-pointer">
                     <td className="px-3.5 py-3 border-b border-gray-100"><span className="font-mono font-bold text-[15px] text-gray-800">{e.folio ? `#${e.folio}` : "—"}</span></td>
                     <td className="px-3.5 py-3 border-b border-gray-100 font-mono text-[12.5px] text-gray-500">{fmtFecha(e.fecha || e.creada)}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100"><div className="font-semibold text-gray-800 text-[13px]">Línea {e.linea || "—"}</div>{e.agente ? <div className="text-[11px] text-gray-400">{e.agente}</div> : null}</td>
@@ -103,7 +117,7 @@ export default function EmbarquesLista() {
                             ) : (
                               <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-500 whitespace-nowrap" title="No se pudo leer el stock">Sin entrega</span>
                             )}
-                            <button onClick={() => generarEntregas(e)} disabled={bloqueado}
+                            <button onClick={(ev) => { ev.stopPropagation(); generarEntregas(e); }} disabled={bloqueado}
                               title={faltaStock ? "Falta stock: espera a que producción registre los pallets en SAP" : "Generar las entregas (ya hay stock)"}
                               className={`text-[11px] font-bold px-2.5 py-1 rounded-lg inline-flex items-center gap-1.5 ${
                                 bloqueado ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"
@@ -121,6 +135,99 @@ export default function EmbarquesLista() {
           </table>
         </div>
       </div>
+
+      {detalle ? (
+        <DrawerEmbarque d={detalle} cargando={cargandoDet} accion={accion} onGenerar={generarEntregas} onClose={() => setDetalle(null)} />
+      ) : null}
     </div>
+  );
+}
+
+function DrawerEmbarque({ d, cargando, accion, onGenerar, onClose }) {
+  const pend = d.entregasPendientes;
+  const listo = (d.pts || []).length && d.pts.every((p) => p.ok);
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
+      <aside className="fixed top-0 right-0 h-full w-[min(560px,95vw)] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
+        <div className="px-5 pt-5 pb-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div>
+            <div className="font-mono font-extrabold text-2xl text-gray-800 leading-none">Embarque #{d.folio || "—"}</div>
+            <div className="text-xs text-gray-400 font-semibold mt-1">Camión · pallets · entregas</div>
+          </div>
+          <div className="flex items-center gap-2">
+            {d.completo
+              ? <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
+              : <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">{pend ? `${pend} sin entrega` : "Sin entrega"}</span>}
+            <button onClick={onClose} className="w-9 h-9 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 grid place-items-center hover:text-red-500 hover:border-red-300"><X size={17} /></button>
+          </div>
+        </div>
+
+        {cargando || !d.pts ? (
+          <div className="flex-1 grid place-items-center text-gray-400"><span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Cargando…</span></div>
+        ) : (
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {/* transporte + resumen */}
+            <div className="grid grid-cols-2 gap-x-5 gap-y-2.5">
+              {[["Transportista", `Línea ${d.linea || "—"}`], ["Agente aduanal", d.agente || "—"],
+                ["Flete", d.flete != null ? `$${Number(d.flete).toLocaleString("es-MX")}` : "—"],
+                ["Anticipo", d.anticipo != null ? `$${Number(d.anticipo).toLocaleString("es-MX")}` : "—"],
+                ["Cajas", (d.cajas || 0).toLocaleString("es-MX")], ["Pallets", d.nPallets],
+                ["OVs", (d.ovs || []).join(", ") || "—"], ["Creado por", d.creadoPor || "—"]].map(([k, v]) => (
+                <div key={k}><div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{k}</div><div className="font-semibold text-sm text-gray-800 break-words">{v}</div></div>
+              ))}
+            </div>
+
+            {/* PTs y stock */}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 flex items-center justify-between">
+                <span>Productos y stock</span>
+                {!d.completo ? (listo ? <span className="text-emerald-600 inline-flex items-center gap-1"><Check size={12} /> stock listo</span> : <span className="text-amber-600 inline-flex items-center gap-1"><AlertTriangle size={12} /> falta stock</span>) : null}
+              </div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 text-[10.5px] uppercase tracking-wide text-gray-400 font-bold">
+                    <th className="text-left px-3 py-2">PT</th><th className="text-right px-3 py-2">Cajas</th><th className="text-right px-3 py-2">Stock</th><th className="text-center px-3 py-2">¿Alcanza?</th>
+                  </tr></thead>
+                  <tbody>
+                    {d.pts.map((p) => (
+                      <tr key={p.pt} className="border-t border-gray-100">
+                        <td className="px-3 py-2 font-mono font-bold text-gray-800">{p.pt}</td>
+                        <td className="px-3 py-2 text-right font-mono">{Number(p.cajas).toLocaleString("es-MX")}</td>
+                        <td className={`px-3 py-2 text-right font-mono font-bold ${p.ok ? "text-emerald-700" : "text-amber-700"}`}>{Number(p.hay).toLocaleString("es-MX")}</td>
+                        <td className="px-3 py-2 text-center">{p.ok ? <Check size={15} className="inline text-emerald-600" /> : <span className="text-amber-600 font-bold">✗</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-[11px] text-gray-400 mt-1.5">Stock del almacén de PT en SAP. "¿Alcanza?" compara las cajas del embarque contra el stock disponible.</div>
+            </div>
+
+            {/* pallets */}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">Pallets · {(d.pallets || []).length}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(d.pallets || []).map((p) => (
+                  <span key={`${p.folio}-${p.position}`} className={`font-mono text-[11px] font-medium border rounded px-2 py-0.5 ${p.entregada ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-white border-gray-200 text-gray-500"}`} title={`${p.pt} · ${p.cajas} cajas · lote ${p.lote || "—"} · OV ${p.ovNum}${p.entregada ? " · entregado" : ""}`}>
+                    {p.folio}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!d.completo && d.pts ? (
+          <div className="px-5 py-3.5 border-t border-gray-200 bg-gray-50">
+            <button onClick={() => onGenerar({ id: d.id })} disabled={accion === d.id || !listo}
+              title={listo ? "Generar las entregas (ya hay stock)" : "Falta stock: espera a que producción registre los pallets en SAP"}
+              className={`w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-sm ${(accion === d.id || !listo) ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-700"}`}>
+              {accion === d.id ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />} Generar entregas
+            </button>
+          </div>
+        ) : null}
+      </aside>
+    </>
   );
 }

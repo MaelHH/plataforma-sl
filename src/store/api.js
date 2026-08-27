@@ -200,6 +200,8 @@ export const getAgentesAduanales = () => req("GET", "/api/sap/agentes-aduanales"
 // body: { linea, flete, anticipo, agente, fecha, pallets:[{palletCode,palletDet,ovEntry,ovNum,cardCode,pt,cajas,lote,baseLine,position}] }.
 export const crearEmbarqueSAP = (body) => req("POST", "/api/sap/embarque", body, TIMEOUT_SAP_WRITE);
 export const getEmbarques = () => req("GET", "/api/sap/embarques");
+// Detalle de un embarque: info + sus PT con cajas y stock + lista de pallets.
+export const getEmbarqueDetalle = (id) => req("GET", `/api/sap/embarques/${encodeURIComponent(id)}`, undefined, 60000);
 // Reintenta las Entregas pendientes de un embarque (cuando ya hay stock en SAP).
 export const reintentarEntregasEmbarque = (id) =>
   req("POST", `/api/sap/embarques/${encodeURIComponent(id)}/entregas`, undefined, TIMEOUT_SAP_WRITE);
