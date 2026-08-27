@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Truck, RefreshCw, Loader2, Check, Package, Send } from "lucide-react";
-import { getEmbarques, reintentarEntregasEmbarque } from "../store/api";
+import { Truck, RefreshCw, Loader2, Check, Package, Send, AlertTriangle } from "lucide-react";
+import { getEmbarques, reintentarEntregasEmbarque, getStockEmbarque } from "../store/api";
 
 // Lista de EMBARQUES creados desde la app (como la "Lista de embarques" del AddOn): folio, camión,
 // OVs, cajas, pallets, fecha. Solo lectura de la BD.
@@ -16,11 +16,19 @@ export default function EmbarquesLista() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   const [accion, setAccion] = useState(null);   // id del embarque generando entregas
+  const [stocks, setStocks] = useState({});     // id → { listo, items } (detector de stock)
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    try { const r = await getEmbarques(); setEmbarques(Array.isArray(r?.embarques) ? r.embarques : []); setError(""); }
-    catch (e) { setError(e?.message || "No se pudieron cargar los embarques."); }
+    try {
+      const r = await getEmbarques();
+      const list = Array.isArray(r?.embarques) ? r.embarques : [];
+      setEmbarques(list); setError("");
+      // detector de stock solo para los embarques que aún NO están completos
+      const pend = list.filter((e) => !e.completo);
+      const res = await Promise.all(pend.map((e) => getStockEmbarque(e.id).then((s) => [e.id, s]).catch(() => [e.id, null])));
+      setStocks(Object.fromEntries(res));
+    } catch (e) { setError(e?.message || "No se pudieron cargar los embarques."); }
     finally { setCargando(false); }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
@@ -74,15 +82,29 @@ export default function EmbarquesLista() {
                     <td className="px-3.5 py-3 border-b border-gray-100">
                       {e.completo ? (
                         <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap" title="Faltan entregas (típico: sin stock en SAP todavía)">{e.entregasPendientes ? `${e.entregasPendientes} sin entrega` : "Sin entrega"}</span>
-                          <button onClick={() => generarEntregas(e)} disabled={accion === e.id}
-                            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5">
-                            {accion === e.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Generar entregas
-                          </button>
-                        </div>
-                      )}
+                      ) : (() => {
+                        const st = stocks[e.id];
+                        const listo = st?.listo;
+                        const detalle = st?.items?.length
+                          ? st.items.map((i) => `${i.pt}: hay ${i.hay} / necesita ${i.necesita}${i.ok ? " ✓" : " ✗"}`).join("\n")
+                          : "";
+                        return (
+                          <div className="flex items-center gap-2">
+                            {st === undefined ? (
+                              <span className="text-[11px] font-semibold text-gray-400 inline-flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> stock…</span>
+                            ) : listo ? (
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 inline-flex items-center gap-1.5" title={detalle}><Check size={12} /> Stock listo</span>
+                            ) : (
+                              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 inline-flex items-center gap-1.5 whitespace-nowrap" title={detalle}><AlertTriangle size={12} /> Falta stock</span>
+                            )}
+                            <button onClick={() => generarEntregas(e)} disabled={accion === e.id}
+                              title={listo ? "Generar las entregas (ya hay stock)" : "Intentar generar las entregas (puede quedar pendiente por stock)"}
+                              className={`text-[11px] font-bold px-2.5 py-1 rounded-lg disabled:opacity-60 inline-flex items-center gap-1.5 ${listo ? "bg-emerald-600 text-white hover:bg-emerald-700" : "border border-emerald-600 text-emerald-700 hover:bg-emerald-50"}`}>
+                              {accion === e.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Generar entregas
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))
