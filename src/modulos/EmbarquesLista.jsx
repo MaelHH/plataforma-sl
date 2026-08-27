@@ -72,18 +72,16 @@ export default function EmbarquesLista() {
                     <td className="px-3.5 py-3 border-b border-gray-100 text-right font-mono font-bold text-[15px] text-gray-800">{e.nPallets}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100 font-mono text-[12px] text-gray-500">{(e.ovs || []).join(", ") || "—"}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100">
-                      {e.entregasPendientes ? (
+                      {e.completo ? (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
+                      ) : (
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap" title="Faltan entregas por falta de stock en SAP">{e.entregasPendientes} sin entrega</span>
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap" title="Faltan entregas (típico: sin stock en SAP todavía)">{e.entregasPendientes ? `${e.entregasPendientes} sin entrega` : "Sin entrega"}</span>
                           <button onClick={() => generarEntregas(e)} disabled={accion === e.id}
                             className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5">
                             {accion === e.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Generar entregas
                           </button>
                         </div>
-                      ) : e.completo ? (
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
-                      ) : (
-                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Incompleto</span>
                       )}
                     </td>
                   </tr>
