@@ -6,6 +6,7 @@ import {
   getPalletsPorEmbarcar, getTransportistas, getConductores, getAgentesAduanales, crearEmbarqueSAP,
   getClienteDestino,
 } from "../store/api";
+import SearchSelect from "../components/SearchSelect";
 
 // Nuevo embarque (Fase 6): 3 pestañas — Transporte (camión de catálogo), Pallets + distribución en el
 // camión (Shift+click + arrastrar a posición), Manifiestos (uno por cliente, auto del destino). Crea todo
@@ -210,19 +211,29 @@ function Transporte({ transp, linea, setLinea, tp, conductor, flete, setFlete, a
     <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5 bg-white border border-gray-200 rounded-xl p-4">
       <div className="space-y-3">
         <label className="block"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Línea (transportista) · de SAP</span>
-          <select value={linea} onChange={(e) => setLinea(e.target.value)} className={INP + " mt-1"}>
-            <option value="">— Elige transportista —</option>
-            {transp.map((t) => <option key={t.Code} value={t.Code}>{t.Code} · {t.Name}</option>)}
-          </select></label>
+          <div className="mt-1">
+            <SearchSelect
+              value={linea}
+              onChange={setLinea}
+              options={transp.map((t) => ({ value: String(t.Code), label: `${t.Code} · ${t.Name}` }))}
+              placeholder="— Elige transportista —"
+              className={INP}
+            />
+          </div></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Flete</span><input value={flete} onChange={(e) => setFlete(e.target.value)} inputMode="decimal" className={INP + " mt-1 font-mono"} /></label>
           <label className="block"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Anticipo</span><input value={anticipo} onChange={(e) => setAnticipo(e.target.value)} inputMode="decimal" className={INP + " mt-1 font-mono"} /></label>
         </div>
         <label className="block"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Agente aduanal · de SAP</span>
-          <select value={agente} onChange={(e) => setAgente(e.target.value)} className={INP + " mt-1"}>
-            <option value="">— Elige agente aduanal —</option>
-            {agentes.map((a) => <option key={a.Code} value={a.Code}>{a.Code}{a.Name && a.Name !== a.Code ? ` — ${a.Name}` : ""}</option>)}
-          </select></label>
+          <div className="mt-1">
+            <SearchSelect
+              value={agente}
+              onChange={setAgente}
+              options={agentes.map((a) => ({ value: a.Code, label: a.Name && a.Name !== a.Code ? `${a.Code} — ${a.Name}` : a.Code }))}
+              placeholder="— Elige agente aduanal —"
+              className={INP}
+            />
+          </div></label>
       </div>
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
         {tp ? (
