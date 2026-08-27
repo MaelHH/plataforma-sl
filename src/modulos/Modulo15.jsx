@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
-  X, RefreshCw, Package, Building2, CalendarDays, Save, PackagePlus, ListChecks, Truck,
+  X, RefreshCw, Package, Building2, CalendarDays, Save, PackagePlus, ListChecks, Truck, ReceiptText,
 } from "lucide-react";
 import {
   getPalletsDisponibles, getClientesVenta,
@@ -11,6 +11,7 @@ import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
 import TableroEmbarques from "./TableroEmbarques";
 import EmbarquesLista from "./EmbarquesLista";
+import OcFlete from "./OcFlete";
 import ConfirmarEnvioSAP from "./ConfirmarEnvioSAP";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
@@ -302,6 +303,7 @@ export default function Modulo15() {
         <TabBtn id="asignar" icon={PackagePlus}>Asignar pallets</TabBtn>
         <TabBtn id="ordenes" icon={ListChecks} badge={nBorradores || undefined}>Órdenes de venta</TabBtn>
         <TabBtn id="embarques" icon={Truck}>Embarques</TabBtn>
+        <TabBtn id="flete" icon={ReceiptText}>OC de flete</TabBtn>
       </div>
 
       {errorOV ? (
@@ -321,7 +323,9 @@ export default function Modulo15() {
         </div>
       ) : null}
 
-      {vista === "embarques" ? (
+      {vista === "flete" ? (
+        <OcFlete />
+      ) : vista === "embarques" ? (
         <EmbarquesLista />
       ) : vista === "ordenes" ? (
         <TableroEmbarques

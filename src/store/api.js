@@ -207,6 +207,14 @@ export const reintentarEntregasEmbarque = (id) =>
   req("POST", `/api/sap/embarques/${encodeURIComponent(id)}/entregas`, undefined, TIMEOUT_SAP_WRITE);
 // Detector de stock: por PT, necesita vs hay; dice si ya se pueden generar las entregas pendientes.
 export const getStockEmbarque = (id) => req("GET", `/api/sap/embarques/${encodeURIComponent(id)}/stock`, undefined, 60000);
+// ── OC de flete desde manifiesto (Fase 7) ──
+// Entrega asociada a un manifiesto (cliente + líneas con cajas y dimensiones). Solo lectura.
+export const getFleteEntrega = (manifiesto) => req("GET", `/api/sap/flete/entrega${qs({ manifiesto })}`, undefined, 60000);
+export const getFleteProveedores = (q) => req("GET", `/api/sap/flete/proveedores${qs({ q })}`, undefined, 60000);
+export const getFleteArticulos = (q) => req("GET", `/api/sap/flete/articulos${qs({ q })}`, undefined, 60000);
+// ESCRITURA: crea la OC de flete (POST PurchaseOrders) con prorrateo por cajas. body:
+// { manifiesto, proveedor, flete, ivaCode, precio, diesel, comentario, fecha }.
+export const crearOcFlete = (body) => req("POST", "/api/sap/flete/oc", body, TIMEOUT_SAP_WRITE);
 // ── Manifiestos / OV: guardar en la app (borrador) → lista → mandar a SAP ──
 // Guarda la OV como BORRADOR en la app (NO toca SAP). Mismo body que crearOrdenVentaSAP.
 export const guardarManifiesto = (body) => req("POST", "/api/sap/manifiestos", body);
