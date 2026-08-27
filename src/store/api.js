@@ -208,6 +208,8 @@ export const reintentarEntregasEmbarque = (id) =>
 // Detector de stock: por PT, necesita vs hay; dice si ya se pueden generar las entregas pendientes.
 export const getStockEmbarque = (id) => req("GET", `/api/sap/embarques/${encodeURIComponent(id)}/stock`, undefined, 60000);
 // ── OC de flete desde manifiesto (Fase 7) ──
+// Manifiestos que la app ya generó (de los embarques), para elegirlos en la OC de flete. Solo lectura (BD local).
+export const getFleteManifiestos = () => req("GET", "/api/sap/flete/manifiestos");
 // Entrega asociada a un manifiesto (cliente + líneas con cajas y dimensiones). Solo lectura.
 export const getFleteEntrega = (manifiesto) => req("GET", `/api/sap/flete/entrega${qs({ manifiesto })}`, undefined, 60000);
 export const getFleteProveedores = (q) => req("GET", `/api/sap/flete/proveedores${qs({ q })}`, undefined, 60000);

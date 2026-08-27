@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Truck, Search, Loader2, AlertCircle, Send, Check } from "lucide-react";
 import {
-  getFleteEntrega, getFleteProveedores, getFleteArticulos, crearOcFlete,
+  getFleteManifiestos, getFleteEntrega, getFleteProveedores, getFleteArticulos, crearOcFlete,
 } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 
@@ -38,6 +38,7 @@ export default function OcFlete() {
   const [manifiesto, setManifiesto] = useState("");
   const [entrega, setEntrega] = useState(null);
   const [buscando, setBuscando] = useState(false);
+  const [manifiestosDisp, setManifiestosDisp] = useState([]);
   const [proveedores, setProveedores] = useState([]);
   const [fletes, setFletes] = useState([]);
 
@@ -54,12 +55,13 @@ export default function OcFlete() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    getFleteManifiestos().then((r) => setManifiestosDisp(r?.manifiestos || [])).catch(() => {});
     getFleteProveedores().then((r) => setProveedores(r?.value || [])).catch(() => {});
     getFleteArticulos().then((r) => setFletes(r?.value || [])).catch(() => {});
   }, []);
 
-  const buscar = useCallback(async () => {
-    const m = manifiesto.trim();
+  const buscar = useCallback(async (mArg) => {
+    const m = (typeof mArg === "string" ? mArg : manifiesto).trim();
     if (!m || buscando) return;
     setBuscando(true); setError(""); setEntrega(null); setCreado(null);
     try {
@@ -68,6 +70,8 @@ export default function OcFlete() {
       setError(e?.message || "No se encontró la Entrega de ese manifiesto.");
     } finally { setBuscando(false); }
   }, [manifiesto, buscando]);
+
+  const elegirManifiesto = useCallback((v) => { setManifiesto(v); buscar(v); }, [buscar]);
 
   const importe = useMemo(() => r2((Number(precio) || 0) - (Number(diesel) || 0)), [precio, diesel]);
   const ivaRate = ivaCode === "IVAA16" ? 0.16 : 0;
@@ -98,14 +102,23 @@ export default function OcFlete() {
         <div>
           <span className="text-xs font-bold uppercase tracking-wide text-gray-400">1 · Manifiesto</span>
           <div className="flex gap-2 mt-2">
-            <input value={manifiesto} onChange={(e) => setManifiesto(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && buscar()} placeholder="Nº de manifiesto"
-              className={INP + " font-mono"} inputMode="numeric" />
-            <button onClick={buscar} disabled={!manifiesto.trim() || buscando}
+            <div className="flex-1 min-w-0">
+              <SearchSelect value={manifiesto} onChange={elegirManifiesto} allowCustom
+                placeholder="Elige o teclea un nº de manifiesto"
+                className={INP + " font-mono"}
+                options={manifiestosDisp.map((m) => ({
+                  value: m.manifiesto,
+                  label: `${m.manifiesto}${m.cardCode ? " · " + m.cardCode : ""}${m.ovNum ? " · OV " + m.ovNum : ""}${m.tieneOC ? " · ya tiene OC" : ""}`,
+                }))} />
+            </div>
+            <button onClick={() => buscar()} disabled={!manifiesto.trim() || buscando}
               className="shrink-0 inline-flex items-center gap-1.5 px-3 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400">
               {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />} Buscar
             </button>
           </div>
+          {manifiestosDisp.length ? (
+            <div className="text-[10.5px] text-gray-400 mt-1.5">{manifiestosDisp.length} manifiesto{manifiestosDisp.length === 1 ? "" : "s"} de tus embarques · o teclea uno manual</div>
+          ) : null}
         </div>
 
         <div className="pt-1">
