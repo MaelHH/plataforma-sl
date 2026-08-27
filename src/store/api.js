@@ -200,6 +200,9 @@ export const getAgentesAduanales = () => req("GET", "/api/sap/agentes-aduanales"
 // body: { linea, flete, anticipo, agente, fecha, pallets:[{palletCode,palletDet,ovEntry,ovNum,cardCode,pt,cajas,lote,baseLine,position}] }.
 export const crearEmbarqueSAP = (body) => req("POST", "/api/sap/embarque", body, TIMEOUT_SAP_WRITE);
 export const getEmbarques = () => req("GET", "/api/sap/embarques");
+// Reintenta las Entregas pendientes de un embarque (cuando ya hay stock en SAP).
+export const reintentarEntregasEmbarque = (id) =>
+  req("POST", `/api/sap/embarques/${encodeURIComponent(id)}/entregas`, undefined, TIMEOUT_SAP_WRITE);
 // ── Manifiestos / OV: guardar en la app (borrador) → lista → mandar a SAP ──
 // Guarda la OV como BORRADOR en la app (NO toca SAP). Mismo body que crearOrdenVentaSAP.
 export const guardarManifiesto = (body) => req("POST", "/api/sap/manifiestos", body);

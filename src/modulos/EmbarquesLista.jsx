@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Truck, RefreshCw, Loader2, Check, Package } from "lucide-react";
-import { getEmbarques } from "../store/api";
+import { Truck, RefreshCw, Loader2, Check, Package, Send } from "lucide-react";
+import { getEmbarques, reintentarEntregasEmbarque } from "../store/api";
 
 // Lista de EMBARQUES creados desde la app (como la "Lista de embarques" del AddOn): folio, camión,
 // OVs, cajas, pallets, fecha. Solo lectura de la BD.
@@ -15,6 +15,7 @@ export default function EmbarquesLista() {
   const [embarques, setEmbarques] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
+  const [accion, setAccion] = useState(null);   // id del embarque generando entregas
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -23,6 +24,13 @@ export default function EmbarquesLista() {
     finally { setCargando(false); }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+
+  const generarEntregas = useCallback(async (e) => {
+    setAccion(e.id);
+    try { await reintentarEntregasEmbarque(e.id); await cargar(); }
+    catch (err) { setError(err?.message || "No se pudieron generar las entregas."); }
+    finally { setAccion(null); }
+  }, [cargar]);
 
   return (
     <div className="space-y-3">
@@ -64,9 +72,19 @@ export default function EmbarquesLista() {
                     <td className="px-3.5 py-3 border-b border-gray-100 text-right font-mono font-bold text-[15px] text-gray-800">{e.nPallets}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100 font-mono text-[12px] text-gray-500">{(e.ovs || []).join(", ") || "—"}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100">
-                      {e.completo
-                        ? <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
-                        : <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Incompleto</span>}
+                      {e.entregasPendientes ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap" title="Faltan entregas por falta de stock en SAP">{e.entregasPendientes} sin entrega</span>
+                          <button onClick={() => generarEntregas(e)} disabled={accion === e.id}
+                            className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5">
+                            {accion === e.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Generar entregas
+                          </button>
+                        </div>
+                      ) : e.completo ? (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">Incompleto</span>
+                      )}
                     </td>
                   </tr>
                 ))
