@@ -23,11 +23,16 @@ function fechaReciboEmpaque(m) {
 // cuántas órdenes tiene ese lote. SOLO informativo (para verificar antes de mandar cubetas a SAP).
 function ofDeRancho(rancho) {
   const ord = rancho?.sap?.ordenes || [];
-  const o0 = ord[0];
-  if (o0 == null) return null;
-  const docNum = (typeof o0 === "object") ? (o0.docNum ?? o0.absoluteEntry) : o0;
-  const item = rancho?.sap?.item || "";
-  return { docNum, item, esPT: String(item).toUpperCase().startsWith("PT"), n: ord.length };
+  if (!ord.length) return null;
+  const list = ord.map((o) => {
+    const docNum = (typeof o === "object") ? (o.docNum ?? o.absoluteEntry) : o;
+    const item = (typeof o === "object" ? o.item : null) || rancho?.sap?.item || "";
+    return { docNum, item, esPT: String(item).toUpperCase().startsWith("PT") };
+  });
+  const o0 = list[0];
+  // Resumen para tooltip: "#21661 EJCON-0001 · #23015 EJOTEORG-…"
+  const resumen = list.map((x) => `#${x.docNum} ${x.item || "sin item"}`).join(" · ");
+  return { ...o0, n: list.length, list, resumen };
 }
 
 // Días entre la salida de campo y el recibo en empaque (el "plazo" en que llegó).
@@ -859,9 +864,9 @@ export default function Modulo8() {
                     {ranchoSelForm && (
                       ofDelRancho ? (
                         <div className={`mt-1 text-[11px] rounded-md px-2 py-1 border ${ofDelRancho.esPT ? "bg-red-50 border-red-300 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
-                          {ofDelRancho.esPT ? "⚠️ " : "✓ "}Orden de fabricación: <b className="font-mono">#{ofDelRancho.docNum}</b> <span className="font-mono">({ofDelRancho.item || "sin item"})</span>
+                          {ofDelRancho.esPT ? "⚠️ " : "✓ "}Orden de fabricación: <b className="font-mono">#{ofDelRancho.docNum}</b> <span className="font-mono">· {ofDelRancho.item || "sin item"}</span>
                           {ofDelRancho.esPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Verifica antes de mandar.</div>}
-                          {ofDelRancho.n > 1 && <div className="mt-0.5">Hay <b>{ofDelRancho.n}</b> órdenes para este lote; se usaría la #{ofDelRancho.docNum}.</div>}
+                          {ofDelRancho.n > 1 && <div className="mt-0.5">Hay <b>{ofDelRancho.n}</b> órdenes para este lote (se usa la 1ª): <span className="font-mono">{ofDelRancho.resumen}</span></div>}
                         </div>
                       ) : (
                         <div className="mt-1 text-[11px] rounded-md px-2 py-1 border bg-amber-50 border-amber-300 text-amber-700">⚠️ Este rancho no tiene orden de fabricación en SAP; el recibo no se podrá mandar.</div>
@@ -1203,7 +1208,7 @@ export default function Modulo8() {
                             <input value={r.nombre} onChange={(e) => updRanchoFld(p.code, ri, "nombre", e.target.value)} className={INP_TBL + " font-medium"} placeholder="Rancho" />
                             {r.cultivo && <span title="Cultivo de este lote (de SAP)" className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-[11px]"><Sprout size={11} /> {r.cultivo}</span>}
                             {r.sap && (() => { const of = ofDeRancho(r); return of ? (
-                              <span title={`Orden de fabricación de SAP para este lote${of.n > 1 ? ` (hay ${of.n})` : ""}`} className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono ${of.esPT ? "border-red-300 bg-red-50 text-red-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>{of.esPT ? "⚠️" : "OF"} #{of.docNum}{of.n > 1 ? ` +${of.n - 1}` : ""}</span>
+                              <span title={`Órdenes de SAP para este lote: ${of.resumen}`} className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-mono ${of.esPT ? "border-red-300 bg-red-50 text-red-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>{of.esPT ? "⚠️" : "OF"} #{of.docNum} · {of.item || "sin item"}{of.n > 1 ? ` +${of.n - 1}` : ""}</span>
                             ) : (
                               <span title="Sin orden de fabricación en SAP" className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 text-[11px]">sin OF</span>
                             ); })()}
