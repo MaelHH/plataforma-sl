@@ -166,6 +166,9 @@ export const reciboProduccionSAP = (body) => req("POST", "/api/sap/recibo-produc
 // va a sumar el recibo (Nº visible, articulo, lote/departamento reales y avance).
 export const getOrdenFabricacionSAP = (absoluteEntry) =>
   req("GET", `/api/sap/orden-fabricacion${qs({ absoluteEntry })}`);
+// Resuelve una OF por su NÚMERO VISIBLE (docNum → AbsoluteEntry), para fijar la OF a mano en un lote.
+export const getOrdenPorNumeroSAP = (docNum) =>
+  req("GET", `/api/sap/orden-por-numero${qs({ docNum })}`, undefined, 60000);
 // G4 · VERIFICAR (solo GET, no escribe en SAP): ¿el recibo que se quedó "enviando" sí se creó?
 // Evita el reintento a ciegas que duplicaría la Cantidad completada. Ver [[sap-reglas-garantia]].
 export const verificarReciboSAP = ({ clave, absoluteEntry, cantidad, fecha }) =>

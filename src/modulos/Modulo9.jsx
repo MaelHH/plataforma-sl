@@ -165,6 +165,14 @@ export default function Modulo9() {
           temporada: proj?.nombre, rancho: r?.nombre ?? m.rancho };
       }
     }
+    // Si el lote tiene OF FIJADA a mano en el catálogo → usar ESA (aunque el mov no traiga ofAbsEntry).
+    const fij = r?.ofFijada;
+    if (fij && fij.absoluteEntry != null) {
+      return { absoluteEntry: fij.absoluteEntry, docNum: fij.docNum ?? fij.absoluteEntry,
+        totalOrdenes: ordenes.length, item: fij.item ?? r?.sap?.item,
+        plannedQty: r?.sap?.plannedQty, completedQty: r?.sap?.completedQty,
+        temporada: proj?.nombre, rancho: r?.nombre ?? m.rancho };
+    }
     // Sin OF elegida (movs viejos / lote de una sola orden) → la 1ª, como antes (falla cerrado).
     const o0 = ordenes[0];
     if (o0 == null || o0.absoluteEntry == null) return null;

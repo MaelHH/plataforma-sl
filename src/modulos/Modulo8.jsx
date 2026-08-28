@@ -4,7 +4,7 @@ import { Eye, Pencil, Trash2, Plus, FileText, RefreshCw, Truck, Receipt, Check, 
 import InfoTip from "../components/InfoTip";
 import { useDatos, nuevoId } from "../store/datos";
 import { useAuth } from "../store/auth";
-import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP } from "../store/api";
+import { getCatalogoProyectosSAP, getProyectosSAP, getProveedoresFleteSAP, getItemsFleteSAP, getTaxCodesSAP, getCultivosSAP, getDepartamentosSAP, crearOrdenCompraSAP, getEstadoOCSAP, getOrdenPorNumeroSAP } from "../store/api";
 import { guardarFolioOC } from "../utils/folioOC";
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
@@ -33,6 +33,20 @@ function ofDeRancho(rancho) {
   // Resumen para tooltip: "#21661 EJCON-0001 · #23015 EJOTEORG-…"
   const resumen = list.map((x) => `#${x.docNum} ${x.item || "sin item"}`).join(" · ");
   return { ...o0, n: list.length, list, resumen };
+}
+
+// OF que se USARÁ para el recibo de un lote: la FIJADA a mano (override) si existe; si no, la 1ª de SAP.
+function ofUsadaDe(rancho) {
+  const f = rancho?.ofFijada;
+  if (f && f.absoluteEntry != null) {
+    return { absoluteEntry: f.absoluteEntry, docNum: f.docNum ?? f.absoluteEntry, item: f.item || "",
+      esPT: String(f.item || "").toUpperCase().startsWith("PT"), fijada: true, estado: f.estado };
+  }
+  const ords = (rancho?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+  const o0 = ords[0];
+  if (o0 == null || o0.absoluteEntry == null) return null;
+  return { absoluteEntry: o0.absoluteEntry, docNum: o0.docNum ?? o0.absoluteEntry, item: o0.item || "",
+    esPT: String(o0.item || "").toUpperCase().startsWith("PT"), fijada: false };
 }
 
 // Días entre la salida de campo y el recibo en empaque (el "plazo" en que llegó).
@@ -459,13 +473,10 @@ export default function Modulo8() {
   // Rancho elegido → responsables; se identifica por (lote + cultivo efectivo).
   const ranchoSelForm = proyectoSel?.ranchos.find((r) => r.nombre === form.rancho && (!cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo));
 
-  // OF de SAP a la que apunta el rancho elegido — para VERIFICAR antes de crear el movimiento
-  // (evita mandar cubetas a la orden equivocada). Es SOLO informativo (no cambia nada).
-  // Órdenes del rancho elegido (normalizadas) + la ELEGIDA en el form. Si el lote tiene VARIAS, el
-  // usuario escoge cuál (form.ofAbsEntry); el recibo del vaciado (M9) irá a ESA, no a la 1ª por default.
-  const ordenesForm = (ranchoSelForm?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
-  const ofElegida = ordenesForm.find((o) => String(o.absoluteEntry) === String(form.ofAbsEntry)) || ordenesForm[0] || null;
-  const ofElegidaEsPT = ofElegida ? String(ofElegida.item || "").toUpperCase().startsWith("PT") : false;
+  // OF que se USARÁ para el recibo del rancho elegido: la FIJADA a mano (en el catálogo) si existe;
+  // si no, la 1ª de SAP. Solo informativo aquí (para verificar antes de crear el movimiento).
+  const ofElegida = ofUsadaDe(ranchoSelForm);
+  const ofElegidaEsPT = ofElegida ? ofElegida.esPT : false;
 
   // Visualización del movimiento: la TEMPORADA va en el campo "Rancho", y el RANCHO elegido va en "Lote".
   // (Movimientos viejos sin `proyecto` siguen mostrando su rancho/lote original.)
@@ -899,30 +910,20 @@ export default function Modulo8() {
                         placeholder="— Cultivo —" options={cultivosTemporada.map((c) => ({ value: c, label: c }))} />
                     </div>
                   )}
-                  <div><label className={LBL}>Rancho / orden de fabricación</label>
-                    <SearchSelect className={INP} value={form.rancho ? `${form.rancho}~#~${form.ofAbsEntry ?? ""}` : ""}
-                      disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
+                  <div><label className={LBL}>Rancho</label>
+                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
                       onChange={(v) => {
-                        const i = v.lastIndexOf("~#~");
-                        const nombre = i >= 0 ? v.slice(0, i) : v;
-                        const aeStr = i >= 0 ? v.slice(i + 3) : "";
-                        const rr = proyectoSel?.ranchos.find((x) => x.nombre === nombre && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo));
-                        const ords = (rr?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
-                        const o = ords.find((x) => String(x.absoluteEntry) === aeStr) || null;
-                        setForm((f) => ({ ...f, rancho: nombre, departamento: rr?.departamento || "", responsableCosecha: "",
-                          ofAbsEntry: o?.absoluteEntry ?? (aeStr || ""), ofDocNum: o ? (o.docNum ?? o.absoluteEntry) : "", ofItem: o?.item || "" }));
+                        const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo));
+                        const of = ofUsadaDe(rr);   // la OF fijada (o la 1ª) — el recibo irá a ESTA
+                        setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "",
+                          ofAbsEntry: of?.absoluteEntry ?? "", ofDocNum: of?.docNum ?? "", ofItem: of?.item || "" }));
                       }}
-                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho / OF —"}
-                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).flatMap((r) => {
+                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
+                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => {
+                        const of = ofUsadaDe(r);
                         const cul = r.cultivo ? `  [${r.cultivo}]` : "  [sin cultivo]";
-                        const ords = (r.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
-                        if (!ords.length) return [{ value: `${r.nombre}~#~`, label: `${r.nombre}${cul}  —  sin OF` }];
-                        // Una opción POR orden (si el lote tiene varias, salen separadas en su renglón)
-                        return ords.map((o) => {
-                          const esPT = String(o.item || "").toUpperCase().startsWith("PT");
-                          return { value: `${r.nombre}~#~${o.absoluteEntry ?? ""}`,
-                            label: `${r.nombre}${cul}  —  ${esPT ? "⚠️ " : ""}OF #${o.docNum ?? o.absoluteEntry} · ${o.item || "sin item"}` };
-                        });
+                        const suf = of ? `  —  ${of.fijada ? "📌 " : ""}OF #${of.docNum} · ${of.item || "sin item"}` : "  —  sin OF";
+                        return { value: r.nombre, label: `${r.nombre}${cul}${suf}` };
                       })} />
                     {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
                     {/* OF que afectará este rancho (verificación antes de mandar cubetas a SAP) */}
@@ -930,10 +931,11 @@ export default function Modulo8() {
                       ofElegida ? (
                         <div className={`mt-1 text-[11px] rounded-md px-2 py-1 border ${ofElegidaEsPT ? "bg-red-50 border-red-300 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
                           {ofElegidaEsPT ? "⚠️ " : "✓ "}Se mandará a la orden: <b className="font-mono">#{ofElegida.docNum ?? ofElegida.absoluteEntry}</b> <span className="font-mono">· {ofElegida.item || "sin item"}</span>
-                          {ofElegidaEsPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Verifica antes de mandar.</div>}
+                          {ofElegida.fijada ? <span className="ml-1 text-indigo-700">📌 fijada a mano</span> : null}
+                          {ofElegidaEsPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Fíjala a mano en "Ranchos / Empaques".</div>}
                         </div>
                       ) : (
-                        <div className="mt-1 text-[11px] rounded-md px-2 py-1 border bg-amber-50 border-amber-300 text-amber-700">⚠️ Este rancho no tiene orden de fabricación en SAP; el recibo no se podrá mandar.</div>
+                        <div className="mt-1 text-[11px] rounded-md px-2 py-1 border bg-amber-50 border-amber-300 text-amber-700">⚠️ Este rancho no tiene orden de fabricación en SAP; fíjala a mano en "Ranchos / Empaques".</div>
                       )
                     )}
                   </div>
@@ -1302,6 +1304,41 @@ export default function Modulo8() {
                               <button onClick={() => addResp(p.code, ri)} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded font-medium">+ Responsable</button>
                             </div>
                           </div>
+                          {/* OF de fabricación FIJADA a mano (override del auto de SAP) — el recibo del vaciado va a ESTA */}
+                          {r.sap && (() => {
+                            const ords = (r.sap.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+                            const fij = r.ofFijada;
+                            const autoDoc = ords[0]?.docNum ?? ords[0]?.absoluteEntry;
+                            return (
+                              <div className="mt-2 pt-2 border-t border-gray-100">
+                                <div className="text-[10px] font-semibold text-gray-400 uppercase mb-0.5">Orden de fabricación · a la que irá el recibo del vaciado</div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="w-full sm:w-72">
+                                    <SearchSelect className={INP_TBL} allowCustom
+                                      value={fij ? String(fij.docNum ?? fij.absoluteEntry) : ""}
+                                      placeholder={autoDoc ? `Auto: #${autoDoc} (la más reciente)` : "sin OF en SAP"}
+                                      options={ords.map((o) => ({ value: String(o.docNum ?? o.absoluteEntry), label: `OF #${o.docNum ?? o.absoluteEntry} · ${o.item || "sin item"}` }))}
+                                      onChange={async (v) => {
+                                        const byDoc = ords.find((o) => String(o.docNum ?? o.absoluteEntry) === v);
+                                        if (byDoc) { updRanchoFld(p.code, ri, "ofFijada", { absoluteEntry: byDoc.absoluteEntry, docNum: byDoc.docNum ?? byDoc.absoluteEntry, item: byDoc.item }); return; }
+                                        const dn = parseInt(String(v).replace(/[^0-9]/g, ""), 10);
+                                        if (!dn) return;
+                                        setSapError(""); setSapInfo(`Buscando la OF #${dn} en SAP…`);
+                                        try {
+                                          const o = await getOrdenPorNumeroSAP(dn);
+                                          updRanchoFld(p.code, ri, "ofFijada", { absoluteEntry: o.absoluteEntry, docNum: o.docNum, item: o.item, manual: true, estado: o.estado });
+                                          setSapInfo(`OF #${o.docNum} (${o.item || "sin item"}) fijada para ${r.nombre}${o.estado && o.estado !== "boposReleased" ? " — ⚠️ no está liberada en SAP" : ""}.`);
+                                        } catch (e) { setSapInfo(""); setSapError(`No se pudo fijar la OF #${dn}: ${e?.message || e}`); }
+                                      }} />
+                                  </div>
+                                  {fij ? (<>
+                                    <span className="text-[11px] font-mono text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5">📌 Fijada #{fij.docNum ?? fij.absoluteEntry} · {fij.item || "sin item"}{fij.estado && fij.estado !== "boposReleased" ? " ⚠️ no liberada" : ""}</span>
+                                    <button onClick={() => updRanchoFld(p.code, ri, "ofFijada", null)} className="text-[11px] text-gray-400 hover:text-red-500 underline">quitar (usar auto)</button>
+                                  </>) : <span className="text-[10px] text-gray-400">Sin fijar → usa la automática. Elige de la lista o escribe el nº de la orden.</span>}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                       <button onClick={() => addRancho(p.code)} className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded font-medium">+ Rancho</button>
