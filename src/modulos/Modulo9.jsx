@@ -151,13 +151,25 @@ export default function Modulo9() {
     const r = m.cultivo
       ? proj?.ranchos?.find((x) => x.nombre === m.rancho && (x.cultivo || "") === m.cultivo)
       : proj?.ranchos?.find((x) => x.nombre === m.rancho);
-    const o0 = r?.sap?.ordenes?.[0];
-    if (o0 == null) return null;
-    // Compat: `ordenes` puede ser [number] (formato viejo) o [{absoluteEntry, docNum}].
-    const absoluteEntry = (typeof o0 === "object") ? o0.absoluteEntry : o0;
-    const docNum = (typeof o0 === "object") ? o0.docNum : null;
-    if (absoluteEntry == null) return null;
-    return { absoluteEntry, docNum, totalOrdenes: (r.sap.ordenes || []).length, item: r.sap.item, plannedQty: r.sap.plannedQty, completedQty: r.sap.completedQty, temporada: proj.nombre, rancho: r.nombre };
+    // Compat: `ordenes` puede ser [number] (formato viejo) o [{absoluteEntry, docNum, item}].
+    const ordenes = (r?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+    // Preferir la OF ELEGIDA en el movimiento (m.ofAbsEntry) — la que el usuario escogió al crearlo,
+    // cuando el lote tenía varias órdenes. Va a ESA aunque el catálogo se haya recargado (dato guardado).
+    if (m.ofAbsEntry != null && String(m.ofAbsEntry) !== "") {
+      const ae = Number(m.ofAbsEntry);
+      if (!Number.isNaN(ae)) {
+        const match = ordenes.find((o) => String(o.absoluteEntry) === String(ae));
+        return { absoluteEntry: ae, docNum: (match?.docNum ?? m.ofDocNum ?? null),
+          totalOrdenes: ordenes.length, item: (match?.item ?? m.ofItem ?? r?.sap?.item),
+          plannedQty: r?.sap?.plannedQty, completedQty: r?.sap?.completedQty,
+          temporada: proj?.nombre, rancho: r?.nombre ?? m.rancho };
+      }
+    }
+    // Sin OF elegida (movs viejos / lote de una sola orden) → la 1ª, como antes (falla cerrado).
+    const o0 = ordenes[0];
+    if (o0 == null || o0.absoluteEntry == null) return null;
+    return { absoluteEntry: o0.absoluteEntry, docNum: o0.docNum ?? null, totalOrdenes: ordenes.length,
+      item: r.sap.item, plannedQty: r.sap.plannedQty, completedQty: r.sap.completedQty, temporada: proj.nombre, rancho: r.nombre };
   };
   const abrirEnvioSAP = (m) => { setSapError(""); setSapKgCubeta(6); setSapMov(m); cargarOrdenSAP(ordenSAPde(m)?.absoluteEntry); };
   const confirmarEnvioSAP = async () => {

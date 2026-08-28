@@ -396,6 +396,8 @@ export default function Modulo8() {
   const formVacio = {
     folio: "", fecha: hoyISO(), viaje: "",
     proyecto: "", cultivo: "", rancho: "", departamento: "", lote: "", horaInicio: "", horaTermino: "", responsableCosecha: "",
+    // OF de fabricación elegida (si el lote tiene varias). El vaciado (M9) manda el recibo a ESTA.
+    ofAbsEntry: "", ofDocNum: "", ofItem: "",
     consignado: "", origen: "", distribuidor: "", destino: "",
     cargaItems: [{ prod: "", parrillas: "", bultos: "" }],
     // transporte
@@ -459,7 +461,11 @@ export default function Modulo8() {
 
   // OF de SAP a la que apunta el rancho elegido — para VERIFICAR antes de crear el movimiento
   // (evita mandar cubetas a la orden equivocada). Es SOLO informativo (no cambia nada).
-  const ofDelRancho = ofDeRancho(ranchoSelForm);
+  // Órdenes del rancho elegido (normalizadas) + la ELEGIDA en el form. Si el lote tiene VARIAS, el
+  // usuario escoge cuál (form.ofAbsEntry); el recibo del vaciado (M9) irá a ESA, no a la 1ª por default.
+  const ordenesForm = (ranchoSelForm?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+  const ofElegida = ordenesForm.find((o) => String(o.absoluteEntry) === String(form.ofAbsEntry)) || ordenesForm[0] || null;
+  const ofElegidaEsPT = ofElegida ? String(ofElegida.item || "").toUpperCase().startsWith("PT") : false;
 
   // Visualización del movimiento: la TEMPORADA va en el campo "Rancho", y el RANCHO elegido va en "Lote".
   // (Movimientos viejos sin `proyecto` siguen mostrando su rancho/lote original.)
@@ -895,7 +901,13 @@ export default function Modulo8() {
                   )}
                   <div><label className={LBL}>Rancho</label>
                     <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
-                      onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo)); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
+                      onChange={(v) => {
+                        const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo));
+                        const o0 = rr?.sap?.ordenes?.[0];
+                        const oa = (o0 && typeof o0 === "object") ? o0 : (o0 != null ? { absoluteEntry: o0 } : null);   // 1ª orden por defecto
+                        setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "",
+                          ofAbsEntry: oa?.absoluteEntry ?? "", ofDocNum: oa ? (oa.docNum ?? oa.absoluteEntry) : "", ofItem: oa?.item || "" }));
+                      }}
                       placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
                       options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => {
                         const of = ofDeRancho(r);
@@ -904,13 +916,21 @@ export default function Modulo8() {
                         return { value: r.nombre, label: `${r.nombre}${cul}${suf}` };
                       })} />
                     {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
+                    {/* Si el lote tiene VARIAS órdenes → elegir cuál (el recibo irá a ESA) */}
+                    {ranchoSelForm && ordenesForm.length > 1 && (
+                      <div className="mt-1">
+                        <label className={LBL}>Orden de fabricación <span className="text-amber-600 normal-case">· este lote tiene {ordenesForm.length} — elige la correcta</span></label>
+                        <SearchSelect className={INP} value={String(form.ofAbsEntry)}
+                          onChange={(v) => { const o = ordenesForm.find((x) => String(x.absoluteEntry) === v); setForm((f) => ({ ...f, ofAbsEntry: o?.absoluteEntry ?? "", ofDocNum: o ? (o.docNum ?? o.absoluteEntry) : "", ofItem: o?.item || "" })); }}
+                          options={ordenesForm.map((o) => ({ value: String(o.absoluteEntry), label: `OF #${o.docNum ?? o.absoluteEntry} · ${o.item || "sin item"}` }))} />
+                      </div>
+                    )}
                     {/* OF que afectará este rancho (verificación antes de mandar cubetas a SAP) */}
                     {ranchoSelForm && (
-                      ofDelRancho ? (
-                        <div className={`mt-1 text-[11px] rounded-md px-2 py-1 border ${ofDelRancho.esPT ? "bg-red-50 border-red-300 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
-                          {ofDelRancho.esPT ? "⚠️ " : "✓ "}Orden de fabricación: <b className="font-mono">#{ofDelRancho.docNum}</b> <span className="font-mono">· {ofDelRancho.item || "sin item"}</span>
-                          {ofDelRancho.esPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Verifica antes de mandar.</div>}
-                          {ofDelRancho.n > 1 && <div className="mt-0.5">Hay <b>{ofDelRancho.n}</b> órdenes para este lote (se usa la 1ª): <span className="font-mono">{ofDelRancho.resumen}</span></div>}
+                      ofElegida ? (
+                        <div className={`mt-1 text-[11px] rounded-md px-2 py-1 border ${ofElegidaEsPT ? "bg-red-50 border-red-300 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-800"}`}>
+                          {ofElegidaEsPT ? "⚠️ " : "✓ "}Se mandará a la orden: <b className="font-mono">#{ofElegida.docNum ?? ofElegida.absoluteEntry}</b> <span className="font-mono">· {ofElegida.item || "sin item"}</span>
+                          {ofElegidaEsPT && <div className="mt-0.5 font-semibold">Esta orden es PT- (producto terminado) — probablemente NO es la de campo. Verifica antes de mandar.</div>}
                         </div>
                       ) : (
                         <div className="mt-1 text-[11px] rounded-md px-2 py-1 border bg-amber-50 border-amber-300 text-amber-700">⚠️ Este rancho no tiene orden de fabricación en SAP; el recibo no se podrá mandar.</div>
