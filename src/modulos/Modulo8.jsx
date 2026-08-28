@@ -899,32 +899,32 @@ export default function Modulo8() {
                         placeholder="— Cultivo —" options={cultivosTemporada.map((c) => ({ value: c, label: c }))} />
                     </div>
                   )}
-                  <div><label className={LBL}>Rancho</label>
-                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
+                  <div><label className={LBL}>Rancho / orden de fabricación</label>
+                    <SearchSelect className={INP} value={form.rancho ? `${form.rancho}~#~${form.ofAbsEntry ?? ""}` : ""}
+                      disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
                       onChange={(v) => {
-                        const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo));
-                        const o0 = rr?.sap?.ordenes?.[0];
-                        const oa = (o0 && typeof o0 === "object") ? o0 : (o0 != null ? { absoluteEntry: o0 } : null);   // 1ª orden por defecto
-                        setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "",
-                          ofAbsEntry: oa?.absoluteEntry ?? "", ofDocNum: oa ? (oa.docNum ?? oa.absoluteEntry) : "", ofItem: oa?.item || "" }));
+                        const i = v.lastIndexOf("~#~");
+                        const nombre = i >= 0 ? v.slice(0, i) : v;
+                        const aeStr = i >= 0 ? v.slice(i + 3) : "";
+                        const rr = proyectoSel?.ranchos.find((x) => x.nombre === nombre && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo));
+                        const ords = (rr?.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+                        const o = ords.find((x) => String(x.absoluteEntry) === aeStr) || null;
+                        setForm((f) => ({ ...f, rancho: nombre, departamento: rr?.departamento || "", responsableCosecha: "",
+                          ofAbsEntry: o?.absoluteEntry ?? (aeStr || ""), ofDocNum: o ? (o.docNum ?? o.absoluteEntry) : "", ofItem: o?.item || "" }));
                       }}
-                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
-                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => {
-                        const of = ofDeRancho(r);
-                        const suf = of ? `  —  OF #${of.docNum} · ${of.item || "sin item"}${of.n > 1 ? ` +${of.n - 1}` : ""}` : "  —  sin OF";
+                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho / OF —"}
+                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).flatMap((r) => {
                         const cul = r.cultivo ? `  [${r.cultivo}]` : "  [sin cultivo]";
-                        return { value: r.nombre, label: `${r.nombre}${cul}${suf}` };
+                        const ords = (r.sap?.ordenes || []).map((o) => (typeof o === "object" ? o : { absoluteEntry: o }));
+                        if (!ords.length) return [{ value: `${r.nombre}~#~`, label: `${r.nombre}${cul}  —  sin OF` }];
+                        // Una opción POR orden (si el lote tiene varias, salen separadas en su renglón)
+                        return ords.map((o) => {
+                          const esPT = String(o.item || "").toUpperCase().startsWith("PT");
+                          return { value: `${r.nombre}~#~${o.absoluteEntry ?? ""}`,
+                            label: `${r.nombre}${cul}  —  ${esPT ? "⚠️ " : ""}OF #${o.docNum ?? o.absoluteEntry} · ${o.item || "sin item"}` };
+                        });
                       })} />
                     {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
-                    {/* Si el lote tiene VARIAS órdenes → elegir cuál (el recibo irá a ESA) */}
-                    {ranchoSelForm && ordenesForm.length > 1 && (
-                      <div className="mt-1">
-                        <label className={LBL}>Orden de fabricación <span className="text-amber-600 normal-case">· este lote tiene {ordenesForm.length} — elige la correcta</span></label>
-                        <SearchSelect className={INP} value={String(form.ofAbsEntry)}
-                          onChange={(v) => { const o = ordenesForm.find((x) => String(x.absoluteEntry) === v); setForm((f) => ({ ...f, ofAbsEntry: o?.absoluteEntry ?? "", ofDocNum: o ? (o.docNum ?? o.absoluteEntry) : "", ofItem: o?.item || "" })); }}
-                          options={ordenesForm.map((o) => ({ value: String(o.absoluteEntry), label: `OF #${o.docNum ?? o.absoluteEntry} · ${o.item || "sin item"}` }))} />
-                      </div>
-                    )}
                     {/* OF que afectará este rancho (verificación antes de mandar cubetas a SAP) */}
                     {ranchoSelForm && (
                       ofElegida ? (
