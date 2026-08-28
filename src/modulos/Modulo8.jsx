@@ -855,13 +855,14 @@ export default function Modulo8() {
                     </div>
                   )}
                   <div><label className={LBL}>Rancho</label>
-                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel || sinCultivoValido || (multiCultivo && !form.cultivo)}
-                      onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v && (!cultivoEfectivo || (x.cultivo || "") === cultivoEfectivo)); setForm((f) => ({ ...f, rancho: v, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
-                      placeholder={!proyectoSel ? "Elige temporada" : sinCultivoValido ? "Sin cultivo tuyo aquí" : (multiCultivo && !form.cultivo) ? "Elige cultivo" : "— Rancho —"}
-                      options={sinCultivoValido ? [] : (proyectoSel?.ranchos || []).filter((r) => !cultivoEfectivo || (r.cultivo || "") === cultivoEfectivo).map((r) => {
+                    <SearchSelect className={INP} value={form.rancho} disabled={!proyectoSel}
+                      onChange={(v) => { const rr = proyectoSel?.ranchos.find((x) => x.nombre === v); setForm((f) => ({ ...f, rancho: v, cultivo: rr?.cultivo || f.cultivo, departamento: rr?.departamento || "", responsableCosecha: "" })); }}
+                      placeholder={!proyectoSel ? "Elige temporada" : "— Rancho —"}
+                      options={(proyectoSel?.ranchos || []).map((r) => {
                         const of = ofDeRancho(r);
                         const suf = of ? `  —  OF #${of.docNum} · ${of.item || "sin item"}${of.n > 1 ? ` +${of.n - 1}` : ""}` : "  —  sin OF";
-                        return { value: r.nombre, label: `${r.nombre}${suf}` };
+                        const cul = r.cultivo ? `  [${r.cultivo}]` : "  [sin cultivo]";
+                        return { value: r.nombre, label: `${r.nombre}${cul}${suf}` };
                       })} />
                     {sinCultivoValido && <div className="text-[10px] text-amber-600 mt-0.5">No tienes asignado ningún cultivo de esta temporada. Pide que te asignen el cultivo correspondiente.</div>}
                     {/* OF que afectará este rancho (verificación antes de mandar cubetas a SAP) */}
