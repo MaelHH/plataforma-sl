@@ -137,6 +137,37 @@ export default function Modulo8() {
       setSapCargando(false);
     }
   };
+  // RECARGA LIMPIO: borra SOLO las temporadas de MI empresa (que pudieron quedar mezcladas al cambiar
+  // la base de SAP prod↔pruebas) y las vuelve a traer frescas de la SAP configurada ahora. Conserva las
+  // de OTRAS empresas. Útil en desarrollo al alternar de company. Solo toca el catálogo local.
+  const recargarLimpioDeSAP = async () => {
+    if (!puedeActualizarSAP) { setSapError("Necesitas temporadas asignadas para actualizar de SAP. Pídele a un administrador que te asigne."); return; }
+    const ok = await dlg.confirm({
+      title: "Recargar LIMPIO de SAP",
+      message: "Esto BORRA las temporadas de TU empresa del catálogo (incluyendo responsables capturados a mano) y las vuelve a traer frescas de la SAP que tengas configurada ahora. Las de otras empresas se conservan. Útil al cambiar de base (productiva ↔ pruebas). ¿Continuar?",
+      confirmText: "Sí, recargar limpio", danger: true,
+    });
+    if (!ok) return;
+    setSapCargando(true); setSapError(""); setSapInfo("");
+    try {
+      const data = await getCatalogoProyectosSAP("");
+      let lista = data.proyectos || [];
+      if (acotado) lista = lista.filter((p) => proyectosAsignados.has(p.code)); // solo lo permitido
+      setProyectos((prev) => {
+        const base = Array.isArray(prev) ? prev : [];
+        const otras = base.filter((p) => !esDeMiEmpresa(p.empresa));   // conserva las de OTRA empresa
+        // recarga fresca lo mío desde cero (etiquetado con mi empresa)
+        let mias = mergeProyectos([], lista, false);
+        if (miEmpresa != null) mias = mias.map((p) => (p.empresa == null ? { ...p, empresa: miEmpresa } : p));
+        return [...otras, ...mias];
+      });
+      setSapInfo(`Catálogo de tu empresa recargado LIMPIO desde SAP (${lista.length}).`);
+    } catch (e) {
+      setSapError(String(e?.message || e));
+    } finally {
+      setSapCargando(false);
+    }
+  };
   // Trae UNA temporada específica de SAP (la elegida en el buscador) y la agrega al catálogo.
   const agregarTemporadaDeSAP = async (code) => {
     if (!code) return;
@@ -1190,11 +1221,18 @@ export default function Modulo8() {
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                   <div className="text-xs font-bold text-gray-700 inline-flex items-center gap-1"><Sprout size={16} /> Temporadas · con sus ranchos y responsables de cosecha</div>
-                  <button onClick={actualizarDeSAP} disabled={sapCargando || !puedeActualizarSAP}
-                    title={!puedeActualizarSAP ? "Necesitas temporadas asignadas para actualizar de SAP" : acotado ? "Carga tus temporadas permitidas desde SAP, con sus ranchos y lotes" : "Carga/actualiza las temporadas de tu empresa desde SAP"}
-                    className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
-                  </button>
+                  <div className="inline-flex items-center gap-2">
+                    <button onClick={recargarLimpioDeSAP} disabled={sapCargando || !puedeActualizarSAP}
+                      title="Borra las temporadas de TU empresa y las trae frescas de la SAP configurada ahora (útil al cambiar de base prod↔pruebas). Conserva las de otras empresas."
+                      className="text-xs px-3 py-1.5 bg-white border border-amber-300 text-amber-700 rounded-lg font-semibold hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <span className="inline-flex items-center gap-1"><Trash2 size={13} /> Recargar limpio</span>
+                    </button>
+                    <button onClick={actualizarDeSAP} disabled={sapCargando || !puedeActualizarSAP}
+                      title={!puedeActualizarSAP ? "Necesitas temporadas asignadas para actualizar de SAP" : acotado ? "Carga tus temporadas permitidas desde SAP, con sus ranchos y lotes" : "Carga/actualiza las temporadas de tu empresa desde SAP"}
+                      className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {sapCargando ? "…" : <span className="inline-flex items-center gap-1"><RefreshCw size={14} /> Actualizar de SAP</span>}
+                    </button>
+                  </div>
                 </div>
                 {!puedeActualizarSAP && <div className="text-[11px] text-amber-600 mb-1">Necesitas <b>temporadas asignadas</b> para actualizar de SAP. Pídele a un administrador que te asigne.</div>}
                 {sapError && <div className="text-[11px] text-red-600 mb-1">No se pudo traer de SAP: {sapError}</div>}
