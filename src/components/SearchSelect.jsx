@@ -156,7 +156,7 @@ export default function SearchSelect({
                     } ${activo ? "font-semibold" : ""}`}
                   >
                     {o.__custom && <Plus size={13} className="shrink-0" />}
-                    <span className="flex-1 truncate">{o.label}</span>
+                    <span className="flex-1 break-words">{o.label}</span>
                     {activo && !o.__custom && <Check size={14} className="text-blue-500 shrink-0" />}
                   </button>
                 );
