@@ -54,9 +54,17 @@ export default function Modulo8() {
   // "Es de mi empresa": sin etiqueta (null = viejo/no sincronizado) cuenta como MÍO; si está
   // etiquetado, debe coincidir. Así el catálogo sin etiqueta no se oculta (antes se asumía ancla=1).
   const esDeMiEmpresa = (emp) => !acotaEmpresa || emp == null || emp === miEmpresa;
+  // Resuelve una temporada por `code` PREFIRIENDO la de MI empresa. Multiempresa puede tener DOS
+  // entradas con el mismo `code` (una por company de SAP); un `find` a secas agarraba la rancia/ajena
+  // (bug: dropdown incompleto + movimientos ocultos). Orden: exacta de mi empresa → sin etiqueta (mía)
+  // → la que haya. Ver diagnóstico Fable 5 (2026-08-27).
+  const proyectoPorCode = (code) => {
+    const l = (proyectos || []).filter((p) => p.code === code);
+    return l.find((p) => p.empresa === miEmpresa) || l.find((p) => esDeMiEmpresa(p.empresa)) || l[0] || null;
+  };
   // Empresa de un proyecto/temporada del catálogo (null si no se sabe). Se usa para derivar la
   // empresa de un movimiento sin etiqueta a partir de su temporada.
-  const empresaDeProy = (code) => { const p = (proyectos || []).find((x) => x.code === code); return p?.empresa ?? null; };
+  const empresaDeProy = (code) => proyectoPorCode(code)?.empresa ?? null;
   const dlg = useDialog();
 
   const [modal, setModal] = useState(false);
@@ -252,7 +260,7 @@ export default function Modulo8() {
   const abrirOC = (m) => {
     setOcError(""); setOcConfirm(false); setOcCardCode(""); setOcItem(""); setOcTax("");
     // Default del cultivo: el que viene anidado al proyecto/rancho (editable abajo).
-    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const proj = proyectoPorCode(m.proyecto);
     const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
     setOcCultivo(r?.cultivo || "");
     // Default del Departamento: PRIMERO la TABLA que eligió quien creó el movimiento (es quien sabe
@@ -272,7 +280,7 @@ export default function Modulo8() {
     if (!ocCardCode) { setOcError("Elige el fletero."); return; }
     if (!ocItem) { setOcError("Elige el item de flete."); return; }
     if (!(precio > 0)) { setOcError("El movimiento no tiene 'Flete $' (precio)."); return; }
-    const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+    const proj = proyectoPorCode(m.proyecto);
     const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
     setOcCargando(true); setOcError("");
     try {
@@ -398,7 +406,7 @@ export default function Modulo8() {
   const cerrarModal = () => { setModal(false); setEditId(null); resetModos(); };
 
   const lineaSel = lineas.find((l) => l.linea === form.linea);
-  const proyectoSel = proyectos.find((p) => p.code === form.proyecto); // proyecto elegido → sus ranchos
+  const proyectoSel = proyectoPorCode(form.proyecto); // proyecto elegido (de MI empresa) → sus ranchos
   // Cultivos de la temporada (acotados a los asignados del usuario). El selector de cultivo solo
   // aparece si hay 2+; con 1 se elige solo. Cada lote pertenece a un cultivo → se filtran por él.
   const cultivosAsignadosSet = new Set(alcance?.cultivos || []);
@@ -424,7 +432,7 @@ export default function Modulo8() {
 
   // Visualización del movimiento: la TEMPORADA va en el campo "Rancho", y el RANCHO elegido va en "Lote".
   // (Movimientos viejos sin `proyecto` siguen mostrando su rancho/lote original.)
-  const tempNombre = (m) => (proyectos.find((p) => p.code === m.proyecto)?.nombre) || m.proyecto || "";
+  const tempNombre = (m) => (proyectoPorCode(m.proyecto)?.nombre) || m.proyecto || "";
   const ranchoDe = (m) => (m.proyecto ? tempNombre(m) : (m.rancho || ""));
   const loteDe = (m) => (m.proyecto ? (m.rancho || "") : (m.lote || ""));
 
@@ -840,7 +848,7 @@ export default function Modulo8() {
                       options={(() => {
                         const opts = proyectosVisibles.map((p) => ({ value: p.code, label: p.nombre }));
                         if (form.proyecto && !opts.some((o) => o.value === form.proyecto)) {
-                          const cur = proyectos.find((p) => p.code === form.proyecto);
+                          const cur = proyectoPorCode(form.proyecto);
                           opts.unshift({ value: form.proyecto, label: cur?.nombre || form.proyecto });
                         }
                         return opts;
@@ -1371,7 +1379,7 @@ export default function Modulo8() {
       {ocMov && (() => {
         const m = ocMov;
         const precio = parseFloat(m.flete) || 0;
-        const proj = (proyectos || []).find((p) => p.code === m.proyecto);
+        const proj = proyectoPorCode(m.proyecto);
         const r = proj?.ranchos?.find((x) => x.nombre === m.rancho);
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[55] p-4">
