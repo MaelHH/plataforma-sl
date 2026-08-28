@@ -146,6 +146,12 @@ export default function EmpaqueCampoDirecto() {
     const r = mismos.find((x) => (x.cultivo || "").toLowerCase() === cultivoFolio)
       || (mismos.length === 1 ? mismos[0] : null);
     const ords = r?.sap?.ordenes || [];
+    // Preferir la OF FIJADA a mano en el catálogo (override); si no, la 1ª (falla cerrado).
+    const fij = r?.ofFijada;
+    if (fij && fij.absoluteEntry != null) {
+      return { absoluteEntry: fij.absoluteEntry, docNum: fij.docNum ?? fij.absoluteEntry, item: fij.item ?? r?.sap?.item,
+               temporada: proj?.nombre, rancho: r?.nombre, varias: ords.length > 1, hayCatalogo: !!r, ambiguo: mismos.length > 1 && !r, fijada: true };
+    }
     const o0 = ords[0];
     const absoluteEntry = (o0 && typeof o0 === "object") ? o0.absoluteEntry : o0;
     const docNum = (o0 && typeof o0 === "object") ? (o0.docNum ?? o0.DocNum) : undefined;
@@ -1084,6 +1090,12 @@ export default function EmpaqueCampoDirecto() {
               <Campo lab="Lote * (escribe o elige)">
                 <SearchSelect value={form.rancho} onChange={onLote} options={loteOpts} allowCustom disabled={lockCamposEdit} placeholder="Ramos…" className={inpLock} />
                 <span className="text-[11px] text-gray-400 mt-0.5 block">Temporada: <b className="text-gray-600">{temporadaDe(form.rancho) || "— se resuelve al elegir el lote —"}</b></span>
+                {/* OF a la que irá el recibo del vaciado (la fijada a mano, o la 1ª de SAP) */}
+                {form.rancho ? (() => { const o = ordenDe(form); const esPT = String(o?.item || "").toUpperCase().startsWith("PT"); return o?.absoluteEntry ? (
+                  <span className={`text-[11px] mt-0.5 block font-mono ${esPT ? "text-red-600" : "text-emerald-700"}`}>{esPT ? "⚠️ " : "✓ "}Orden de fabricación: <b>#{o.docNum ?? o.absoluteEntry}</b>{o.item ? ` · ${o.item}` : ""}{o.fijada ? " 📌 fijada" : ""}</span>
+                ) : (
+                  <span className="text-[11px] text-amber-600 mt-0.5 block">⚠️ Este lote no tiene orden en SAP{o?.ambiguo ? " (o el cultivo no se identificó)" : ""}. Fíjala a mano en "Ranchos / Empaques".</span>
+                ); })() : null}
               </Campo>
               <Campo lab="Tabla (departamento) *">
                 <SearchSelect value={form.departamento} onChange={(v) => upd({ departamento: v })} options={tablaOpts} allowCustom disabled={lockCamposEdit} placeholder="Tabla…" className={inpLock} />
