@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { RefreshCw, Loader2, FileText, Check, AlertTriangle, X, Save, Pencil, FileDown, Plus, Trash2 } from "lucide-react";
-import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo, getManifiestoCatalogos, agregarValorCatalogo, getManifiestoPdfData, crearManifiestoApp } from "../store/api";
+import { RefreshCw, Loader2, FileText, Check, AlertTriangle, X, Save, Pencil, FileDown, Plus } from "lucide-react";
+import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo, getManifiestoCatalogos, agregarValorCatalogo, getManifiestoPdfData, crearManifiestoApp, getOvsPendientesManifiesto } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
 import { useDialog } from "../components/Dialog";
 import { generarManifiestoPDF } from "./reportes/manifiestoPdf";
@@ -108,32 +108,44 @@ export default function ManifiestosTablero() {
   );
 }
 
-// ── Drawer: crear un manifiesto APP-ONLY (ruta de emergencia, sin PT en SAP) ──
+// ── Drawer: crear un manifiesto APP-ONLY para una OV con embarque pero SIN Entrega (falta stock) ──
 function CrearDrawer({ dlg, onClose, onSaved }) {
+  const [ovs, setOvs] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [ovSel, setOvSel] = useState(null);      // OV elegida (objeto)
   const [folio, setFolio] = useState("");
-  const [cardCode, setCardCode] = useState("");
-  const [lineas, setLineas] = useState([{ pt: "", descripcion: "", cajas: "" }]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  const setL = (i, f, v) => setLineas((p) => p.map((l, j) => (j === i ? { ...l, [f]: v } : l)));
-  const addL = () => setLineas((p) => [...p, { pt: "", descripcion: "", cajas: "" }]);
-  const delL = (i) => setLineas((p) => p.filter((_, j) => j !== i));
-  const totalCajas = lineas.reduce((a, l) => a + (Number(l.cajas) || 0), 0);
-  const puede = folio.trim() && lineas.some((l) => l.pt.trim() && Number(l.cajas) > 0);
+  useEffect(() => {
+    let vivo = true;
+    getOvsPendientesManifiesto().then((r) => { if (vivo) setOvs(Array.isArray(r?.ovs) ? r.ovs : []); })
+      .catch(() => {}).finally(() => { if (vivo) setCargando(false); });
+    return () => { vivo = false; };
+  }, []);
+
+  const opts = ovs.map((o, i) => ({ value: String(i), label: `#${o.embarqueFolio} · OV ${o.ovNum} · ${o.cliente || o.cardCode || "—"} · ${o.totalCajas} cajas` }));
+  const elegir = (v) => {
+    const o = ovs[Number(v)] || null;
+    setOvSel(o);
+    if (o && o.folioActual && !folio.trim()) setFolio(o.folioActual);
+  };
+  const puede = !!(ovSel && folio.trim());
 
   const guardar = async () => {
+    if (!puede) return;
     const ok = await dlg.confirm({
-      title: "Crear manifiesto SIN PT en SAP",
-      message: `Vas a crear el manifiesto ${folio.trim()} en la app, SIN pallets/PT en SAP (ruta de emergencia). Queda registrado a tu nombre y marcado como pendiente de SAP. ¿Continuar?`,
+      title: "Crear manifiesto SIN Entrega en SAP",
+      message: `Vas a crear el manifiesto ${folio.trim()} para la OV ${ovSel.ovNum} (${ovSel.cliente}), con sus pallets ya asignados en el embarque #${ovSel.embarqueFolio}. La Entrega NO se ha hecho (falta stock). Queda a tu nombre y pendiente de SAP; se ligará a la Entrega real cuando llegue el stock. ¿Continuar?`,
       confirmText: "Sí, crear (bajo mi responsabilidad)", cancelText: "Cancelar", danger: true,
     });
     if (!ok) return;
     setGuardando(true); setError("");
     try {
-      const ls = lineas.filter((l) => l.pt.trim() || Number(l.cajas) > 0)
-        .map((l) => ({ pt: l.pt.trim(), descripcion: l.descripcion.trim(), cajas: Number(l.cajas) || 0 }));
-      await crearManifiestoApp({ folio: folio.trim(), cardCode: cardCode.trim(), lineas: ls });
+      await crearManifiestoApp({
+        folio: folio.trim(), cardCode: ovSel.cardCode, lineas: ovSel.lineas || [],
+        embarqueId: ovSel.embarqueId, ovNum: ovSel.ovNum,
+      });
       onSaved();
     } catch (e) { setError(e?.message || "No se pudo crear el manifiesto."); setGuardando(false); }
   };
@@ -144,34 +156,41 @@ function CrearDrawer({ dlg, onClose, onSaved }) {
       <aside className="fixed top-0 right-0 h-full w-[min(560px,96vw)] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
         <div className="px-5 pt-5 pb-4 border-b border-gray-200 flex items-start justify-between gap-3">
           <div>
-            <div className="font-extrabold text-xl text-gray-800 leading-tight">Nuevo manifiesto (app)</div>
-            <div className="text-xs text-amber-700 font-semibold mt-1">Sin PT en SAP · ruta de emergencia</div>
+            <div className="font-extrabold text-xl text-gray-800 leading-tight">Manifiesto app (sin Entrega)</div>
+            <div className="text-xs text-amber-700 font-semibold mt-1">OV con embarque pero sin stock · ruta de emergencia</div>
           </div>
           <button onClick={onClose} disabled={guardando} className="w-9 h-9 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 grid place-items-center hover:text-red-500 hover:border-red-300 disabled:opacity-40"><X size={17} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Crea el manifiesto SOLO en la app (no toca SAP), para salir a tiempo cuando los pallets aún no están en SAP. Después se liga al manifiesto real.</div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field lbl="Folio del manifiesto"><input className={INP} value={folio} onChange={(e) => setFolio(e.target.value)} placeholder="Nº manifiesto" /></Field>
-            <Field lbl="Cliente"><input className={INP} value={cardCode} onChange={(e) => setCardCode(e.target.value)} placeholder="Nombre / código" /></Field>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Líneas (PT · cajas)</div>
-              <button onClick={addL} className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700"><Plus size={13} /> Agregar</button>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-start gap-2"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Toma una OV que ya tiene embarque pero cuya <b>Entrega no se pudo hacer por falta de stock</b>. Usa sus pallets ya asignados (PT/cajas de SAP) para armar el manifiesto y salir a tiempo. No toca SAP.</div>
+
+          <Field lbl="OV pendiente (con embarque, sin Entrega)" full>
+            {cargando ? <div className="text-xs text-gray-400 py-2"><Loader2 size={13} className="inline animate-spin mr-1" /> Buscando OVs…</div>
+              : opts.length ? <SearchSelect className={INP} value={ovSel ? String(ovs.indexOf(ovSel)) : ""} options={opts} placeholder="Elige una OV…" onChange={elegir} />
+              : <div className="text-xs text-gray-400 py-2">No hay OVs pendientes (todas tienen Entrega, o no hay embarques sin stock).</div>}
+          </Field>
+
+          {ovSel ? (<>
+            <div className="grid grid-cols-2 gap-3">
+              <Field lbl="Folio del manifiesto"><input className={INP} value={folio} onChange={(e) => setFolio(e.target.value)} placeholder="Nº manifiesto" /></Field>
+              <Field lbl="Cliente"><input className={INP} value={ovSel.cliente || ovSel.cardCode || ""} disabled /></Field>
             </div>
-            <div className="space-y-2">
-              {lineas.map((l, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input className={INP + " w-24"} value={l.pt} onChange={(e) => setL(i, "pt", e.target.value)} placeholder="PT" />
-                  <input className={INP + " flex-1"} value={l.descripcion} onChange={(e) => setL(i, "descripcion", e.target.value)} placeholder="Descripción" />
-                  <input className={INP + " w-20"} value={l.cajas} onChange={(e) => setL(i, "cajas", e.target.value)} placeholder="Cajas" inputMode="numeric" />
-                  <button onClick={() => delL(i)} className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
-                </div>
-              ))}
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">Pallets del embarque (de SAP)</div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="bg-gray-50 text-[10px] uppercase text-gray-400 font-bold"><th className="text-left px-3 py-1.5">PT</th><th className="text-left px-3 py-1.5">Descripción</th><th className="text-right px-3 py-1.5">Cajas</th></tr></thead>
+                  <tbody>
+                    {(ovSel.lineas || []).map((l, i) => (
+                      <tr key={i} className="border-t border-gray-100"><td className="px-3 py-1.5 font-mono font-bold">{l.pt}</td><td className="px-3 py-1.5 text-gray-600">{l.descripcion || "—"}</td><td className="px-3 py-1.5 text-right font-mono">{Number(l.cajas || 0).toLocaleString("es-MX")}</td></tr>
+                    ))}
+                    <tr className="border-t border-gray-200 bg-gray-50"><td colSpan={2} className="px-3 py-1.5 text-right font-bold">TOTAL</td><td className="px-3 py-1.5 text-right font-mono font-bold">{Number(ovSel.totalCajas || 0).toLocaleString("es-MX")}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-[11px] text-gray-400 mt-1.5">Después le capturas sellos/camión y le sacas el PDF, como cualquier manifiesto.</div>
             </div>
-            <div className="text-right text-[12px] font-bold text-gray-600 mt-2">Total: {totalCajas.toLocaleString("es-MX")} cajas</div>
-          </div>
+          </>) : null}
         </div>
         <div className="px-5 py-3.5 border-t border-gray-200 bg-gray-50 space-y-2">
           {error ? <div className="text-[12.5px] font-semibold text-red-600">{error}</div> : null}

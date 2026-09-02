@@ -232,7 +232,9 @@ export const getManifiestoCatalogos = () => req("GET", "/api/sap/manifiesto-cata
 export const agregarValorCatalogo = (lista, valor) => req("POST", "/api/sap/manifiesto-catalogo", { lista, valor });
 // Datos ensamblados (SAP + info manual) para generar el PDF de un manifiesto.
 export const getManifiestoPdfData = (folio) => req("GET", `/api/sap/manifiesto-pdf${qs({ folio })}`);
-// Crea un manifiesto APP-ONLY (ruta de emergencia, sin PT en SAP). body: { folio, cardCode, lineas, overlay }.
+// OVs con embarque pero sin Entrega (falta stock) → candidatas a un manifiesto app-only con sus pallets.
+export const getOvsPendientesManifiesto = () => req("GET", "/api/sap/manifiesto-ovs-pendientes");
+// Crea un manifiesto APP-ONLY (ruta de emergencia). body: { folio, cardCode, lineas, embarqueId, ovNum }.
 export const crearManifiestoApp = (body) => req("POST", "/api/sap/manifiesto-app", body);
 // ESCRITURA: crea la OC de flete (POST PurchaseOrders) con prorrateo por cajas. body:
 // { manifiesto, proveedor, flete, ivaCode, precio, diesel, comentario, fecha }.
