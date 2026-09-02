@@ -224,6 +224,9 @@ export const getFleteArticulos = (q) => req("GET", `/api/sap/flete/articulos${qs
 export const getOcsFlete = () => req("GET", "/api/sap/flete/ocs", undefined, 90000);
 // Tablero unificado de manifiestos (los que están en SAP + los app-only). Solo lectura (BD local).
 export const getManifiestosTablero = () => req("GET", "/api/sap/manifiestos-tablero");
+// Info manual (overlay: sellos/camión/pesos…) de un manifiesto por folio.
+export const getManifiestoInfo = (folio) => req("GET", `/api/sap/manifiesto-info${qs({ folio })}`);
+export const guardarManifiestoInfo = (body) => req("POST", "/api/sap/manifiesto-info", body);
 // ESCRITURA: crea la OC de flete (POST PurchaseOrders) con prorrateo por cajas. body:
 // { manifiesto, proveedor, flete, ivaCode, precio, diesel, comentario, fecha }.
 export const crearOcFlete = (body) => req("POST", "/api/sap/flete/oc", body, TIMEOUT_SAP_WRITE);
