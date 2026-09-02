@@ -101,10 +101,14 @@ export default function OcFlete() {
     } finally { setCreando(false); }
   }, [puede, manifiesto, prov, flete, ivaCode, precio, diesel, comentario, fecha]);
 
-  const optsManifiestos = manifiestosDisp.map((m) => ({
-    value: m.manifiesto,
-    label: `${m.manifiesto}${m.cardCode ? " · " + m.cardCode : ""}${m.ovNum ? " · OV " + m.ovNum : ""}${m.tieneOC ? " · ya tiene OC" : ""}`,
-  }));
+  // Solo manifiestos que AÚN NO tienen OC de flete: aquí es para CREAR. Los que ya la tienen se ven
+  // en el listado de OCs (otro apartado), no aquí. Ver [[oc-flete-desde-manifiesto]].
+  const optsManifiestos = manifiestosDisp
+    .filter((m) => !m.tieneOC)
+    .map((m) => ({
+      value: m.manifiesto,
+      label: `${m.manifiesto}${m.cardCode ? " · " + m.cardCode : ""}${m.ovNum ? " · OV " + m.ovNum : ""}`,
+    }));
 
   return (
     <div className="space-y-4">
@@ -154,8 +158,8 @@ export default function OcFlete() {
                 {buscando ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />} Buscar
               </button>
             </div>
-            {manifiestosDisp.length ? (
-              <div className="text-[11px] text-gray-400">{manifiestosDisp.length} de tus embarques · o teclea uno manual</div>
+            {optsManifiestos.length ? (
+              <div className="text-[11px] text-gray-400">{optsManifiestos.length} embarque{optsManifiestos.length === 1 ? "" : "s"} sin OC · o teclea uno manual</div>
             ) : null}
           </section>
 
