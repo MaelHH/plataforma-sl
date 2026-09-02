@@ -7,6 +7,7 @@ import {
   getClienteDestino,
 } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
+import { useDialog } from "../components/Dialog";
 
 // Nuevo embarque (Fase 6): 3 pestañas — Transporte (camión de catálogo), Pallets + distribución en el
 // camión (Shift+click + arrastrar a posición), Manifiestos (uno por cliente, auto del destino). Crea todo
@@ -17,6 +18,7 @@ const INP = "w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:ou
 const hoyISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
 
 export default function NuevoEmbarque({ onClose, onCreated }) {
+  const dlg = useDialog();
   const [tab, setTab] = useState(0);
   const [pallets, setPallets] = useState([]);
   const [transp, setTransp] = useState([]);
@@ -132,6 +134,19 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
 
   const crear = useCallback(async () => {
     if (!linea || !enCamion.length || creando || creado) return;  // ya creado → no recrear
+    // Aviso ANTES de mandar: OV(s) sin nº de manifiesto. Se puede avanzar (se agrega después desde
+    // "Embarques" mientras la Entrega esté abierta) o regresar a ponerlo. Ver [[oc-flete-desde-manifiesto]].
+    const faltan = porOV.filter((o) => !String(numeros[String(o.ovEntry)] || "").trim());
+    if (faltan.length) {
+      const quien = faltan.map((o) => `OV ${o.ovNum}`).join(", ");
+      const ok = await dlg.confirm({
+        title: "Falta el número de manifiesto",
+        message: `${faltan.length === 1 ? "Esta orden no tiene" : "Estas órdenes no tienen"} número de manifiesto: ${quien}.\n\nLo puedes agregar después desde "Embarques", mientras la entrega siga abierta. ¿Deseas avanzar sin agregarlo?`,
+        confirmText: "Sí, avanzar sin él",
+        cancelText: "Regresar y ponerlo",
+      });
+      if (!ok) { setTab(2); return; }   // regresa a la pestaña "Manifiestos" para capturarlo
+    }
     setCreando(true); setError("");
     try {
       // nº de manifiesto por OV (solo los que se capturaron)
@@ -158,7 +173,7 @@ export default function NuevoEmbarque({ onClose, onCreated }) {
     } catch (e) {
       setError((e?.sinRespuesta ? "Sin confirmación de SAP — verifica antes de reintentar. " : "") + (e?.message || "No se pudo crear el embarque."));
     } finally { setCreando(false); }
-  }, [linea, flete, anticipo, agente, fecha, enCamion, numeros, sellos, creando, onCreated]);
+  }, [linea, flete, anticipo, agente, fecha, enCamion, numeros, sellos, creando, creado, onCreated, porOV, dlg]);
 
   const TABS = [["Transporte", Truck], ["Pallets y distribución", Package], ["Manifiestos", FileText]];
 
