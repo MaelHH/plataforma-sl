@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { RefreshCw, Loader2, FileText, Check, AlertTriangle, X, Save, Pencil } from "lucide-react";
-import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo, getManifiestoCatalogos, agregarValorCatalogo } from "../store/api";
+import { RefreshCw, Loader2, FileText, Check, AlertTriangle, X, Save, Pencil, FileDown } from "lucide-react";
+import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo, getManifiestoCatalogos, agregarValorCatalogo, getManifiestoPdfData } from "../store/api";
 import SearchSelect from "../components/SearchSelect";
+import { generarManifiestoPDF } from "./reportes/manifiestoPdf";
 
 // Tablero UNIFICADO de manifiestos (Fase 1+2): los que están EN SAP (sellados desde un embarque) y los
 // EN LA APP (creados sin PT en SAP, ruta de emergencia). Clic en un renglón → drawer para capturar la
@@ -16,6 +17,14 @@ export default function ManifiestosTablero() {
   const [error, setError] = useState("");
   const [filtro, setFiltro] = useState("todos"); // todos | sap | app
   const [sel, setSel] = useState(null);          // manifiesto abierto en el drawer
+  const [genPdf, setGenPdf] = useState(null);    // folio del que se está generando el PDF
+
+  const pdf = useCallback(async (folio) => {
+    setGenPdf(folio);
+    try { const d = await getManifiestoPdfData(folio); generarManifiestoPDF(d); }
+    catch (e) { setError(e?.message || "No se pudo generar el PDF."); }
+    finally { setGenPdf(null); }
+  }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -71,7 +80,13 @@ export default function ManifiestosTablero() {
                   <td className="px-3.5 py-3 border-b border-gray-100 text-right font-mono font-bold text-[13px] text-gray-800">{(m.cajas || 0).toLocaleString("es-MX")}</td>
                   <td className="px-3.5 py-3 border-b border-gray-100">{m.tieneInfo ? <span className="text-[11px] font-bold text-emerald-700 inline-flex items-center gap-1"><Check size={12} /> Sí</span> : <span className="text-[11px] font-semibold text-amber-600">falta</span>}</td>
                   <td className="px-3.5 py-3 border-b border-gray-100 text-[11.5px] font-semibold text-gray-500 capitalize">{m.estado || "—"}</td>
-                  <td className="px-3.5 py-3 border-b border-gray-100 text-right"><span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700"><Pencil size={12} /> Info</span></td>
+                  <td className="px-3.5 py-3 border-b border-gray-100 text-right whitespace-nowrap">
+                    <button onClick={(ev) => { ev.stopPropagation(); pdf(m.folio); }} disabled={genPdf === m.folio}
+                      title="Generar PDF del manifiesto" className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 hover:text-sky-900 disabled:opacity-40 mr-3">
+                      {genPdf === m.folio ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />} PDF
+                    </button>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700"><Pencil size={12} /> Info</span>
+                  </td>
                 </tr>
               ))}
             </tbody>

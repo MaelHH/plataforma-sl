@@ -230,6 +230,8 @@ export const guardarManifiestoInfo = (body) => req("POST", "/api/sap/manifiesto-
 // Catálogos editables de la info del manifiesto (elegir de la lista o escribir uno nuevo que se guarda).
 export const getManifiestoCatalogos = () => req("GET", "/api/sap/manifiesto-catalogos");
 export const agregarValorCatalogo = (lista, valor) => req("POST", "/api/sap/manifiesto-catalogo", { lista, valor });
+// Datos ensamblados (SAP + info manual) para generar el PDF de un manifiesto.
+export const getManifiestoPdfData = (folio) => req("GET", `/api/sap/manifiesto-pdf${qs({ folio })}`);
 // ESCRITURA: crea la OC de flete (POST PurchaseOrders) con prorrateo por cajas. body:
 // { manifiesto, proveedor, flete, ivaCode, precio, diesel, comentario, fecha }.
 export const crearOcFlete = (body) => req("POST", "/api/sap/flete/oc", body, TIMEOUT_SAP_WRITE);
