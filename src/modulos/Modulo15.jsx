@@ -12,6 +12,7 @@ import { useDialog } from "../components/Dialog";
 import TableroEmbarques from "./TableroEmbarques";
 import EmbarquesLista from "./EmbarquesLista";
 import OcFlete from "./OcFlete";
+import OcFleteLista from "./OcFleteLista";
 import ConfirmarEnvioSAP from "./ConfirmarEnvioSAP";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
@@ -111,6 +112,17 @@ export default function Modulo15() {
   const disponibles = useMemo(() => pool.filter((p) => !addedIds.has(cid(p))).length, [pool, addedIds]);
   const added = useMemo(() => pool.filter((p) => addedIds.has(cid(p))), [pool, addedIds]);
   const nSel = useMemo(() => [...selIds].filter((k) => !addedIds.has(k)).length, [selIds, addedIds]);
+
+  // SD = Stock Disponible por PT: suma de cajas de los pallets AÚN disponibles (no asignados) de cada PT.
+  // Baja conforme asignas. Se muestra chiquito en cada fila para ver de un vistazo cuánto queda de ese PT.
+  const sdPorPt = useMemo(() => {
+    const m = new Map();
+    for (const p of pool) {
+      if (addedIds.has(cid(p))) continue;
+      m.set(p.pt, (m.get(p.pt) || 0) + (Number(p.cajas) || 0));
+    }
+    return m;
+  }, [pool, addedIds]);
 
   // Agrupado como el AddOn: una línea de OV por (PT + lote + depto).
   const grupos = useMemo(() => {
@@ -304,6 +316,7 @@ export default function Modulo15() {
         <TabBtn id="ordenes" icon={ListChecks} badge={nBorradores || undefined}>Órdenes de venta</TabBtn>
         <TabBtn id="embarques" icon={Truck}>Embarques</TabBtn>
         <TabBtn id="flete" icon={ReceiptText}>OC de flete</TabBtn>
+        <TabBtn id="ocsflete" icon={ListChecks}>OCs creadas</TabBtn>
       </div>
 
       {errorOV ? (
@@ -323,7 +336,9 @@ export default function Modulo15() {
         </div>
       ) : null}
 
-      {vista === "flete" ? (
+      {vista === "ocsflete" ? (
+        <OcFleteLista />
+      ) : vista === "flete" ? (
         <OcFlete />
       ) : vista === "embarques" ? (
         <EmbarquesLista />
@@ -465,7 +480,8 @@ export default function Modulo15() {
                         <span className="text-[11.5px] text-gray-500 font-semibold">· Lote {p.lote}</span>
                       </span>
                       <span className="block text-[10.5px] text-gray-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis mt-px">
-                        <b className="text-emerald-600 font-bold">Cultivo {p.cultivoCod || "—"} {p.cultivoNombre || p.cultivo || ""}</b>
+                        <b className="text-sky-600 font-bold">SD {(sdPorPt.get(p.pt) || 0).toLocaleString("es-MX")}</b>
+                        {" · "}<b className="text-emerald-600 font-bold">Cultivo {p.cultivoCod || "—"} {p.cultivoNombre || p.cultivo || ""}</b>
                         {" · "}{p.presentacion}{" · "}{p.fecha}{p.agricultor ? " · " + p.agricultor : ""}{p.tag ? " · #" + p.tag : ""}
                       </span>
                     </span>

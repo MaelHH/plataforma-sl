@@ -210,6 +210,9 @@ export const reintentarEntregasEmbarque = (id) =>
   req("POST", `/api/sap/embarques/${encodeURIComponent(id)}/entregas`, undefined, TIMEOUT_SAP_WRITE);
 // Detector de stock: por PT, necesita vs hay; dice si ya se pueden generar las entregas pendientes.
 export const getStockEmbarque = (id) => req("GET", `/api/sap/embarques/${encodeURIComponent(id)}/stock`, undefined, 60000);
+// Captura/edita el nº de manifiesto de una OV del embarque y lo sella en su Entrega (solo si está abierta).
+export const actualizarManifiestoEmbarque = (id, ovEntry, numero) =>
+  req("POST", `/api/sap/embarques/${encodeURIComponent(id)}/manifiesto`, { ovEntry, numero }, TIMEOUT_SAP_WRITE);
 // ── OC de flete desde manifiesto (Fase 7) ──
 // Manifiestos que la app ya generó (de los embarques), para elegirlos en la OC de flete. Solo lectura (BD local).
 export const getFleteManifiestos = () => req("GET", "/api/sap/flete/manifiestos");
@@ -217,6 +220,8 @@ export const getFleteManifiestos = () => req("GET", "/api/sap/flete/manifiestos"
 export const getFleteEntrega = (manifiesto) => req("GET", `/api/sap/flete/entrega${qs({ manifiesto })}`, undefined, 60000);
 export const getFleteProveedores = (q) => req("GET", `/api/sap/flete/proveedores${qs({ q })}`, undefined, 60000);
 export const getFleteArticulos = (q) => req("GET", `/api/sap/flete/articulos${qs({ q })}`, undefined, 60000);
+// Lista de OC de flete creadas + su estado en SAP (pedido / entrada de mercancía / factura). Solo lectura.
+export const getOcsFlete = () => req("GET", "/api/sap/flete/ocs", undefined, 90000);
 // ESCRITURA: crea la OC de flete (POST PurchaseOrders) con prorrateo por cajas. body:
 // { manifiesto, proveedor, flete, ivaCode, precio, diesel, comentario, fecha }.
 export const crearOcFlete = (body) => req("POST", "/api/sap/flete/oc", body, TIMEOUT_SAP_WRITE);
