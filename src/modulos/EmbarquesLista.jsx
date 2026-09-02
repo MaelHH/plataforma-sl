@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Truck, RefreshCw, Loader2, Check, Package, Send, AlertTriangle, X } from "lucide-react";
-import { getEmbarques, reintentarEntregasEmbarque, getStockEmbarque, getEmbarqueDetalle } from "../store/api";
+import { getEmbarques, reintentarEntregasEmbarque, getStockEmbarque, getEmbarqueDetalle, actualizarManifiestoEmbarque } from "../store/api";
 
 // Lista de EMBARQUES creados desde la app (como la "Lista de embarques" del AddOn): folio, camión,
 // OVs, cajas, pallets, fecha. Solo lectura de la BD.
@@ -19,6 +19,20 @@ export default function EmbarquesLista() {
   const [stocks, setStocks] = useState({});     // id → { listo, items } (detector de stock)
   const [detalle, setDetalle] = useState(null); // embarque abierto (drawer)
   const [cargandoDet, setCargandoDet] = useState(false);
+  const [guardandoMan, setGuardandoMan] = useState(null); // ovEntry cuyo nº de manifiesto se está guardando
+
+  const guardarManifiesto = useCallback(async (id, ovEntry, numero) => {
+    setGuardandoMan(ovEntry);
+    try {
+      await actualizarManifiestoEmbarque(id, ovEntry, numero);
+      const d = await getEmbarqueDetalle(id);                       // refresca el drawer (nº + estado)
+      setDetalle((prev) => (prev && prev.id === id ? d : prev));
+      // refresca el badge "Falta manifiesto" de la LISTA con el detalle recién traído (¿alguna OV sin nº?)
+      const faltaMan = (d?.manifiestos || []).some((m) => !String(m.numero || "").trim());
+      setEmbarques((prev) => prev.map((e) => (e.id === id ? { ...e, faltaManifiesto: faltaMan } : e)));
+    } catch (e) { setError(e?.message || "No se pudo guardar el nº de manifiesto."); }
+    finally { setGuardandoMan(null); }
+  }, []);
 
   const abrir = useCallback(async (id) => {
     setDetalle({ id }); setCargandoDet(true);
@@ -94,6 +108,7 @@ export default function EmbarquesLista() {
                     <td className="px-3.5 py-3 border-b border-gray-100 text-right font-mono font-bold text-[15px] text-gray-800">{e.nPallets}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100 font-mono text-[12px] text-gray-500">{(e.ovs || []).join(", ") || "—"}</td>
                     <td className="px-3.5 py-3 border-b border-gray-100">
+                      <div className="flex flex-col gap-1 items-start">
                       {e.completo ? (
                         <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 inline-flex items-center gap-1.5"><Check size={13} /> En SAP</span>
                       ) : (() => {
@@ -127,6 +142,13 @@ export default function EmbarquesLista() {
                           </div>
                         );
                       })()}
+                      {e.faltaManifiesto ? (
+                        <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 inline-flex items-center gap-1 whitespace-nowrap"
+                          title="Alguna OV no tiene número de manifiesto. Ábrelo para capturarlo (mientras la entrega esté abierta).">
+                          <AlertTriangle size={11} /> Falta manifiesto
+                        </span>
+                      ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -137,13 +159,52 @@ export default function EmbarquesLista() {
       </div>
 
       {detalle ? (
-        <DrawerEmbarque d={detalle} cargando={cargandoDet} accion={accion} onGenerar={generarEntregas} onClose={() => setDetalle(null)} />
+        <DrawerEmbarque d={detalle} cargando={cargandoDet} accion={accion} onGenerar={generarEntregas} onClose={() => setDetalle(null)}
+          onGuardarManifiesto={guardarManifiesto} guardandoMan={guardandoMan} />
       ) : null}
     </div>
   );
 }
 
-function DrawerEmbarque({ d, cargando, accion, onGenerar, onClose }) {
+// Un renglón de manifiesto (por OV): input editable del nº mientras la Entrega esté ABIERTA; si ya está
+// cerrada, read-only. El input viene prellenado con el nº de la creación (no doble captura).
+function ManifiestoRow({ m, embId, onGuardar, guardando }) {
+  const [val, setVal] = useState(m.numero || "");
+  useEffect(() => { setVal(m.numero || ""); }, [m.numero]);
+  const cerrada = m.entregada && !m.entregaAbierta;                 // Entrega existe pero cerrada → no editable
+  const guardandoEsta = guardando === m.ovEntry;
+  return (
+    <div className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
+      <div className="min-w-0">
+        <div className="font-semibold text-gray-800 text-[13px] truncate">{m.cardName || m.cardCode}</div>
+        <div className="font-mono text-[11px] text-gray-400">OV {m.ovNum}
+          {m.entregaDocNum ? <span className="text-emerald-600 font-semibold"> · Entrega #{m.entregaDocNum}</span> : <span className="text-gray-300"> · sin entrega</span>}
+        </div>
+      </div>
+      {cerrada ? (
+        <div className="text-right shrink-0">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Nº manifiesto</div>
+          {m.numero ? <div className="font-mono font-bold text-sm text-gray-800">{m.numero}</div>
+                    : <div className="text-[11px] text-amber-600 font-semibold">sin número</div>}
+          <div className="text-[10px] text-gray-400">entrega cerrada · ya no se edita</div>
+        </div>
+      ) : (
+        <div className="shrink-0 flex items-center gap-2">
+          {!m.numero ? <span className="text-[10px] text-amber-600 font-bold uppercase" title="Falta el nº de manifiesto">falta</span> : null}
+          <input value={val} onChange={(e) => setVal(e.target.value)} placeholder="Nº manifiesto"
+            className="w-32 border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm font-mono focus:border-emerald-500 outline-none" />
+          <button onClick={() => onGuardar(embId, m.ovEntry, val.trim())} disabled={guardandoEsta || !val.trim()}
+            title="Guardar y sellar el nº en la Entrega"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">
+            {guardandoEsta ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Guardar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DrawerEmbarque({ d, cargando, accion, onGenerar, onClose, onGuardarManifiesto, guardandoMan }) {
   const pend = d.entregasPendientes;
   const listo = (d.pts || []).length && d.pts.every((p) => p.ok);
   return (
@@ -183,18 +244,7 @@ function DrawerEmbarque({ d, cargando, accion, onGenerar, onClose }) {
               <div className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2">Manifiestos · nº por OV</div>
               <div className="space-y-2">
                 {(d.manifiestos || []).map((m) => (
-                  <div key={m.ovEntry} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-gray-800 text-[13px] truncate">{m.cardName || m.cardCode}</div>
-                      <div className="font-mono text-[11px] text-gray-400">OV {m.ovNum}</div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Nº manifiesto</div>
-                      {m.numero
-                        ? <div className="font-mono font-bold text-sm text-gray-800">{m.numero}</div>
-                        : <div className="text-[11px] text-amber-600 font-semibold">sin número</div>}
-                    </div>
-                  </div>
+                  <ManifiestoRow key={m.ovEntry} m={m} embId={d.id} onGuardar={onGuardarManifiesto} guardando={guardandoMan} />
                 ))}
               </div>
             </div>
