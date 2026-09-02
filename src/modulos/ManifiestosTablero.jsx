@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { RefreshCw, Loader2, FileText, Check, AlertTriangle, X, Save, Pencil } from "lucide-react";
-import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo } from "../store/api";
+import { getManifiestosTablero, getManifiestoInfo, guardarManifiestoInfo, getManifiestoCatalogos, agregarValorCatalogo } from "../store/api";
+import SearchSelect from "../components/SearchSelect";
 
 // Tablero UNIFICADO de manifiestos (Fase 1+2): los que están EN SAP (sellados desde un embarque) y los
 // EN LA APP (creados sin PT en SAP, ruta de emergencia). Clic en un renglón → drawer para capturar la
@@ -87,9 +88,12 @@ export default function ManifiestosTablero() {
 // ── Drawer: capturar/editar la INFO MANUAL del manifiesto (overlay tipo hoja "MENU" del Excel) ──
 function InfoDrawer({ m, onClose, onSaved }) {
   const [ov, setOv] = useState({ sellos: {}, camion: {}, conductor: {}, agencia: "", distribuidor: "", temperatura: "", flete: "", anticipo: "", observaciones: "" });
+  const [cat, setCat] = useState({});   // catálogos editables (transportistas, marcasCamion, agencias…)
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => { getManifiestoCatalogos().then((r) => setCat(r || {})).catch(() => {}); }, []);
 
   useEffect(() => {
     let vivo = true;
@@ -108,6 +112,17 @@ function InfoDrawer({ m, onClose, onSaved }) {
   const g = (grp, f) => (e) => setOv((p) => ({ ...p, [grp]: { ...(p[grp] || {}), [f]: e.target.value } }));
   const t = (f) => (e) => setOv((p) => ({ ...p, [f]: e.target.value }));
   const vg = (grp, f) => (ov[grp] || {})[f] || "";
+  const setG = (grp, f, val) => setOv((p) => ({ ...p, [grp]: { ...(p[grp] || {}), [f]: val } }));
+  const setT = (f, val) => setOv((p) => ({ ...p, [f]: val }));
+  const catOpts = (lista) => (cat[lista] || []).map((v) => ({ value: v, label: v }));
+  // elige de la lista o escribe uno nuevo: si es nuevo, se GUARDA en el catálogo (BD) y aparece luego.
+  const pickCat = (lista, apply) => (v) => {
+    apply(v);
+    if (v && !(cat[lista] || []).includes(v)) {
+      agregarValorCatalogo(lista, v).catch(() => {});
+      setCat((p) => ({ ...p, [lista]: [...(p[lista] || []), v] }));
+    }
+  };
 
   const guardar = async () => {
     setGuardando(true); setError("");
@@ -141,21 +156,21 @@ function InfoDrawer({ m, onClose, onSaved }) {
               <Field lbl="¿Quién abrió?" full><input className={INP} value={vg("sellos", "abrio")} onChange={g("sellos", "abrio")} /></Field>
             </Sec>
             <Sec title="Camión / caja">
-              <Field lbl="Línea de transporte" full><input className={INP} value={vg("camion", "linea")} onChange={g("camion", "linea")} /></Field>
-              <Field lbl="Marca"><input className={INP} value={vg("camion", "marca")} onChange={g("camion", "marca")} /></Field>
+              <Field lbl="Línea de transporte" full><SearchSelect className={INP} allowCustom placeholder="Elige o escribe…" value={vg("camion", "linea")} options={catOpts("transportistas")} onChange={pickCat("transportistas", (v) => setG("camion", "linea", v))} /></Field>
+              <Field lbl="Marca"><SearchSelect className={INP} allowCustom placeholder="Elige o escribe…" value={vg("camion", "marca")} options={catOpts("marcasCamion")} onChange={pickCat("marcasCamion", (v) => setG("camion", "marca", v))} /></Field>
               <Field lbl="Modelo"><input className={INP} value={vg("camion", "modelo")} onChange={g("camion", "modelo")} /></Field>
               <Field lbl="Placas tracto"><input className={INP} value={vg("camion", "placasTracto")} onChange={g("camion", "placasTracto")} /></Field>
               <Field lbl="Placas caja"><input className={INP} value={vg("camion", "placasCaja")} onChange={g("camion", "placasCaja")} /></Field>
               <Field lbl="Económico"><input className={INP} value={vg("camion", "economico")} onChange={g("camion", "economico")} /></Field>
             </Sec>
             <Sec title="Conductor">
-              <Field lbl="Nombre" full><input className={INP} value={vg("conductor", "nombre")} onChange={g("conductor", "nombre")} /></Field>
+              <Field lbl="Nombre" full><SearchSelect className={INP} allowCustom placeholder="Elige o escribe…" value={vg("conductor", "nombre")} options={catOpts("conductores")} onChange={pickCat("conductores", (v) => setG("conductor", "nombre", v))} /></Field>
               <Field lbl="Licencia"><input className={INP} value={vg("conductor", "licencia")} onChange={g("conductor", "licencia")} /></Field>
               <Field lbl="Teléfono"><input className={INP} value={vg("conductor", "tel")} onChange={g("conductor", "tel")} /></Field>
             </Sec>
             <Sec title="Aduana / destino / flete">
-              <Field lbl="Agencia aduanal"><input className={INP} value={ov.agencia} onChange={t("agencia")} /></Field>
-              <Field lbl="Distribuidor"><input className={INP} value={ov.distribuidor} onChange={t("distribuidor")} /></Field>
+              <Field lbl="Agencia aduanal"><SearchSelect className={INP} allowCustom placeholder="Elige o escribe…" value={ov.agencia} options={catOpts("agenciasAduanales")} onChange={pickCat("agenciasAduanales", (v) => setT("agencia", v))} /></Field>
+              <Field lbl="Distribuidor"><SearchSelect className={INP} allowCustom placeholder="Elige o escribe…" value={ov.distribuidor} options={catOpts("distribuidores")} onChange={pickCat("distribuidores", (v) => setT("distribuidor", v))} /></Field>
               <Field lbl="Temperatura"><input className={INP} value={ov.temperatura} onChange={t("temperatura")} /></Field>
               <Field lbl="Flete"><input className={INP} value={ov.flete} onChange={t("flete")} inputMode="decimal" /></Field>
               <Field lbl="Anticipo"><input className={INP} value={ov.anticipo} onChange={t("anticipo")} inputMode="decimal" /></Field>
