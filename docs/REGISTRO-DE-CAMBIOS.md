@@ -29,6 +29,17 @@
 
 ## 📝 Cambios
 
+### 2026-09-01 — Manifiestos + OC de flete: sellar/editar nº en la Entrega, listado de OCs, Solicitud→Pedido y varios fixes
+- **Qué (backend + frontend, rama `feat/manifiestos`):**
+  - **OC de flete Solicitud→Pedido:** el `PurchaseOrders` ahora **nace de una `PurchaseRequests`** (regla de la empresa: ningún Pedido directo), calcado de `compras.py`. Moneda desde `sap_doc_currency` (ya no "MXP" fijo → arregló el `-5002`) y el dropdown **solo muestra fletes que existen en la company** (arregló el `-2028` por ItemCode fantasma).
+  - **Nº de manifiesto en la Entrega:** `crear_entrega` devuelve `docEntry` aunque la OV ya estuviera entregada + "Generar entregas" re-sella; **captura/edición del nº por OV** en el drawer de Embarques (`POST /embarques/{id}/manifiesto`) → `PATCH DeliveryNotes.U_Manifiesto` **solo si la Entrega está abierta**, buscando la Entrega por **DocNum** (confiable; el filtro `any()` no lo soporta esta SAP). Badge **"Falta manifiesto"** en la lista + nº de **Entrega** en el drawer. El dropdown de OC lee el nº **por OV** (ya no llaves huérfanas).
+  - **Listado de OCs de flete** (pestaña "OCs creadas"): estado del Pedido (Abierta/Cerrada) + entrada de mercancía + factura (best-effort).
+  - **SD (stock disponible por PT)** en Asignar Pallets · **"Mandar a SAP" anti-doble-envío** (drawer con estado vivo) · **aviso al crear embarque** si falta el nº de manifiesto · **fix script** `ensanchar_pk_proyectos` (no truena si falta `movimientos.proyecto_id`).
+- **Archivos:** back `src/sap/{fletes,embarques,service,router}.py`, `src/scripts/ensanchar_pk_proyectos.py`. Front `src/modulos/{OcFlete,OcFleteLista,EmbarquesLista,TableroEmbarques,NuevoEmbarque,Modulo15}.jsx`, `src/store/api.js`.
+- **Seguridad:** ✅ [[sap-reglas-garantia]]: solo GET/POST/PATCH vía `client.py`, nunca PUT/DELETE; el PATCH es a `U_Manifiesto` (campo existente); ningún objeto global; permisos `manifiestos.ver`/`editar`.
+- **Estado:** ✅ probado local con SAP de prueba (OC **8742** Solicitud→Pedido; nº **14524** sellado en Entrega **2451**). No desplegado. **Sin cambios de esquema de BD.**
+- **Plan nuevo (solo doc):** `docs/plan-manifiestos-alternativo-y-pdf.md` — manifiesto **app-only** (sin PT en SAP, permiso del gerente) + tablero unificado SAP/app + PDF para todos.
+
 ### 2026-08-27 — Fase 7 Manifiestos: OC de flete desde el manifiesto (pestaña nueva)
 - **Qué:** nueva pestaña **"OC de flete"** en el módulo Asignar Pallets (Modulo15). Se busca un **nº de manifiesto** → se lee su **Entrega** (por `U_Manifiesto`) → se capturan **proveedor/flete/IVA/precio/diésel/comentario** → se crea **1 OC (`PurchaseOrders`)** en SAP con el flete **prorrateado POR CAJAS** (fórmula correcta: `Importe/total_cajas × cajas_línea`, residual a la de más cajas, Σ = Importe exacto; `Importe = precio − diésel`, pre-IVA; el IVA lo agrega SAP con el `TaxCode`). Recrea el proyecto de escritorio `SL_Pedidos_Fletes` corrigiendo su matemática (repartía en partes iguales). Preview en vivo en el front; el **backend recalcula** al crear (autoritativo).
 - **Archivos:** front `src/modulos/OcFlete.jsx` (nuevo), pestaña en `src/modulos/Modulo15.jsx`, funciones en `src/store/api.js`. Back `src/models/oc_fletes.py`, `src/sap/fletes.py`, `src/sap/oc_flete_calc.py`, `crear_oc_flete` en `src/sap/service.py`, endpoints `/flete/*` en `src/sap/router.py`. Doc: `plataforma-sl-backend/docs/cambios/2026-08-27-oc-flete.md` + `CAMBIOS-BD.md` (tabla `oc_fletes`, aditiva).
