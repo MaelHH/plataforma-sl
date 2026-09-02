@@ -84,6 +84,14 @@ export default function TableroEmbarques({ manifiestos, clientes, cargando, acci
     return (cc) => m.get(cc) || cc || "—";
   }, [clientes]);
 
+  // El drawer debe reflejar el estado VIVO de la lista: tras "Mandar a SAP", `manifiestos` se refresca y la
+  // OV pasa a "enviada". Sin esto, `sel` queda como foto congelada (estado viejo) y el botón "Mandar a SAP"
+  // sigue clickeable → la gente cree que no se mandó y re-pica (el backend no duplica, pero mejor no exponerlo).
+  const selLive = useMemo(
+    () => (sel ? manifiestos.find((x) => x.id === sel.id) || sel : null),
+    [sel, manifiestos]
+  );
+
   const kpis = useMemo(() => {
     const cajas = manifiestos.reduce((a, m) => a + (m.cajas || 0), 0);
     const pallets = manifiestos.reduce((a, m) => a + (m.nPallets || 0), 0);
@@ -210,7 +218,7 @@ export default function TableroEmbarques({ manifiestos, clientes, cargando, acci
       </div>
 
       {/* Drawer detalle */}
-      {sel ? <Drawer m={sel} nombreCliente={nombreCliente} accionId={accionId} onEnviar={onEnviar} onCancelar={onCancelar} onClose={() => setSel(null)} /> : null}
+      {selLive ? <Drawer m={selLive} nombreCliente={nombreCliente} accionId={accionId} onEnviar={onEnviar} onCancelar={onCancelar} onClose={() => setSel(null)} /> : null}
     </div>
   );
 }
