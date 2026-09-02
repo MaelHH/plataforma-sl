@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   Check, Trash2, Search, ScanLine, Loader2, AlertCircle,
-  X, RefreshCw, Package, Building2, CalendarDays, Save, PackagePlus, ListChecks, Truck, ReceiptText,
+  X, RefreshCw, Package, Building2, CalendarDays, Save, PackagePlus, ListChecks, Truck, ReceiptText, FileText,
 } from "lucide-react";
 import {
   getPalletsDisponibles, getClientesVenta,
@@ -13,6 +13,7 @@ import TableroEmbarques from "./TableroEmbarques";
 import EmbarquesLista from "./EmbarquesLista";
 import OcFlete from "./OcFlete";
 import OcFleteLista from "./OcFleteLista";
+import ManifiestosTablero from "./ManifiestosTablero";
 import ConfirmarEnvioSAP from "./ConfirmarEnvioSAP";
 
 // ── Módulo 15 · Asignar Pallets (arma la Orden de Venta para embarque) ──────────────
@@ -315,6 +316,7 @@ export default function Modulo15() {
         <TabBtn id="asignar" icon={PackagePlus}>Asignar pallets</TabBtn>
         <TabBtn id="ordenes" icon={ListChecks} badge={nBorradores || undefined}>Órdenes de venta</TabBtn>
         <TabBtn id="embarques" icon={Truck}>Embarques</TabBtn>
+        <TabBtn id="manifiestos" icon={FileText}>Manifiestos</TabBtn>
         <TabBtn id="flete" icon={ReceiptText}>OC de flete</TabBtn>
         <TabBtn id="ocsflete" icon={ListChecks}>OCs creadas</TabBtn>
       </div>
@@ -336,7 +338,9 @@ export default function Modulo15() {
         </div>
       ) : null}
 
-      {vista === "ocsflete" ? (
+      {vista === "manifiestos" ? (
+        <ManifiestosTablero />
+      ) : vista === "ocsflete" ? (
         <OcFleteLista />
       ) : vista === "flete" ? (
         <OcFlete />
